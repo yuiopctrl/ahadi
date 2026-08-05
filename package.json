@@ -1,6 +1,8 @@
 {
   "name": "ahadi-platform",
   "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.24.0",
   "scripts": {
     "dev": "turbo run dev --parallel",
     "build": "turbo run build",
@@ -9,9 +11,12 @@
     "format": "prettier --write ."
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "eslint": "^10.8.0",
+    "globals": "^17.7.0",
     "prettier": "^3.9.6",
     "turbo": "^2.10.8",
-    "typescript": "~6.0.2"
+    "typescript": "~6.0.2",
+    "typescript-eslint": "^8.65.0"
   }
 }
