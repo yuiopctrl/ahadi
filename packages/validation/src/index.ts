@@ -62,6 +62,10 @@ export const verifyOtpSchema = z.object({
 
 const weakPins = new Set(['0000', '1111', '1234', '4321'])
 
+const nullableEmailSchema = z.union([z.email(), z.literal(''), z.null()]).optional().transform((value) => value || null)
+const nullableDateSchema = z.union([z.iso.date(), z.literal(''), z.null()]).optional().transform((value) => value || null)
+const nullableTextSchema = (max: number) => z.union([z.string().trim().max(max), z.literal(''), z.null()]).optional().transform((value) => value || null)
+
 export function isWeakPin(pin: string): boolean {
   return !/^[0-9]{4}$/.test(pin) || weakPins.has(pin) || /^([0-9])\1{3}$/.test(pin)
 }
@@ -87,7 +91,7 @@ export const verifyPinSchema = z.object({
 export const organizationSchema = z.object({
   tenantName: z.string().trim().min(2).max(120),
   tenantPhone: tanzaniaPhoneSchema,
-  tenantEmail: z.email().optional().or(z.literal('')).transform((value) => value || null),
+  tenantEmail: nullableEmailSchema,
   countryCode: z.literal('TZ').default('TZ'),
   currency: z.literal('TZS').default('TZS'),
   timezone: z.literal('Africa/Dar_es_Salaam').default('Africa/Dar_es_Salaam'),
@@ -96,7 +100,7 @@ export const organizationSchema = z.object({
 export const administratorProfileSchema = z.object({
   adminFullName: z.string().trim().min(2).max(120),
   adminPhone: tanzaniaPhoneSchema,
-  adminEmail: z.email().optional().or(z.literal('')).transform((value) => value || null),
+  adminEmail: nullableEmailSchema,
   preferredLanguage: z.enum(['sw', 'en']),
 })
 
@@ -104,11 +108,11 @@ export const eventSetupSchema = z
   .object({
     firstEventName: z.string().trim().min(2).max(160),
     eventType: eventTypeSchema,
-    customEventType: z.string().trim().max(80).optional().or(z.literal('')).transform((value) => value || null),
-    eventDate: z.iso.date().optional().or(z.literal('')).transform((value) => value || null),
-    venue: z.string().trim().max(160).optional().or(z.literal('')).transform((value) => value || null),
+    customEventType: nullableTextSchema(80),
+    eventDate: nullableDateSchema,
+    venue: nullableTextSchema(160),
     targetAmount: tzsAmountSchema.optional().nullable(),
-    pledgeDeadline: z.iso.date().optional().or(z.literal('')).transform((value) => value || null),
+    pledgeDeadline: nullableDateSchema,
   })
   .superRefine((value, context) => {
     if (value.eventType === 'OTHER' && !value.customEventType) {

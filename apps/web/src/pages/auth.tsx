@@ -3,7 +3,7 @@ import { ArrowLeft, CheckCircle2, LockKeyhole } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import type { OnboardingPayload, SubscriptionPlan, TenantMembershipContext } from '@ahadi/types'
-import { normalizeTanzaniaPhone, setupPinSchema } from '@ahadi/validation'
+import { normalizeTanzaniaPhone, onboardingPayloadSchema, setupPinSchema } from '@ahadi/validation'
 import { api, ApiClientError } from '../lib/api'
 import { supabase } from '../lib/supabase'
 import { getSingleActiveMembership, useSessionStore } from '../stores/session-store'
@@ -38,6 +38,19 @@ interface OnboardingDraft {
   confirmed: boolean
 }
 
+interface PlanApiRow extends Partial<SubscriptionPlan> {
+  billing_interval?: SubscriptionPlan['billingInterval']
+  display_order?: number
+  included_sms?: number
+  is_active?: boolean
+  is_public?: boolean
+  max_active_events?: number
+  max_members?: number
+  max_users?: number
+  price_amount?: number | string
+  trial_days?: number
+}
+
 const defaultDraft: OnboardingDraft = {
   planCode: '',
   tenantName: '',
@@ -54,6 +67,59 @@ const defaultDraft: OnboardingDraft = {
   targetAmount: '',
   pledgeDeadline: '',
   confirmed: false,
+}
+
+function numberValue(value: number | string | undefined, fallback = 0) {
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : fallback
+}
+
+function normalizePlan(row: PlanApiRow): SubscriptionPlan {
+  return {
+    id: row.id ?? row.code ?? '',
+    code: row.code ?? '',
+    name: row.name ?? 'Plan',
+    description: row.description ?? '',
+    currency: row.currency ?? 'TZS',
+    priceAmount: numberValue(row.priceAmount ?? row.price_amount),
+    billingInterval: row.billingInterval ?? row.billing_interval ?? 'CUSTOM',
+    trialDays: numberValue(row.trialDays ?? row.trial_days),
+    maxActiveEvents: numberValue(row.maxActiveEvents ?? row.max_active_events),
+    maxMembers: numberValue(row.maxMembers ?? row.max_members),
+    maxUsers: numberValue(row.maxUsers ?? row.max_users),
+    includedSms: numberValue(row.includedSms ?? row.included_sms),
+    features: row.features ?? {},
+    isPublic: row.isPublic ?? row.is_public ?? true,
+    isActive: row.isActive ?? row.is_active ?? true,
+    displayOrder: numberValue(row.displayOrder ?? row.display_order),
+  }
+}
+
+function formatBillingInterval(plan: Pick<SubscriptionPlan, 'billingInterval'>) {
+  return (plan.billingInterval ?? 'CUSTOM').toLowerCase()
+}
+
+const onboardingFieldLabels: Record<string, string> = {
+  adminEmail: 'administrator email',
+  adminFullName: 'administrator full name',
+  customEventType: 'custom event type',
+  eventDate: 'event date',
+  firstEventName: 'event name',
+  planCode: 'package',
+  pledgeDeadline: 'pledge deadline',
+  preferredLanguage: 'preferred language',
+  targetAmount: 'target amount',
+  tenantEmail: 'organization email',
+  tenantName: 'organization name',
+  tenantPhone: 'organization phone number',
+  venue: 'venue',
+}
+
+function onboardingValidationMessage(error: { issues: { message: string; path: PropertyKey[] }[] }) {
+  const issue = error.issues[0]
+  const path = issue?.path.join('.') ?? ''
+  const label = onboardingFieldLabels[path] ?? path
+  return label ? `Check ${label}: ${issue?.message ?? 'invalid value'}` : 'Check the onboarding details and try again.'
 }
 
 function errorMessage(error: unknown) {
@@ -290,7 +356,7 @@ function OnboardingPage() {
   })
   const plansQuery = useQuery({
     queryKey: ['plans'],
-    queryFn: async () => (await api.plans()).data as SubscriptionPlan[],
+    queryFn: async () => ((await api.plans()).data as PlanApiRow[]).map(normalizePlan),
   })
   const selectedPlan = plansQuery.data?.find((plan) => plan.code === draft.planCode)
 
@@ -317,7 +383,11 @@ function OnboardingPage() {
         pledgeDeadline: draft.pledgeDeadline || null,
         idempotencyKey: crypto.randomUUID(),
       }
-      return api.completeOnboarding(payload)
+      const parsedPayload = onboardingPayloadSchema.safeParse(payload)
+      if (!parsedPayload.success) {
+        throw new Error(onboardingValidationMessage(parsedPayload.error))
+      }
+      return api.completeOnboarding(parsedPayload.data)
     },
     onSuccess: async (result) => {
       localStorage.removeItem(onboardingDraftKey)
@@ -356,7 +426,7 @@ function OnboardingPage() {
               <button className={draft.planCode === plan.code ? 'package-card selected' : 'package-card'} key={plan.code} type="button" onClick={() => setField('planCode', plan.code)}>
                 <strong>{plan.name}</strong>
                 <MoneyDisplay amount={plan.priceAmount} />
-                <span>{plan.billingInterval.toLowerCase()} billing, {plan.trialDays} trial days</span>
+                <span>{formatBillingInterval(plan)} billing, {plan.trialDays ?? 0} trial days</span>
                 <small>{plan.maxActiveEvents} active events · {plan.maxUsers} users · {plan.maxMembers} members · {plan.includedSms} SMS</small>
               </button>
             ))}

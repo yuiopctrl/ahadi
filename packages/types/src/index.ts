@@ -16,6 +16,7 @@ export type ApiErrorCode =
   | 'INVALID_OTP'
   | 'SESSION_REQUIRED'
   | 'PIN_REQUIRED'
+  | 'PIN_TOO_WEAK'
   | 'PIN_INVALID'
   | 'PIN_LOCKED'
   | 'TENANT_ACCESS_DENIED'
@@ -23,6 +24,9 @@ export type ApiErrorCode =
   | 'PLAN_NOT_AVAILABLE'
   | 'SUBSCRIPTION_INACTIVE'
   | 'RATE_LIMITED'
+  | 'INVALID_WEBHOOK_SIGNATURE'
+  | 'INVALID_SMS_HOOK_PAYLOAD'
+  | 'SMS_PROVIDER_FAILED'
   | 'INTERNAL_ERROR'
 
 export interface SubscriptionPlan {
