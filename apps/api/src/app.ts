@@ -16,6 +16,7 @@ import { logOtpDiagnostic, maskPhoneForLog } from './diagnostics.js'
 import { env } from './env.js'
 import { AppError, errorHandler } from './errors.js'
 import { sendSmsHookHandler } from './modules/auth/hooks/send-sms-hook.controller.js'
+import { classifyOnboardingDatabaseError, getSafeOnboardingDatabaseErrorDetails } from './onboarding-errors.js'
 import { classifyPinSetupDatabaseError, classifyPinSetupValidationError, getSafePinDatabaseErrorDetails } from './pin-errors.js'
 import { createUserSupabase, supabasePublic } from './supabase.js'
 import { loadUserContext, requestIdMiddleware, requireAuth, requirePlatformPermission, requireTenantContext } from './middleware.js'
@@ -365,7 +366,11 @@ app.post('/api/v1/onboarding/complete', requireAuth, async (request, response, n
       ...(input.pledgeDeadline ? { p_pledge_deadline: input.pledgeDeadline } : {}),
     })
     if (error) {
-      throw error
+      if (env.NODE_ENV === 'development') {
+        console.error('Onboarding database error', getSafeOnboardingDatabaseErrorDetails(request.requestId, 'onboarding-complete', error))
+      }
+      const classification = classifyOnboardingDatabaseError(error, Boolean(request.auth?.user))
+      throw new AppError(classification.code, classification.message, classification.status, classification.category)
     }
     response.json(data)
   } catch (error) {
