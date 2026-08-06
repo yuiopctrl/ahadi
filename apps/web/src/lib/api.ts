@@ -66,4 +66,29 @@ export const api = {
   platformDashboard: () => apiFetch<{ data: Record<string, number> }>('/platform/dashboard'),
   platformTenants: () => apiFetch<{ data: unknown[] }>('/platform/tenants'),
   platformPlans: () => apiFetch<{ data: unknown[] }>('/platform/plans'),
+  eventFinancialSummary: (tenantId: string, eventId: string) => apiFetch<{ data: Record<string, unknown> }>(`/events/${eventId}/financial-summary`, { tenantId }),
+  eventMembers: (tenantId: string, eventId: string) => apiFetch<{ data: Record<string, unknown>[] }>(`/events/${eventId}/members`, { tenantId }),
+  eventMemberDetail: (tenantId: string, eventId: string, eventMemberId: string) =>
+    apiFetch<{ data: { member: Record<string, unknown>; payments: Record<string, unknown>[] } }>(`/events/${eventId}/members/${eventMemberId}`, { tenantId }),
+  createEventMember: (tenantId: string, eventId: string, payload: Record<string, unknown>) =>
+    apiFetch<{ data: Record<string, unknown> }>(`/events/${eventId}/members`, { tenantId, method: 'POST', body: JSON.stringify(payload) }),
+  attachEventMember: (tenantId: string, eventId: string, payload: Record<string, unknown>) =>
+    apiFetch<{ data: Record<string, unknown> }>(`/events/${eventId}/members/attach`, { tenantId, method: 'POST', body: JSON.stringify(payload) }),
+  removeEventMember: (tenantId: string, eventId: string, eventMemberId: string) =>
+    apiFetch<{ data: Record<string, unknown> }>(`/events/${eventId}/members/${eventMemberId}/remove`, { tenantId, method: 'POST' }),
+  eventPledges: (tenantId: string, eventId: string) => apiFetch<{ data: Record<string, unknown>[] }>(`/events/${eventId}/pledges`, { tenantId }),
+  upsertPledge: (tenantId: string, eventId: string, payload: Record<string, unknown>, pledgeId?: string) =>
+    apiFetch<{ data: Record<string, unknown> }>(pledgeId ? `/events/${eventId}/pledges/${pledgeId}` : `/events/${eventId}/pledges`, {
+      tenantId,
+      method: pledgeId ? 'PATCH' : 'POST',
+      body: JSON.stringify(payload),
+    }),
+  cancelPledge: (tenantId: string, eventId: string, pledgeId: string, reason: string) =>
+    apiFetch<{ data: Record<string, unknown> }>(`/events/${eventId}/pledges/${pledgeId}/cancel`, { tenantId, method: 'POST', body: JSON.stringify({ reason }) }),
+  eventPayments: (tenantId: string, eventId: string) => apiFetch<{ data: Record<string, unknown>[] }>(`/events/${eventId}/payments`, { tenantId }),
+  recordPayment: (tenantId: string, eventId: string, payload: Record<string, unknown>) =>
+    apiFetch<{ data: Record<string, unknown> }>(`/events/${eventId}/payments`, { tenantId, method: 'POST', body: JSON.stringify(payload) }),
+  reversePayment: (tenantId: string, eventId: string, paymentId: string, payload: Record<string, unknown>) =>
+    apiFetch<{ data: Record<string, unknown> }>(`/events/${eventId}/payments/${paymentId}/reverse`, { tenantId, method: 'POST', body: JSON.stringify(payload) }),
+  receipt: (tenantId: string, receiptId: string) => apiFetch<{ data: Record<string, unknown> }>(`/receipts/${receiptId}`, { tenantId }),
 }

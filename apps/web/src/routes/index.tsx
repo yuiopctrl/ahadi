@@ -4,7 +4,7 @@ import { PlatformAppLayout } from '../layouts/PlatformAppLayout'
 import { TenantAppLayout } from '../layouts/TenantAppLayout'
 import { AuthPage } from '../pages/auth'
 import { PlatformPage } from '../pages/platform'
-import { EventDetailPage, TenantDashboardPage, TenantListPage } from '../pages/tenant'
+import { EventDetailPage, MemberDetailPage, PaymentEntryPage, ReceiptPage, TenantDashboardPage, TenantListPage } from '../pages/tenant'
 import { AuthenticatedRoute, OnboardingRoute, PinUnlockedRoute, PlatformOwnerRoute, PublicRoute, TenantRoute } from './guards'
 
 export const router = createBrowserRouter([
@@ -55,9 +55,12 @@ export const router = createBrowserRouter([
                   { path: 'events', element: <TenantListPage title="Events" kind="events" /> },
                   { path: 'events/:eventId', element: <EventDetailPage /> },
                   { path: 'events/:eventId/members', element: <EventDetailPage section="members" /> },
+                  { path: 'events/:eventId/members/:eventMemberId', element: <MemberDetailPage /> },
                   { path: 'events/:eventId/pledges', element: <EventDetailPage section="pledges" /> },
                   { path: 'events/:eventId/payments', element: <EventDetailPage section="payments" /> },
+                  { path: 'events/:eventId/payments/new', element: <PaymentEntryPage /> },
                   { path: 'events/:eventId/messages', element: <EventDetailPage section="messages" /> },
+                  { path: 'receipts/:receiptId', element: <ReceiptPage /> },
                   { path: 'members', element: <TenantListPage title="Members" kind="members" /> },
                   { path: 'payments', element: <TenantListPage title="Payments" kind="payments" /> },
                   { path: 'messages', element: <TenantListPage title="Messages" kind="messages" /> },

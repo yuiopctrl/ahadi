@@ -110,6 +110,147 @@ export type Database = {
           },
         ]
       }
+      event_member_categories: {
+        Row: {
+          created_at: string
+          created_by: string
+          description: string | null
+          display_order: number
+          event_id: string
+          id: string
+          is_active: boolean
+          name: string
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          description?: string | null
+          display_order?: number
+          event_id: string
+          id?: string
+          is_active?: boolean
+          name: string
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          description?: string | null
+          display_order?: number
+          event_id?: string
+          id?: string
+          is_active?: boolean
+          name?: string
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "event_member_categories_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "event_member_categories_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      event_members: {
+        Row: {
+          category_id: string | null
+          created_at: string
+          created_by: string
+          event_id: string
+          event_member_number: string | null
+          id: string
+          joined_at: string
+          member_id: string
+          notes: string | null
+          removed_at: string | null
+          removed_by: string | null
+          status: string
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          category_id?: string | null
+          created_at?: string
+          created_by: string
+          event_id: string
+          event_member_number?: string | null
+          id?: string
+          joined_at?: string
+          member_id: string
+          notes?: string | null
+          removed_at?: string | null
+          removed_by?: string | null
+          status?: string
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          category_id?: string | null
+          created_at?: string
+          created_by?: string
+          event_id?: string
+          event_member_number?: string | null
+          id?: string
+          joined_at?: string
+          member_id?: string
+          notes?: string | null
+          removed_at?: string | null
+          removed_by?: string | null
+          status?: string
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "event_members_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "event_member_categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "event_members_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "event_members_member_id_fkey"
+            columns: ["member_id"]
+            isOneToOne: false
+            referencedRelation: "members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "event_members_member_id_fkey"
+            columns: ["member_id"]
+            isOneToOne: false
+            referencedRelation: "v_event_members_list"
+            referencedColumns: ["member_id"]
+          },
+          {
+            foreignKeyName: "event_members_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       event_user_assignments: {
         Row: {
           access_level: string
@@ -230,6 +371,77 @@ export type Database = {
           },
         ]
       }
+      members: {
+        Row: {
+          alternative_phone_e164: string | null
+          archived_at: string | null
+          archived_by: string | null
+          created_at: string
+          created_by: string
+          email: string | null
+          full_name: string
+          gender: string | null
+          id: string
+          location: string | null
+          member_code: string
+          notes: string | null
+          phone_e164: string | null
+          preferred_language: string
+          sms_enabled: boolean
+          status: string
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          alternative_phone_e164?: string | null
+          archived_at?: string | null
+          archived_by?: string | null
+          created_at?: string
+          created_by: string
+          email?: string | null
+          full_name: string
+          gender?: string | null
+          id?: string
+          location?: string | null
+          member_code: string
+          notes?: string | null
+          phone_e164?: string | null
+          preferred_language?: string
+          sms_enabled?: boolean
+          status?: string
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          alternative_phone_e164?: string | null
+          archived_at?: string | null
+          archived_by?: string | null
+          created_at?: string
+          created_by?: string
+          email?: string | null
+          full_name?: string
+          gender?: string | null
+          id?: string
+          location?: string | null
+          member_code?: string
+          notes?: string | null
+          phone_e164?: string | null
+          preferred_language?: string
+          sms_enabled?: boolean
+          status?: string
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "members_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       onboarding_requests: {
         Row: {
           created_at: string
@@ -256,6 +468,264 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      payment_allocations: {
+        Row: {
+          allocated_amount: number
+          created_at: string
+          created_by: string
+          event_id: string
+          id: string
+          payment_id: string
+          pledge_id: string
+          tenant_id: string
+        }
+        Insert: {
+          allocated_amount: number
+          created_at?: string
+          created_by: string
+          event_id: string
+          id?: string
+          payment_id: string
+          pledge_id: string
+          tenant_id: string
+        }
+        Update: {
+          allocated_amount?: number
+          created_at?: string
+          created_by?: string
+          event_id?: string
+          id?: string
+          payment_id?: string
+          pledge_id?: string
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payment_allocations_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payment_allocations_payment_id_fkey"
+            columns: ["payment_id"]
+            isOneToOne: false
+            referencedRelation: "payments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payment_allocations_payment_id_fkey"
+            columns: ["payment_id"]
+            isOneToOne: false
+            referencedRelation: "v_event_payments_list"
+            referencedColumns: ["payment_id"]
+          },
+          {
+            foreignKeyName: "payment_allocations_payment_id_fkey"
+            columns: ["payment_id"]
+            isOneToOne: false
+            referencedRelation: "v_receipt_detail"
+            referencedColumns: ["payment_id"]
+          },
+          {
+            foreignKeyName: "payment_allocations_pledge_id_fkey"
+            columns: ["pledge_id"]
+            isOneToOne: false
+            referencedRelation: "pledges"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payment_allocations_pledge_id_fkey"
+            columns: ["pledge_id"]
+            isOneToOne: false
+            referencedRelation: "v_event_members_list"
+            referencedColumns: ["pledge_id"]
+          },
+          {
+            foreignKeyName: "payment_allocations_pledge_id_fkey"
+            columns: ["pledge_id"]
+            isOneToOne: false
+            referencedRelation: "v_event_pledges_list"
+            referencedColumns: ["pledge_id"]
+          },
+          {
+            foreignKeyName: "payment_allocations_pledge_id_fkey"
+            columns: ["pledge_id"]
+            isOneToOne: false
+            referencedRelation: "v_receipt_detail"
+            referencedColumns: ["pledge_id"]
+          },
+          {
+            foreignKeyName: "payment_allocations_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      payment_reversals: {
+        Row: {
+          created_at: string
+          event_id: string
+          id: string
+          idempotency_key: string | null
+          original_payment_snapshot: Json
+          payment_id: string
+          reason: string
+          reversed_at: string
+          reversed_by: string
+          tenant_id: string
+        }
+        Insert: {
+          created_at?: string
+          event_id: string
+          id?: string
+          idempotency_key?: string | null
+          original_payment_snapshot: Json
+          payment_id: string
+          reason: string
+          reversed_at?: string
+          reversed_by: string
+          tenant_id: string
+        }
+        Update: {
+          created_at?: string
+          event_id?: string
+          id?: string
+          idempotency_key?: string | null
+          original_payment_snapshot?: Json
+          payment_id?: string
+          reason?: string
+          reversed_at?: string
+          reversed_by?: string
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payment_reversals_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payment_reversals_payment_id_fkey"
+            columns: ["payment_id"]
+            isOneToOne: true
+            referencedRelation: "payments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payment_reversals_payment_id_fkey"
+            columns: ["payment_id"]
+            isOneToOne: true
+            referencedRelation: "v_event_payments_list"
+            referencedColumns: ["payment_id"]
+          },
+          {
+            foreignKeyName: "payment_reversals_payment_id_fkey"
+            columns: ["payment_id"]
+            isOneToOne: true
+            referencedRelation: "v_receipt_detail"
+            referencedColumns: ["payment_id"]
+          },
+          {
+            foreignKeyName: "payment_reversals_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      payments: {
+        Row: {
+          amount: number
+          created_at: string
+          event_id: string
+          event_member_id: string
+          id: string
+          idempotency_key: string | null
+          notes: string | null
+          payment_date: string
+          payment_method: string
+          payment_number: string
+          provider_name: string | null
+          received_by: string
+          status: string
+          tenant_id: string
+          transaction_reference: string | null
+          updated_at: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          event_id: string
+          event_member_id: string
+          id?: string
+          idempotency_key?: string | null
+          notes?: string | null
+          payment_date?: string
+          payment_method: string
+          payment_number: string
+          provider_name?: string | null
+          received_by: string
+          status?: string
+          tenant_id: string
+          transaction_reference?: string | null
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          event_id?: string
+          event_member_id?: string
+          id?: string
+          idempotency_key?: string | null
+          notes?: string | null
+          payment_date?: string
+          payment_method?: string
+          payment_number?: string
+          provider_name?: string | null
+          received_by?: string
+          status?: string
+          tenant_id?: string
+          transaction_reference?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payments_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payments_event_member_id_fkey"
+            columns: ["event_member_id"]
+            isOneToOne: false
+            referencedRelation: "event_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payments_event_member_id_fkey"
+            columns: ["event_member_id"]
+            isOneToOne: false
+            referencedRelation: "v_event_members_list"
+            referencedColumns: ["event_member_id"]
+          },
+          {
+            foreignKeyName: "payments_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       permissions: {
         Row: {
@@ -311,6 +781,183 @@ export type Database = {
         }
         Relationships: []
       }
+      pledge_history: {
+        Row: {
+          action: string
+          changed_by: string
+          created_at: string
+          event_id: string
+          id: number
+          new_amount: number | null
+          new_due_date: string | null
+          new_status: string | null
+          pledge_id: string
+          previous_amount: number | null
+          previous_due_date: string | null
+          previous_status: string | null
+          reason: string | null
+          tenant_id: string
+        }
+        Insert: {
+          action: string
+          changed_by: string
+          created_at?: string
+          event_id: string
+          id?: never
+          new_amount?: number | null
+          new_due_date?: string | null
+          new_status?: string | null
+          pledge_id: string
+          previous_amount?: number | null
+          previous_due_date?: string | null
+          previous_status?: string | null
+          reason?: string | null
+          tenant_id: string
+        }
+        Update: {
+          action?: string
+          changed_by?: string
+          created_at?: string
+          event_id?: string
+          id?: never
+          new_amount?: number | null
+          new_due_date?: string | null
+          new_status?: string | null
+          pledge_id?: string
+          previous_amount?: number | null
+          previous_due_date?: string | null
+          previous_status?: string | null
+          reason?: string | null
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pledge_history_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pledge_history_pledge_id_fkey"
+            columns: ["pledge_id"]
+            isOneToOne: false
+            referencedRelation: "pledges"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pledge_history_pledge_id_fkey"
+            columns: ["pledge_id"]
+            isOneToOne: false
+            referencedRelation: "v_event_members_list"
+            referencedColumns: ["pledge_id"]
+          },
+          {
+            foreignKeyName: "pledge_history_pledge_id_fkey"
+            columns: ["pledge_id"]
+            isOneToOne: false
+            referencedRelation: "v_event_pledges_list"
+            referencedColumns: ["pledge_id"]
+          },
+          {
+            foreignKeyName: "pledge_history_pledge_id_fkey"
+            columns: ["pledge_id"]
+            isOneToOne: false
+            referencedRelation: "v_receipt_detail"
+            referencedColumns: ["pledge_id"]
+          },
+          {
+            foreignKeyName: "pledge_history_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      pledges: {
+        Row: {
+          cancellation_reason: string | null
+          cancelled_at: string | null
+          cancelled_by: string | null
+          created_at: string
+          due_date: string | null
+          event_id: string
+          event_member_id: string
+          id: string
+          notes: string | null
+          pledged_amount: number
+          pledged_at: string
+          recorded_by: string
+          status: string
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          cancellation_reason?: string | null
+          cancelled_at?: string | null
+          cancelled_by?: string | null
+          created_at?: string
+          due_date?: string | null
+          event_id: string
+          event_member_id: string
+          id?: string
+          notes?: string | null
+          pledged_amount: number
+          pledged_at?: string
+          recorded_by: string
+          status?: string
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          cancellation_reason?: string | null
+          cancelled_at?: string | null
+          cancelled_by?: string | null
+          created_at?: string
+          due_date?: string | null
+          event_id?: string
+          event_member_id?: string
+          id?: string
+          notes?: string | null
+          pledged_amount?: number
+          pledged_at?: string
+          recorded_by?: string
+          status?: string
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pledges_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pledges_event_member_id_fkey"
+            columns: ["event_member_id"]
+            isOneToOne: true
+            referencedRelation: "event_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pledges_event_member_id_fkey"
+            columns: ["event_member_id"]
+            isOneToOne: true
+            referencedRelation: "v_event_members_list"
+            referencedColumns: ["event_member_id"]
+          },
+          {
+            foreignKeyName: "pledges_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           avatar_url: string | null
@@ -352,6 +999,84 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      receipts: {
+        Row: {
+          created_at: string
+          event_id: string
+          id: string
+          issued_at: string
+          issued_by: string
+          payment_id: string
+          receipt_number: string
+          tenant_id: string
+          void_reason: string | null
+          voided_at: string | null
+          voided_by: string | null
+        }
+        Insert: {
+          created_at?: string
+          event_id: string
+          id?: string
+          issued_at?: string
+          issued_by: string
+          payment_id: string
+          receipt_number: string
+          tenant_id: string
+          void_reason?: string | null
+          voided_at?: string | null
+          voided_by?: string | null
+        }
+        Update: {
+          created_at?: string
+          event_id?: string
+          id?: string
+          issued_at?: string
+          issued_by?: string
+          payment_id?: string
+          receipt_number?: string
+          tenant_id?: string
+          void_reason?: string | null
+          voided_at?: string | null
+          voided_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "receipts_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "receipts_payment_id_fkey"
+            columns: ["payment_id"]
+            isOneToOne: true
+            referencedRelation: "payments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "receipts_payment_id_fkey"
+            columns: ["payment_id"]
+            isOneToOne: true
+            referencedRelation: "v_event_payments_list"
+            referencedColumns: ["payment_id"]
+          },
+          {
+            foreignKeyName: "receipts_payment_id_fkey"
+            columns: ["payment_id"]
+            isOneToOne: true
+            referencedRelation: "v_receipt_detail"
+            referencedColumns: ["payment_id"]
+          },
+          {
+            foreignKeyName: "receipts_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       role_permissions: {
         Row: {
@@ -492,6 +1217,41 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      tenant_financial_counters: {
+        Row: {
+          created_at: string
+          next_member_number: number
+          next_payment_number: number
+          next_receipt_number: number
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          next_member_number?: number
+          next_payment_number?: number
+          next_receipt_number?: number
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          next_member_number?: number
+          next_payment_number?: number
+          next_receipt_number?: number
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tenant_financial_counters_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: true
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       tenant_settings: {
         Row: {
@@ -748,7 +1508,218 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      v_event_members_list: {
+        Row: {
+          category: string | null
+          event_id: string | null
+          event_member_id: string | null
+          event_member_status: string | null
+          full_name: string | null
+          last_payment_date: string | null
+          member_code: string | null
+          member_id: string | null
+          outstanding_amount: number | null
+          phone_e164: string | null
+          pledge_id: string | null
+          pledge_status: string | null
+          pledged_amount: number | null
+          tenant_id: string | null
+          total_allocated: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "event_members_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "event_members_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      v_event_outstanding_members: {
+        Row: {
+          category: string | null
+          days_overdue: number | null
+          due_date: string | null
+          event_id: string | null
+          last_payment_date: string | null
+          member_name: string | null
+          outstanding_amount: number | null
+          paid_amount: number | null
+          phone: string | null
+          pledge_status: string | null
+          pledged_amount: number | null
+          tenant_id: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pledges_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pledges_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      v_event_payments_list: {
+        Row: {
+          allocated_amount: number | null
+          amount: number | null
+          event_id: string | null
+          event_member_id: string | null
+          member_name: string | null
+          payment_date: string | null
+          payment_id: string | null
+          payment_method: string | null
+          payment_number: string | null
+          receipt_id: string | null
+          receipt_number: string | null
+          received_by_name: string | null
+          status: string | null
+          tenant_id: string | null
+          transaction_reference: string | null
+          unallocated_amount: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payments_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payments_event_member_id_fkey"
+            columns: ["event_member_id"]
+            isOneToOne: false
+            referencedRelation: "event_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payments_event_member_id_fkey"
+            columns: ["event_member_id"]
+            isOneToOne: false
+            referencedRelation: "v_event_members_list"
+            referencedColumns: ["event_member_id"]
+          },
+          {
+            foreignKeyName: "payments_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      v_event_pledges_list: {
+        Row: {
+          category: string | null
+          due_date: string | null
+          event_id: string | null
+          event_member_id: string | null
+          last_payment_date: string | null
+          member_name: string | null
+          outstanding_amount: number | null
+          phone_e164: string | null
+          pledge_id: string | null
+          pledged_amount: number | null
+          status: string | null
+          tenant_id: string | null
+          total_allocated: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pledges_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pledges_event_member_id_fkey"
+            columns: ["event_member_id"]
+            isOneToOne: true
+            referencedRelation: "event_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pledges_event_member_id_fkey"
+            columns: ["event_member_id"]
+            isOneToOne: true
+            referencedRelation: "v_event_members_list"
+            referencedColumns: ["event_member_id"]
+          },
+          {
+            foreignKeyName: "pledges_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      v_receipt_detail: {
+        Row: {
+          allocated_amount: number | null
+          event_date: string | null
+          event_id: string | null
+          event_name: string | null
+          issued_at: string | null
+          member_name: string | null
+          member_phone: string | null
+          outstanding_amount: number | null
+          payment_amount: number | null
+          payment_date: string | null
+          payment_id: string | null
+          payment_method: string | null
+          payment_number: string | null
+          payment_status: string | null
+          pledge_id: string | null
+          pledged_amount: number | null
+          provider_name: string | null
+          receipt_id: string | null
+          receipt_number: string | null
+          received_by: string | null
+          reversal_reason: string | null
+          reversed_at: string | null
+          tenant_id: string | null
+          tenant_logo_url: string | null
+          tenant_name: string | null
+          total_paid_toward_pledge: number | null
+          transaction_reference: string | null
+          unallocated_excess: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "receipts_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "receipts_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
       active_event_count: {
@@ -759,6 +1730,10 @@ export type Database = {
         Args: { p_tenant_id: string }
         Returns: number
       }
+      calculated_pledge_status: {
+        Args: { p_pledge_id: string }
+        Returns: string
+      }
       can_access_event: {
         Args: { event_uuid: string }
         Returns: boolean
@@ -767,6 +1742,14 @@ export type Database = {
         Args: { event_uuid: string }
         Returns: boolean
       }
+      confirmed_pledge_allocated_amount: {
+        Args: { p_pledge_id: string }
+        Returns: number
+      }
+      ensure_tenant_write_access: {
+        Args: { p_tenant_id: string }
+        Returns: undefined
+      }
       generate_tenant_code: {
         Args: Record<PropertyKey, never>
         Returns: string
@@ -774,6 +1757,15 @@ export type Database = {
       generate_unique_tenant_slug: {
         Args: { tenant_name: string }
         Returns: string
+      }
+      has_event_financial_access: {
+        Args: {
+          p_event_id: string
+          p_min_assignment_level?: string
+          p_permission: string
+          p_tenant_id: string
+        }
+        Returns: boolean
       }
       has_platform_permission: {
         Args: { permission_code: string }
@@ -811,9 +1803,56 @@ export type Database = {
         Args: { p_tenant_id: string }
         Returns: string
       }
+      next_member_code: {
+        Args: { p_tenant_id: string }
+        Returns: string
+      }
+      next_payment_number: {
+        Args: { p_tenant_id: string }
+        Returns: string
+      }
+      next_receipt_number: {
+        Args: { p_tenant_id: string }
+        Returns: string
+      }
       normalize_tz_phone: {
         Args: { raw_phone: string }
         Returns: string
+      }
+      payment_allocated_amount: {
+        Args: { p_payment_id: string }
+        Returns: number
+      }
+      payment_unallocated_amount: {
+        Args: { p_payment_id: string }
+        Returns: number
+      }
+      pledge_financial_summary: {
+        Args: { p_pledge_id: string }
+        Returns: Json
+      }
+      refresh_pledge_status: {
+        Args: { p_changed_by?: string; p_pledge_id: string }
+        Returns: string
+      }
+      rpc_attach_existing_member_to_event: {
+        Args: {
+          p_category_id?: string
+          p_event_id: string
+          p_member_id: string
+          p_notes?: string
+          p_tenant_id: string
+        }
+        Returns: Json
+      }
+      rpc_cancel_pledge: {
+        Args: {
+          p_event_id: string
+          p_pledge_id: string
+          p_reason: string
+          p_tenant_id: string
+        }
+        Returns: Json
       }
       rpc_complete_tenant_onboarding: {
         Args: {
@@ -843,6 +1882,36 @@ export type Database = {
         }
         Returns: Json
       }
+      rpc_create_member_and_attach_to_event: {
+        Args: {
+          p_alternative_phone?: string
+          p_category_id?: string
+          p_email?: string
+          p_event_id: string
+          p_full_name: string
+          p_location?: string
+          p_notes?: string
+          p_phone?: string
+          p_tenant_id: string
+        }
+        Returns: Json
+      }
+      rpc_create_or_update_pledge: {
+        Args: {
+          p_amount: number
+          p_change_reason?: string
+          p_due_date?: string
+          p_event_id: string
+          p_event_member_id: string
+          p_notes?: string
+          p_tenant_id: string
+        }
+        Returns: Json
+      }
+      rpc_get_event_financial_summary: {
+        Args: { p_event_id: string; p_tenant_id: string }
+        Returns: Json
+      }
       rpc_get_my_context: {
         Args: Record<PropertyKey, never>
         Returns: Json
@@ -854,6 +1923,39 @@ export type Database = {
       rpc_has_my_pin: {
         Args: Record<PropertyKey, never>
         Returns: boolean
+      }
+      rpc_record_installment_payment: {
+        Args: {
+          p_amount: number
+          p_event_id: string
+          p_event_member_id: string
+          p_idempotency_key?: string
+          p_notes?: string
+          p_payment_date?: string
+          p_payment_method: string
+          p_pledge_id?: string
+          p_provider_name?: string
+          p_tenant_id: string
+          p_transaction_reference?: string
+        }
+        Returns: Json
+      }
+      rpc_remove_event_member: {
+        Args: {
+          p_event_id: string
+          p_event_member_id: string
+          p_tenant_id: string
+        }
+        Returns: Json
+      }
+      rpc_reverse_payment: {
+        Args: {
+          p_idempotency_key?: string
+          p_payment_id: string
+          p_reason: string
+          p_tenant_id: string
+        }
+        Returns: Json
       }
       rpc_set_my_pin: {
         Args: { p_pin: string }

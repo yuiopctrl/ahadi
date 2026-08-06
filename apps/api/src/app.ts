@@ -3,7 +3,8 @@ import express from 'express'
 import rateLimit from 'express-rate-limit'
 import helmet from 'helmet'
 import morgan from 'morgan'
-import { ZodError } from 'zod'
+import { z, ZodError } from 'zod'
+import type { ApiErrorCode } from '@ahadi/types'
 import {
   onboardingPayloadSchema,
   requestOtpSchema,
@@ -176,6 +177,129 @@ function logValidationError(requestId: string, operation: string, error: ZodErro
       message: issue.message,
     })),
   })
+}
+
+const uuidParamSchema = z.string().uuid()
+const optionalTextSchema = z.string().trim().max(500).optional().nullable()
+const optionalShortTextSchema = z.string().trim().max(160).optional().nullable()
+const moneySchema = z.coerce.number().finite().positive().max(999_999_999_999.99)
+
+const createMemberSchema = z.object({
+  fullName: z.string().trim().min(2).max(160),
+  phone: z.string().trim().optional().nullable(),
+  alternativePhone: z.string().trim().optional().nullable(),
+  email: z.string().trim().email().optional().nullable().or(z.literal('')),
+  location: optionalShortTextSchema,
+  categoryId: z.string().uuid().optional().nullable(),
+  notes: optionalTextSchema,
+  initialPledgeAmount: z.coerce.number().finite().positive().optional().nullable(),
+  initialPledgeDueDate: z.string().date().optional().nullable(),
+})
+
+const attachMemberSchema = z.object({
+  memberId: z.string().uuid(),
+  categoryId: z.string().uuid().optional().nullable(),
+  notes: optionalTextSchema,
+})
+
+const upsertPledgeSchema = z.object({
+  eventMemberId: z.string().uuid(),
+  amount: moneySchema,
+  dueDate: z.string().date().optional().nullable(),
+  notes: optionalTextSchema,
+  changeReason: optionalTextSchema,
+})
+
+const patchPledgeSchema = upsertPledgeSchema.extend({
+  eventMemberId: z.string().uuid().optional(),
+})
+
+const cancelPledgeSchema = z.object({
+  reason: z.string().trim().min(1).max(500),
+})
+
+const recordPaymentSchema = z.object({
+  eventMemberId: z.string().uuid(),
+  amount: moneySchema,
+  paymentMethod: z.enum(['CASH', 'M_PESA', 'AIRTEL_MONEY', 'MIX_BY_YAS', 'HALOPESA', 'BANK_TRANSFER', 'CHEQUE', 'OTHER']),
+  paymentDate: z.string().datetime({ offset: true }).optional().nullable(),
+  transactionReference: optionalShortTextSchema,
+  providerName: optionalShortTextSchema,
+  notes: optionalTextSchema,
+  pledgeId: z.string().uuid().optional().nullable(),
+  idempotencyKey: z.string().uuid(),
+})
+
+const reversePaymentSchema = z.object({
+  reason: z.string().trim().min(1).max(500),
+  idempotencyKey: z.string().uuid(),
+})
+
+const updateMemberSchema = z.object({
+  fullName: z.string().trim().min(2).max(160).optional(),
+  phoneE164: z.string().trim().optional().nullable(),
+  alternativePhoneE164: z.string().trim().optional().nullable(),
+  email: z.string().trim().email().optional().nullable().or(z.literal('')),
+  location: optionalShortTextSchema,
+  notes: optionalTextSchema,
+  preferredLanguage: z.enum(['sw', 'en']).optional(),
+  smsEnabled: z.boolean().optional(),
+  status: z.enum(['ACTIVE', 'INACTIVE', 'ARCHIVED']).optional(),
+})
+
+const knownDatabaseCodes: ApiErrorCode[] = [
+  'INVALID_INPUT',
+  'SESSION_REQUIRED',
+  'TENANT_ACCESS_DENIED',
+  'MEMBER_NOT_FOUND',
+  'MEMBER_PHONE_ALREADY_EXISTS',
+  'MEMBER_ALREADY_IN_EVENT',
+  'EVENT_MEMBER_NOT_FOUND',
+  'EVENT_MEMBER_REMOVED',
+  'CATEGORY_NOT_FOUND',
+  'PLEDGE_NOT_FOUND',
+  'PLEDGE_ALREADY_EXISTS',
+  'PLEDGE_AMOUNT_INVALID',
+  'PLEDGE_BELOW_PAID_AMOUNT',
+  'PLEDGE_CANCELLED',
+  'PAYMENT_NOT_FOUND',
+  'PAYMENT_AMOUNT_INVALID',
+  'PAYMENT_REFERENCE_DUPLICATE',
+  'PAYMENT_ALREADY_REVERSED',
+  'PAYMENT_REVERSAL_REASON_REQUIRED',
+  'PAYMENT_IDEMPOTENCY_CONFLICT',
+  'EVENT_NOT_ACTIVE',
+  'EVENT_ACCESS_DENIED',
+  'RECEIPT_NOT_FOUND',
+  'SUBSCRIPTION_READ_ONLY',
+  'SUBSCRIPTION_BLOCKED',
+]
+
+function databaseMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message
+  }
+  if (typeof error === 'object' && error !== null && 'message' in error && typeof error.message === 'string') {
+    return error.message
+  }
+  return ''
+}
+
+function throwFinancialDatabaseError(error: unknown, fallbackCategory: string): never {
+  const message = databaseMessage(error).toUpperCase()
+  const matchedCode = knownDatabaseCodes.find((code) => message.includes(code))
+  if (matchedCode) {
+    throw new AppError(matchedCode)
+  }
+  throw new AppError('INTERNAL_ERROR', 'Unexpected application error', 500, fallbackCategory)
+}
+
+function tenantIdFromRequest(request: express.Request): string {
+  const tenantId = request.tenantContext?.tenant.id
+  if (!tenantId) {
+    throw new AppError('TENANT_ACCESS_DENIED', 'A verified tenant context is required')
+  }
+  return tenantId
 }
 
 app.use(helmet())
@@ -456,6 +580,360 @@ app.get('/api/v1/platform/plans', requireAuth, loadUserContext, requirePlatformP
     const { data, error } = await client.from('subscription_plans').select('*').order('display_order')
     if (error) {
       throw error
+    }
+    response.json({ data })
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.get('/api/v1/events/:eventId/financial-summary', requireAuth, loadUserContext, requireTenantContext, async (request, response, next) => {
+  try {
+    const tenantId = tenantIdFromRequest(request)
+    const eventId = uuidParamSchema.parse(request.params['eventId'])
+    const client = createUserSupabase(request.auth?.accessToken ?? '')
+    const { data, error } = await client.rpc('rpc_get_event_financial_summary', { p_tenant_id: tenantId, p_event_id: eventId })
+    if (error) {
+      throwFinancialDatabaseError(error, 'EVENT_FINANCIAL_SUMMARY_FAILED')
+    }
+    response.json({ data })
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.get('/api/v1/events/:eventId/members', requireAuth, loadUserContext, requireTenantContext, async (request, response, next) => {
+  try {
+    const tenantId = tenantIdFromRequest(request)
+    const eventId = uuidParamSchema.parse(request.params['eventId'])
+    const client = createUserSupabase(request.auth?.accessToken ?? '')
+    const { data, error } = await client.from('v_event_members_list').select('*').eq('tenant_id', tenantId).eq('event_id', eventId).order('full_name')
+    if (error) {
+      throwFinancialDatabaseError(error, 'EVENT_MEMBERS_LIST_FAILED')
+    }
+    response.json({ data: data ?? [] })
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.post('/api/v1/events/:eventId/members', requireAuth, loadUserContext, requireTenantContext, async (request, response, next) => {
+  try {
+    const tenantId = tenantIdFromRequest(request)
+    const eventId = uuidParamSchema.parse(request.params['eventId'])
+    const input = createMemberSchema.parse(request.body)
+    const client = createUserSupabase(request.auth?.accessToken ?? '')
+    const { data, error } = await client.rpc('rpc_create_member_and_attach_to_event', {
+      p_tenant_id: tenantId,
+      p_event_id: eventId,
+      p_full_name: input.fullName,
+      p_phone: input.phone || null,
+      p_alternative_phone: input.alternativePhone || null,
+      p_email: input.email || null,
+      p_location: input.location || null,
+      p_category_id: input.categoryId || null,
+      p_notes: input.notes || null,
+    })
+    if (error) {
+      throwFinancialDatabaseError(error, 'CREATE_MEMBER_FAILED')
+    }
+    if (input.initialPledgeAmount && typeof data === 'object' && data !== null && 'event_member_id' in data && typeof data.event_member_id === 'string') {
+      const pledgeResult = await client.rpc('rpc_create_or_update_pledge', {
+        p_tenant_id: tenantId,
+        p_event_id: eventId,
+        p_event_member_id: data.event_member_id,
+        p_amount: input.initialPledgeAmount,
+        p_due_date: input.initialPledgeDueDate || null,
+        p_notes: input.notes || null,
+        p_change_reason: null,
+      })
+      if (pledgeResult.error) {
+        throwFinancialDatabaseError(pledgeResult.error, 'CREATE_INITIAL_PLEDGE_FAILED')
+      }
+      response.status(201).json({ data: { ...data, pledge: pledgeResult.data } })
+      return
+    }
+    response.status(201).json({ data })
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.get('/api/v1/events/:eventId/members/:eventMemberId', requireAuth, loadUserContext, requireTenantContext, async (request, response, next) => {
+  try {
+    const tenantId = tenantIdFromRequest(request)
+    const eventId = uuidParamSchema.parse(request.params['eventId'])
+    const eventMemberId = uuidParamSchema.parse(request.params['eventMemberId'])
+    const client = createUserSupabase(request.auth?.accessToken ?? '')
+    const [member, payments] = await Promise.all([
+      client.from('v_event_members_list').select('*').eq('tenant_id', tenantId).eq('event_id', eventId).eq('event_member_id', eventMemberId).single(),
+      client.from('v_event_payments_list').select('*').eq('tenant_id', tenantId).eq('event_id', eventId).eq('event_member_id', eventMemberId).order('payment_date', { ascending: false }),
+    ])
+    if (member.error) {
+      throwFinancialDatabaseError(member.error, 'EVENT_MEMBER_DETAIL_FAILED')
+    }
+    if (payments.error) {
+      throwFinancialDatabaseError(payments.error, 'EVENT_MEMBER_PAYMENTS_FAILED')
+    }
+    response.json({ data: { member: member.data, payments: payments.data ?? [] } })
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.patch('/api/v1/members/:memberId', requireAuth, loadUserContext, requireTenantContext, async (request, response, next) => {
+  try {
+    const tenantId = tenantIdFromRequest(request)
+    const memberId = uuidParamSchema.parse(request.params['memberId'])
+    const input = updateMemberSchema.parse(request.body)
+    const client = createUserSupabase(request.auth?.accessToken ?? '')
+    const update = {
+      ...(input.fullName !== undefined ? { full_name: input.fullName } : {}),
+      ...(input.phoneE164 !== undefined ? { phone_e164: input.phoneE164 || null } : {}),
+      ...(input.alternativePhoneE164 !== undefined ? { alternative_phone_e164: input.alternativePhoneE164 || null } : {}),
+      ...(input.email !== undefined ? { email: input.email || null } : {}),
+      ...(input.location !== undefined ? { location: input.location || null } : {}),
+      ...(input.notes !== undefined ? { notes: input.notes || null } : {}),
+      ...(input.preferredLanguage !== undefined ? { preferred_language: input.preferredLanguage } : {}),
+      ...(input.smsEnabled !== undefined ? { sms_enabled: input.smsEnabled } : {}),
+      ...(input.status !== undefined ? { status: input.status, archived_by: input.status === 'ARCHIVED' ? request.auth?.user.id : null } : {}),
+    }
+    const { data, error } = await client.from('members').update(update).eq('tenant_id', tenantId).eq('id', memberId).select('*').single()
+    if (error) {
+      throwFinancialDatabaseError(error, 'UPDATE_MEMBER_FAILED')
+    }
+    response.json({ data })
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.post('/api/v1/events/:eventId/members/attach', requireAuth, loadUserContext, requireTenantContext, async (request, response, next) => {
+  try {
+    const tenantId = tenantIdFromRequest(request)
+    const eventId = uuidParamSchema.parse(request.params['eventId'])
+    const input = attachMemberSchema.parse(request.body)
+    const client = createUserSupabase(request.auth?.accessToken ?? '')
+    const { data, error } = await client.rpc('rpc_attach_existing_member_to_event', {
+      p_tenant_id: tenantId,
+      p_event_id: eventId,
+      p_member_id: input.memberId,
+      p_category_id: input.categoryId || null,
+      p_notes: input.notes || null,
+    })
+    if (error) {
+      throwFinancialDatabaseError(error, 'ATTACH_MEMBER_FAILED')
+    }
+    response.status(201).json({ data })
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.post('/api/v1/events/:eventId/members/:eventMemberId/remove', requireAuth, loadUserContext, requireTenantContext, async (request, response, next) => {
+  try {
+    const tenantId = tenantIdFromRequest(request)
+    const eventId = uuidParamSchema.parse(request.params['eventId'])
+    const eventMemberId = uuidParamSchema.parse(request.params['eventMemberId'])
+    const client = createUserSupabase(request.auth?.accessToken ?? '')
+    const { data, error } = await client.rpc('rpc_remove_event_member', { p_tenant_id: tenantId, p_event_id: eventId, p_event_member_id: eventMemberId })
+    if (error) {
+      throwFinancialDatabaseError(error, 'REMOVE_EVENT_MEMBER_FAILED')
+    }
+    response.json({ data })
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.get('/api/v1/events/:eventId/pledges', requireAuth, loadUserContext, requireTenantContext, async (request, response, next) => {
+  try {
+    const tenantId = tenantIdFromRequest(request)
+    const eventId = uuidParamSchema.parse(request.params['eventId'])
+    const client = createUserSupabase(request.auth?.accessToken ?? '')
+    const { data, error } = await client.from('v_event_pledges_list').select('*').eq('tenant_id', tenantId).eq('event_id', eventId).order('due_date', { ascending: true })
+    if (error) {
+      throwFinancialDatabaseError(error, 'PLEDGES_LIST_FAILED')
+    }
+    response.json({ data: data ?? [] })
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.post('/api/v1/events/:eventId/pledges', requireAuth, loadUserContext, requireTenantContext, async (request, response, next) => {
+  try {
+    const tenantId = tenantIdFromRequest(request)
+    const eventId = uuidParamSchema.parse(request.params['eventId'])
+    const input = upsertPledgeSchema.parse(request.body)
+    const client = createUserSupabase(request.auth?.accessToken ?? '')
+    const { data, error } = await client.rpc('rpc_create_or_update_pledge', {
+      p_tenant_id: tenantId,
+      p_event_id: eventId,
+      p_event_member_id: input.eventMemberId,
+      p_amount: input.amount,
+      p_due_date: input.dueDate || null,
+      p_notes: input.notes || null,
+      p_change_reason: input.changeReason || null,
+    })
+    if (error) {
+      throwFinancialDatabaseError(error, 'UPSERT_PLEDGE_FAILED')
+    }
+    response.status(201).json({ data })
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.patch('/api/v1/events/:eventId/pledges/:pledgeId', requireAuth, loadUserContext, requireTenantContext, async (request, response, next) => {
+  try {
+    const tenantId = tenantIdFromRequest(request)
+    const eventId = uuidParamSchema.parse(request.params['eventId'])
+    const pledgeId = uuidParamSchema.parse(request.params['pledgeId'])
+    const input = patchPledgeSchema.parse(request.body)
+    const client = createUserSupabase(request.auth?.accessToken ?? '')
+    let eventMemberId = input.eventMemberId
+    if (!eventMemberId) {
+      const pledgeLookup = await client.from('v_event_pledges_list').select('event_member_id').eq('tenant_id', tenantId).eq('event_id', eventId).eq('pledge_id', pledgeId).single()
+      if (pledgeLookup.error || !pledgeLookup.data?.event_member_id || typeof pledgeLookup.data.event_member_id !== 'string') {
+        throwFinancialDatabaseError(pledgeLookup.error ?? new Error('PLEDGE_NOT_FOUND'), 'PLEDGE_LOOKUP_FAILED')
+      }
+      eventMemberId = pledgeLookup.data.event_member_id
+    }
+    const { data, error } = await client.rpc('rpc_create_or_update_pledge', {
+      p_tenant_id: tenantId,
+      p_event_id: eventId,
+      p_event_member_id: eventMemberId,
+      p_amount: input.amount,
+      p_due_date: input.dueDate || null,
+      p_notes: input.notes || null,
+      p_change_reason: input.changeReason || null,
+    })
+    if (error) {
+      throwFinancialDatabaseError(error, 'UPDATE_PLEDGE_FAILED')
+    }
+    response.json({ data })
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.post('/api/v1/events/:eventId/pledges/:pledgeId/cancel', requireAuth, loadUserContext, requireTenantContext, async (request, response, next) => {
+  try {
+    const tenantId = tenantIdFromRequest(request)
+    const eventId = uuidParamSchema.parse(request.params['eventId'])
+    const pledgeId = uuidParamSchema.parse(request.params['pledgeId'])
+    const input = cancelPledgeSchema.parse(request.body)
+    const client = createUserSupabase(request.auth?.accessToken ?? '')
+    const { data, error } = await client.rpc('rpc_cancel_pledge', { p_tenant_id: tenantId, p_event_id: eventId, p_pledge_id: pledgeId, p_reason: input.reason })
+    if (error) {
+      throwFinancialDatabaseError(error, 'CANCEL_PLEDGE_FAILED')
+    }
+    response.json({ data })
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.get('/api/v1/events/:eventId/payments', requireAuth, loadUserContext, requireTenantContext, async (request, response, next) => {
+  try {
+    const tenantId = tenantIdFromRequest(request)
+    const eventId = uuidParamSchema.parse(request.params['eventId'])
+    const client = createUserSupabase(request.auth?.accessToken ?? '')
+    const { data, error } = await client.from('v_event_payments_list').select('*').eq('tenant_id', tenantId).eq('event_id', eventId).order('payment_date', { ascending: false })
+    if (error) {
+      throwFinancialDatabaseError(error, 'PAYMENTS_LIST_FAILED')
+    }
+    response.json({ data: data ?? [] })
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.post('/api/v1/events/:eventId/payments', requireAuth, loadUserContext, requireTenantContext, async (request, response, next) => {
+  try {
+    const tenantId = tenantIdFromRequest(request)
+    const eventId = uuidParamSchema.parse(request.params['eventId'])
+    const input = recordPaymentSchema.parse(request.body)
+    const client = createUserSupabase(request.auth?.accessToken ?? '')
+    const { data, error } = await client.rpc('rpc_record_installment_payment', {
+      p_tenant_id: tenantId,
+      p_event_id: eventId,
+      p_event_member_id: input.eventMemberId,
+      p_amount: input.amount,
+      p_payment_method: input.paymentMethod,
+      p_payment_date: input.paymentDate || new Date().toISOString(),
+      p_transaction_reference: input.transactionReference || null,
+      p_provider_name: input.providerName || null,
+      p_notes: input.notes || null,
+      p_pledge_id: input.pledgeId || null,
+      p_idempotency_key: input.idempotencyKey,
+    })
+    if (error) {
+      throwFinancialDatabaseError(error, 'RECORD_PAYMENT_FAILED')
+    }
+    response.status(201).json({ data })
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.get('/api/v1/events/:eventId/payments/:paymentId', requireAuth, loadUserContext, requireTenantContext, async (request, response, next) => {
+  try {
+    const tenantId = tenantIdFromRequest(request)
+    const eventId = uuidParamSchema.parse(request.params['eventId'])
+    const paymentId = uuidParamSchema.parse(request.params['paymentId'])
+    const client = createUserSupabase(request.auth?.accessToken ?? '')
+    const { data, error } = await client.from('v_event_payments_list').select('*').eq('tenant_id', tenantId).eq('event_id', eventId).eq('payment_id', paymentId).single()
+    if (error) {
+      throwFinancialDatabaseError(error, 'PAYMENT_DETAIL_FAILED')
+    }
+    response.json({ data })
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.post('/api/v1/events/:eventId/payments/:paymentId/reverse', requireAuth, loadUserContext, requireTenantContext, async (request, response, next) => {
+  try {
+    const tenantId = tenantIdFromRequest(request)
+    uuidParamSchema.parse(request.params['eventId'])
+    const paymentId = uuidParamSchema.parse(request.params['paymentId'])
+    const input = reversePaymentSchema.parse(request.body)
+    const client = createUserSupabase(request.auth?.accessToken ?? '')
+    const { data, error } = await client.rpc('rpc_reverse_payment', { p_tenant_id: tenantId, p_payment_id: paymentId, p_reason: input.reason, p_idempotency_key: input.idempotencyKey })
+    if (error) {
+      throwFinancialDatabaseError(error, 'REVERSE_PAYMENT_FAILED')
+    }
+    response.json({ data })
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.get('/api/v1/receipts/:receiptId', requireAuth, loadUserContext, requireTenantContext, async (request, response, next) => {
+  try {
+    const tenantId = tenantIdFromRequest(request)
+    const receiptId = uuidParamSchema.parse(request.params['receiptId'])
+    const client = createUserSupabase(request.auth?.accessToken ?? '')
+    const { data, error } = await client.from('v_receipt_detail').select('*').eq('tenant_id', tenantId).eq('receipt_id', receiptId).single()
+    if (error) {
+      throwFinancialDatabaseError(error, 'RECEIPT_DETAIL_FAILED')
+    }
+    response.json({ data })
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.get('/api/v1/receipts/:receiptId/print', requireAuth, loadUserContext, requireTenantContext, async (request, response, next) => {
+  try {
+    const tenantId = tenantIdFromRequest(request)
+    const receiptId = uuidParamSchema.parse(request.params['receiptId'])
+    const client = createUserSupabase(request.auth?.accessToken ?? '')
+    const { data, error } = await client.from('v_receipt_detail').select('*').eq('tenant_id', tenantId).eq('receipt_id', receiptId).single()
+    if (error) {
+      throwFinancialDatabaseError(error, 'RECEIPT_PRINT_FAILED')
     }
     response.json({ data })
   } catch (error) {
