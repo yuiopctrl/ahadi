@@ -1,0 +1,130 @@
+import { z } from 'zod'
+
+const tzPhoneRegex = /^\+255[67][0-9]{8}$/
+
+export function normalizeTanzaniaPhone(input: string): string {
+  const trimmed = input.trim()
+  const cleaned = trimmed.startsWith('+')
+    ? `+${trimmed.slice(1).replace(/\D/g, '')}`
+    : trimmed.replace(/\D/g, '')
+
+  if (tzPhoneRegex.test(cleaned)) {
+    return cleaned
+  }
+
+  if (/^255[67][0-9]{8}$/.test(cleaned)) {
+    return `+${cleaned}`
+  }
+
+  if (/^0[67][0-9]{8}$/.test(cleaned)) {
+    return `+255${cleaned.slice(1)}`
+  }
+
+  throw new Error('INVALID_PHONE')
+}
+
+export const tanzaniaPhoneSchema = z
+  .string()
+  .min(1)
+  .transform((value, context) => {
+    try {
+      return normalizeTanzaniaPhone(value)
+    } catch {
+      context.addIssue({ code: 'custom', message: 'Invalid Tanzanian phone number' })
+      return z.NEVER
+    }
+  })
+
+export const uuidHeaderSchema = z.string().uuid()
+export const planCodeSchema = z.string().trim().min(1).transform((value) => value.toUpperCase())
+
+export const eventTypeSchema = z.enum([
+  'WEDDING',
+  'SENDOFF',
+  'FUNERAL',
+  'FUNDRAISER',
+  'BIRTHDAY',
+  'GRADUATION',
+  'RELIGIOUS',
+  'OTHER',
+])
+
+export const tzsAmountSchema = z.coerce.number().finite().nonnegative().max(999_999_999_999.99)
+
+export const requestOtpSchema = z.object({
+  phone: tanzaniaPhoneSchema,
+})
+
+export const verifyOtpSchema = z.object({
+  phone: tanzaniaPhoneSchema,
+  token: z.string().regex(/^[0-9]{6}$/),
+})
+
+const weakPins = new Set(['0000', '1111', '1234', '4321'])
+
+export function isWeakPin(pin: string): boolean {
+  return !/^[0-9]{4}$/.test(pin) || weakPins.has(pin) || /^([0-9])\1{3}$/.test(pin)
+}
+
+export const setupPinSchema = z
+  .object({
+    pin: z.string().regex(/^[0-9]{4}$/),
+    confirmPin: z.string().regex(/^[0-9]{4}$/).optional(),
+  })
+  .superRefine((value, context) => {
+    if (isWeakPin(value.pin)) {
+      context.addIssue({ code: 'custom', path: ['pin'], message: 'Choose a stronger PIN' })
+    }
+    if (value.confirmPin !== undefined && value.pin !== value.confirmPin) {
+      context.addIssue({ code: 'custom', path: ['confirmPin'], message: 'PINs do not match' })
+    }
+  })
+
+export const verifyPinSchema = z.object({
+  pin: z.string().regex(/^[0-9]{4}$/),
+})
+
+export const organizationSchema = z.object({
+  tenantName: z.string().trim().min(2).max(120),
+  tenantPhone: tanzaniaPhoneSchema,
+  tenantEmail: z.email().optional().or(z.literal('')).transform((value) => value || null),
+  countryCode: z.literal('TZ').default('TZ'),
+  currency: z.literal('TZS').default('TZS'),
+  timezone: z.literal('Africa/Dar_es_Salaam').default('Africa/Dar_es_Salaam'),
+})
+
+export const administratorProfileSchema = z.object({
+  adminFullName: z.string().trim().min(2).max(120),
+  adminPhone: tanzaniaPhoneSchema,
+  adminEmail: z.email().optional().or(z.literal('')).transform((value) => value || null),
+  preferredLanguage: z.enum(['sw', 'en']),
+})
+
+export const eventSetupSchema = z
+  .object({
+    firstEventName: z.string().trim().min(2).max(160),
+    eventType: eventTypeSchema,
+    customEventType: z.string().trim().max(80).optional().or(z.literal('')).transform((value) => value || null),
+    eventDate: z.iso.date().optional().or(z.literal('')).transform((value) => value || null),
+    venue: z.string().trim().max(160).optional().or(z.literal('')).transform((value) => value || null),
+    targetAmount: tzsAmountSchema.optional().nullable(),
+    pledgeDeadline: z.iso.date().optional().or(z.literal('')).transform((value) => value || null),
+  })
+  .superRefine((value, context) => {
+    if (value.eventType === 'OTHER' && !value.customEventType) {
+      context.addIssue({ code: 'custom', path: ['customEventType'], message: 'Custom event type is required' })
+    }
+  })
+
+export const onboardingPayloadSchema = z
+  .object({
+    planCode: planCodeSchema,
+    idempotencyKey: z.string().uuid(),
+  })
+  .and(organizationSchema)
+  .and(administratorProfileSchema.omit({ adminPhone: true }))
+  .and(eventSetupSchema)
+
+export const tenantContextHeaderSchema = z.object({
+  tenantId: uuidHeaderSchema,
+})

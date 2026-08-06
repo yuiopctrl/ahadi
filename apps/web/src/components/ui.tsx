@@ -10,7 +10,7 @@ import {
   X,
 } from 'lucide-react'
 import type { ComponentType, ReactNode } from 'react'
-import type { EventSummary, TenantSummary } from '../types/auth'
+import type { EventSummary, TenantMembershipContext } from '@ahadi/types'
 
 type IconType = ComponentType<{ size?: number; className?: string; 'aria-hidden'?: boolean }>
 
@@ -202,11 +202,11 @@ export function AppDrawer({ title, children }: AppDrawerProps) {
   )
 }
 
-export function TenantSwitcherDisplay({ tenant }: { tenant: TenantSummary | null }) {
+export function TenantSwitcherDisplay({ tenant }: { tenant: TenantMembershipContext | null }) {
   return (
     <button className="tenant-switcher" type="button" aria-label="Current tenant">
-      <span>{tenant?.name ?? 'No tenant selected'}</span>
-      <small>{tenant?.planName ?? 'Setup required'}</small>
+      <span>{tenant?.tenantName ?? 'No tenant selected'}</span>
+      <small>{tenant?.subscription?.planName ?? 'Setup required'}</small>
       <ChevronDown size={16} aria-hidden />
     </button>
   )

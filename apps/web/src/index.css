@@ -143,6 +143,9 @@ a {
 }
 
 .auth-form input,
+.auth-form select,
+.onboarding-shell input,
+.onboarding-shell select,
 .search-input input {
   min-height: 48px;
   width: 100%;
@@ -155,6 +158,9 @@ a {
 }
 
 .auth-form input:focus,
+.auth-form select:focus,
+.onboarding-shell input:focus,
+.onboarding-shell select:focus,
 .search-input input:focus {
   border-color: var(--color-primary);
   box-shadow: 0 0 0 3px rgba(143, 29, 44, 0.12);
@@ -174,6 +180,12 @@ a {
 
 .primary-button {
   width: 100%;
+}
+
+.auth-form button:disabled,
+.onboarding-action-bar button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
 }
 
 .desktop-primary-button,
@@ -198,6 +210,214 @@ a {
   align-items: center;
   color: var(--color-primary);
   font-weight: 700;
+}
+
+.privacy-note,
+.phone-summary {
+  margin: 0;
+  color: var(--color-muted);
+  font-size: 13px;
+}
+
+.field-error {
+  margin: 0;
+  color: var(--color-danger);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.security-note {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-primary-soft);
+  padding: 12px;
+  color: var(--color-text);
+  font-size: 13px;
+}
+
+.text-button {
+  min-height: 44px;
+  border: 0;
+  background: transparent;
+  color: var(--color-primary);
+  cursor: pointer;
+  font-weight: 800;
+}
+
+.tenant-card-stack {
+  display: grid;
+  gap: 10px;
+}
+
+.tenant-card {
+  display: grid;
+  min-height: 112px;
+  gap: 5px;
+  justify-items: start;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: white;
+  color: var(--color-text);
+  padding: 14px;
+  text-align: left;
+}
+
+.tenant-card span,
+.tenant-card small {
+  color: var(--color-muted);
+}
+
+.onboarding-layout {
+  min-height: 100svh;
+  background: var(--color-background);
+  padding: 14px 14px calc(92px + env(safe-area-inset-bottom));
+}
+
+.onboarding-shell {
+  width: min(100%, 760px);
+  margin: 0 auto;
+}
+
+.onboarding-header {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.onboarding-header h1 {
+  margin: 0;
+  font-size: 30px;
+  line-height: 1.08;
+}
+
+.progress-dots {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 6px;
+}
+
+.progress-dots span {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--color-border);
+}
+
+.progress-dots span.active {
+  background: var(--color-primary);
+}
+
+.package-stack,
+.form-grid,
+.review-stack {
+  display: grid;
+  gap: 12px;
+}
+
+.package-card {
+  display: grid;
+  min-height: 148px;
+  gap: 8px;
+  justify-items: start;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: white;
+  color: var(--color-text);
+  padding: 16px;
+  text-align: left;
+}
+
+.package-card.selected {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(143, 29, 44, 0.12);
+}
+
+.package-card strong {
+  font-size: 18px;
+}
+
+.package-card span,
+.package-card small {
+  color: var(--color-muted);
+}
+
+.form-grid label {
+  display: grid;
+  gap: 8px;
+  color: var(--color-text);
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.review-card {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: white;
+  padding: 14px;
+}
+
+.review-card strong,
+.review-card span {
+  display: block;
+}
+
+.review-card span {
+  color: var(--color-muted);
+  font-size: 14px;
+}
+
+.checkbox-row {
+  display: grid;
+  grid-template-columns: 24px 1fr;
+  gap: 10px;
+  align-items: center;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: white;
+  padding: 14px;
+  font-weight: 800;
+}
+
+.checkbox-row input {
+  min-height: 24px;
+}
+
+.onboarding-action-bar {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 40;
+  display: grid;
+  grid-template-columns: 0.8fr 1.2fr;
+  gap: 10px;
+  border-top: 1px solid var(--color-border);
+  background: rgba(255, 255, 255, 0.98);
+  padding: 10px 14px max(10px, env(safe-area-inset-bottom));
+}
+
+.onboarding-action-bar button {
+  display: inline-flex;
+  min-height: 48px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: white;
+  color: var(--color-text);
+  font-weight: 900;
+}
+
+.onboarding-action-bar button:last-child {
+  border-color: var(--color-primary);
+  background: var(--color-primary);
+  color: white;
 }
 
 .tenant-layout {

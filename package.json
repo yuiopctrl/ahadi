@@ -8,6 +8,8 @@
     "build": "turbo run build",
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "db:types": "supabase gen types typescript --local > packages/database/src/database.types.ts",
     "format": "prettier --write ."
   },
   "devDependencies": {
@@ -15,6 +17,7 @@
     "eslint": "^10.8.0",
     "globals": "^17.7.0",
     "prettier": "^3.9.6",
+    "tsx": "^4.23.5",
     "turbo": "^2.10.8",
     "typescript": "~6.0.2",
     "typescript-eslint": "^8.65.0"

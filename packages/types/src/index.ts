@@ -1,0 +1,230 @@
+export type BillingInterval = 'MONTHLY' | 'QUARTERLY' | 'YEARLY' | 'CUSTOM'
+export type TenantStatus = 'TRIAL' | 'ACTIVE' | 'SUSPENDED' | 'EXPIRED' | 'CANCELLED' | 'ARCHIVED'
+export type SubscriptionStatus = 'TRIAL' | 'ACTIVE' | 'PAST_DUE' | 'SUSPENDED' | 'CANCELLED' | 'EXPIRED'
+export type TenantUserStatus = 'INVITED' | 'ACTIVE' | 'SUSPENDED' | 'REMOVED'
+export type ProfileStatus = 'PENDING' | 'ACTIVE' | 'SUSPENDED' | 'DISABLED'
+export type EventType = 'WEDDING' | 'SENDOFF' | 'FUNERAL' | 'FUNDRAISER' | 'BIRTHDAY' | 'GRADUATION' | 'RELIGIOUS' | 'OTHER'
+export type EventStatus = 'DRAFT' | 'ACTIVE' | 'CLOSED' | 'CANCELLED' | 'ARCHIVED'
+export type EventAccessLevel = 'VIEW' | 'COLLECT' | 'MANAGE'
+export type PlatformRole = 'PLATFORM_OWNER' | 'PLATFORM_ADMIN' | 'PLATFORM_SUPPORT' | 'PLATFORM_AUDITOR'
+export type TenantAccessState = 'ACTIVE' | 'TRIAL' | 'READ_ONLY' | 'BLOCKED'
+
+export type ApiErrorCode =
+  | 'INVALID_INPUT'
+  | 'INVALID_PHONE'
+  | 'OTP_REQUEST_FAILED'
+  | 'INVALID_OTP'
+  | 'SESSION_REQUIRED'
+  | 'PIN_REQUIRED'
+  | 'PIN_INVALID'
+  | 'PIN_LOCKED'
+  | 'TENANT_ACCESS_DENIED'
+  | 'ONBOARDING_ALREADY_COMPLETED'
+  | 'PLAN_NOT_AVAILABLE'
+  | 'SUBSCRIPTION_INACTIVE'
+  | 'RATE_LIMITED'
+  | 'INTERNAL_ERROR'
+
+export interface SubscriptionPlan {
+  id: string
+  code: string
+  name: string
+  description: string
+  currency: string
+  priceAmount: number
+  billingInterval: BillingInterval
+  trialDays: number
+  maxActiveEvents: number
+  maxMembers: number
+  maxUsers: number
+  includedSms: number
+  features: Record<string, unknown>
+  isPublic: boolean
+  isActive: boolean
+  displayOrder: number
+}
+
+export interface Tenant {
+  id: string
+  code: string
+  slug: string
+  name: string
+  legalName: string | null
+  phoneE164: string
+  email: string | null
+  countryCode: 'TZ'
+  timezone: 'Africa/Dar_es_Salaam'
+  currency: 'TZS'
+  status: TenantStatus
+}
+
+export interface TenantSettings {
+  tenantId: string
+  receiptPrefix: string
+  smsSenderName: string | null
+  defaultEventType: EventType | null
+  defaultPledgeDeadlineDays: number | null
+  logoUrl: string | null
+  primaryColor: string | null
+}
+
+export interface TenantSubscription {
+  id: string
+  tenantId: string
+  planId: string
+  status: SubscriptionStatus
+  startsAt: string
+  trialEndsAt: string | null
+  currentPeriodStart: string
+  currentPeriodEnd: string | null
+  planSnapshot: Record<string, unknown>
+}
+
+export interface TenantUser {
+  id: string
+  tenantId: string
+  userId: string
+  status: TenantUserStatus
+  isOwner: boolean
+  joinedAt: string | null
+}
+
+export interface TenantRole {
+  id: string
+  tenantId: string | null
+  code: string
+  name: string
+  scope: 'SYSTEM' | 'TENANT'
+  isSystem: boolean
+}
+
+export interface Permission {
+  id: string
+  code: string
+  name: string
+}
+
+export interface Event {
+  id: string
+  tenantId: string
+  code: string
+  name: string
+  eventType: EventType
+  customEventType: string | null
+  eventDate: string | null
+  venue: string | null
+  targetAmount: number | null
+  pledgeDeadline: string | null
+  status: EventStatus
+}
+
+export interface EventAssignment {
+  id: string
+  tenantId: string
+  eventId: string
+  tenantUserId: string
+  accessLevel: EventAccessLevel
+}
+
+export interface PlatformUser {
+  id: string
+  userId: string
+  role: PlatformRole
+  status: 'ACTIVE' | 'SUSPENDED' | 'DISABLED'
+}
+
+export interface UserProfile {
+  id: string
+  fullName: string
+  phoneE164: string
+  email: string | null
+  avatarUrl: string | null
+  status: ProfileStatus
+  preferredLanguage: 'sw' | 'en'
+  onboardingCompletedAt: string | null
+}
+
+export interface SubscriptionSummary {
+  id: string
+  status: SubscriptionStatus
+  planCode: string
+  planName: string
+  trialEndsAt: string | null
+  currentPeriodEnd: string | null
+  limits: Record<string, unknown>
+}
+
+export interface EventSummary {
+  id: string
+  code: string
+  name: string
+  eventType: EventType
+  status: EventStatus
+  eventDate: string | null
+}
+
+export interface TenantMembershipContext {
+  tenantUserId: string
+  tenantId: string
+  tenantCode: string
+  tenantName: string
+  tenantSlug: string
+  tenantStatus: TenantStatus
+  membershipStatus: TenantUserStatus
+  isOwner: boolean
+  roles: string[]
+  permissions: string[]
+  subscription: SubscriptionSummary | null
+  accessibleEvents: EventSummary[]
+}
+
+export interface UserContext {
+  profile: UserProfile | null
+  isPlatformUser: boolean
+  platformRole: PlatformRole | null
+  onboardingCompleted: boolean
+  tenantMemberships: TenantMembershipContext[]
+}
+
+export interface TenantContext {
+  tenant: Tenant
+  subscription: SubscriptionSummary | null
+  membership: Pick<TenantUser, 'id' | 'status' | 'isOwner'> | null
+  roles: string[]
+  permissions: string[]
+  events: EventSummary[]
+  accessState: TenantAccessState
+}
+
+export interface OnboardingPayload {
+  planCode: string
+  tenantName: string
+  tenantPhone: string
+  tenantEmail?: string | null
+  adminFullName: string
+  adminEmail?: string | null
+  preferredLanguage: 'sw' | 'en'
+  firstEventName: string
+  eventType: EventType
+  customEventType?: string | null
+  eventDate?: string | null
+  venue?: string | null
+  targetAmount?: number | null
+  pledgeDeadline?: string | null
+  idempotencyKey: string
+}
+
+export interface OnboardingResult {
+  tenantId: string
+  tenantCode: string
+  tenantSlug: string
+  subscriptionId: string
+  eventId: string
+  eventCode: string
+}
+
+export interface PinVerificationResult {
+  ok: boolean
+  lockedUntil: string | null
+  remainingAttempts?: number
+}

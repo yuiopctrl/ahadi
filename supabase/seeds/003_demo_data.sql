@@ -1,0 +1,2 @@
+-- Optional local demo seed. Safe to skip in production.
+-- Create real demo users through Supabase Auth first, then run onboarding through the app/RPC.

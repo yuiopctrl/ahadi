@@ -1,58 +1,513 @@
-import { Link } from 'react-router-dom'
+import { useMutation, useQuery } from '@tanstack/react-query'
+import { ArrowLeft, CheckCircle2, LockKeyhole } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import type { OnboardingPayload, SubscriptionPlan, TenantMembershipContext } from '@ahadi/types'
+import { normalizeTanzaniaPhone, setupPinSchema } from '@ahadi/validation'
+import { api, ApiClientError } from '../lib/api'
+import { supabase } from '../lib/supabase'
+import { getSingleActiveMembership, useSessionStore } from '../stores/session-store'
+import { MoneyDisplay, StatusBadge } from '../components/ui'
+
+type AuthMode = 'login' | 'otp' | 'pin' | 'register' | 'onboarding' | 'selectTenant'
 
 interface AuthPageProps {
   title: string
   subtitle: string
-  mode: 'login' | 'otp' | 'pin' | 'register' | 'onboarding'
+  mode: AuthMode
+}
+
+const phoneDraftKey = 'ahadi:verification-phone'
+const onboardingDraftKey = 'ahadi:onboarding-draft'
+
+interface OnboardingDraft {
+  planCode: string
+  tenantName: string
+  tenantPhone: string
+  tenantEmail: string
+  adminFullName: string
+  adminEmail: string
+  preferredLanguage: 'sw' | 'en'
+  firstEventName: string
+  eventType: OnboardingPayload['eventType']
+  customEventType: string
+  eventDate: string
+  venue: string
+  targetAmount: string
+  pledgeDeadline: string
+  confirmed: boolean
+}
+
+const defaultDraft: OnboardingDraft = {
+  planCode: '',
+  tenantName: '',
+  tenantPhone: '',
+  tenantEmail: '',
+  adminFullName: '',
+  adminEmail: '',
+  preferredLanguage: 'sw',
+  firstEventName: '',
+  eventType: 'WEDDING',
+  customEventType: '',
+  eventDate: '',
+  venue: '',
+  targetAmount: '',
+  pledgeDeadline: '',
+  confirmed: false,
+}
+
+function errorMessage(error: unknown) {
+  if (error instanceof ApiClientError) {
+    return error.message
+  }
+  if (error instanceof Error) {
+    return error.message
+  }
+  return 'Something went wrong'
 }
 
 export function AuthPage({ title, subtitle, mode }: AuthPageProps) {
-  const primaryLabel =
-    mode === 'login'
-      ? 'Continue'
-      : mode === 'otp'
-        ? 'Verify code'
-        : mode === 'pin'
-          ? 'Save PIN'
-          : mode === 'register'
-            ? 'Create account'
-            : 'Finish setup'
+  if (mode === 'otp') {
+    return <OtpPage title={title} subtitle={subtitle} />
+  }
+  if (mode === 'pin') {
+    return <PinPage title={title} subtitle={subtitle} />
+  }
+  if (mode === 'onboarding') {
+    return <OnboardingPage />
+  }
+  if (mode === 'selectTenant') {
+    return <TenantSelectionPage title={title} subtitle={subtitle} />
+  }
+  return <LoginPage title={title} subtitle={mode === 'register' ? 'Create your first tenant after phone verification.' : subtitle} />
+}
+
+function LoginPage({ title, subtitle }: Pick<AuthPageProps, 'title' | 'subtitle'>) {
+  const navigate = useNavigate()
+  const [phone, setPhone] = useState(localStorage.getItem(phoneDraftKey) ?? '')
+  const [error, setError] = useState<string | null>(null)
+  const mutation = useMutation({
+    mutationFn: async () => {
+      const normalized = normalizeTanzaniaPhone(phone)
+      await api.requestOtp(normalized)
+      localStorage.setItem(phoneDraftKey, normalized)
+      return normalized
+    },
+    onSuccess: () => navigate('/verify-otp'),
+    onError: (nextError) => setError(errorMessage(nextError)),
+  })
 
   return (
-    <form className="auth-form">
+    <form className="auth-form" onSubmit={(event) => event.preventDefault()}>
       <div>
         <h1>{title}</h1>
         <p>{subtitle}</p>
       </div>
-      {mode === 'otp' ? (
-        <label>
-          Verification code
-          <input inputMode="numeric" placeholder="123456" />
-        </label>
-      ) : null}
-      {mode === 'pin' ? (
-        <label>
-          Secure PIN
-          <input inputMode="numeric" type="password" placeholder="4 digits" />
-        </label>
-      ) : null}
-      {mode === 'register' || mode === 'onboarding' ? (
-        <label>
-          Committee or organization name
-          <input placeholder="Mrema Family Committee" />
-        </label>
-      ) : null}
       <label>
         Phone number
-        <input inputMode="tel" placeholder="+255 712 345 678" />
+        <input inputMode="tel" placeholder="0712 345 678" value={phone} onChange={(event) => setPhone(event.target.value)} />
       </label>
-      <button type="button" className="primary-button">
-        {primaryLabel}
+      {error ? <p className="field-error">{error}</p> : null}
+      <button className="primary-button" type="button" disabled={mutation.isPending} onClick={() => mutation.mutate()}>
+        {mutation.isPending ? 'Sending...' : 'Continue'}
       </button>
-      <p className="auth-link">
-        <Link to="/register">Create tenant</Link>
-        <Link to="/login">Sign in</Link>
-      </p>
+      <p className="privacy-note">We use your phone number only to secure your Ahadi account and send requested verification messages.</p>
     </form>
+  )
+}
+
+function OtpPage({ title, subtitle }: Pick<AuthPageProps, 'title' | 'subtitle'>) {
+  const navigate = useNavigate()
+  const session = useSessionStore()
+  const [digits, setDigits] = useState('')
+  const [seconds, setSeconds] = useState(45)
+  const [error, setError] = useState<string | null>(null)
+  const phone = localStorage.getItem(phoneDraftKey) ?? ''
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setSeconds((value) => Math.max(0, value - 1)), 1000)
+    return () => window.clearInterval(timer)
+  }, [])
+
+  const mutation = useMutation({
+    mutationFn: async (token: string) => {
+      const response = await api.verifyOtp(phone, token)
+      await supabase.auth.setSession({
+        access_token: response.session.access_token,
+        refresh_token: response.session.refresh_token,
+      })
+    },
+    onSuccess: async () => {
+      const context = await session.refreshContext()
+      const hasPin = await api.hasPin()
+      if (!hasPin.hasPin) {
+        navigate('/setup-pin', { replace: true })
+        return
+      }
+      session.lockState.unlock()
+      if (!context?.onboardingCompleted) {
+        navigate('/onboarding', { replace: true })
+        return
+      }
+      const singleTenant = getSingleActiveMembership(context)
+      if (singleTenant) {
+        await session.selectTenant(singleTenant.tenantId)
+        navigate('/app', { replace: true })
+        return
+      }
+      if (context?.isPlatformUser && !context.tenantMemberships.length) {
+        navigate('/platform', { replace: true })
+        return
+      }
+      navigate('/select-tenant', { replace: true })
+    },
+    onError: (nextError) => {
+      setDigits('')
+      setError(errorMessage(nextError))
+    },
+  })
+
+  useEffect(() => {
+    if (digits.length === 6 && !mutation.isPending) {
+      mutation.mutate(digits)
+    }
+  }, [digits, mutation])
+
+  return (
+    <form className="auth-form" onSubmit={(event) => event.preventDefault()}>
+      <div>
+        <h1>{title}</h1>
+        <p>{subtitle}</p>
+      </div>
+      <p className="phone-summary">Code sent to {phone || 'your phone'}</p>
+      <label>
+        Six-digit code
+        <input
+          inputMode="numeric"
+          autoComplete="one-time-code"
+          maxLength={6}
+          placeholder="123456"
+          value={digits}
+          onChange={(event) => setDigits(event.target.value.replace(/\D/g, '').slice(0, 6))}
+        />
+      </label>
+      {error ? <p className="field-error">{error}</p> : null}
+      <button className="primary-button" type="button" disabled={digits.length !== 6 || mutation.isPending} onClick={() => mutation.mutate(digits)}>
+        {mutation.isPending ? 'Verifying...' : 'Verify code'}
+      </button>
+      <button className="text-button" type="button" onClick={() => navigate('/login')}>
+        Change phone
+      </button>
+      <p className="privacy-note">Resend available in {seconds}s. OTP is never stored by Ahadi.</p>
+    </form>
+  )
+}
+
+function PinPage({ title, subtitle }: Pick<AuthPageProps, 'title' | 'subtitle'>) {
+  const navigate = useNavigate()
+  const session = useSessionStore()
+  const [pin, setPin] = useState('')
+  const [confirmPin, setConfirmPin] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const [remaining, setRemaining] = useState<number | null>(null)
+  const hasPinQuery = useQuery({
+    queryKey: ['has-pin'],
+    queryFn: api.hasPin,
+  })
+  const returningDevice = Boolean(hasPinQuery.data?.hasPin && session.lockState.isLocked)
+  const mutation = useMutation({
+    mutationFn: async () => {
+      if (returningDevice) {
+        return api.verifyPin(pin)
+      }
+      setupPinSchema.parse({ pin, confirmPin })
+      await api.setPin(pin, confirmPin)
+      return { ok: true, lockedUntil: null }
+    },
+    onSuccess: async (result) => {
+      if (!result.ok) {
+        setPin('')
+        setRemaining(result.remainingAttempts ?? null)
+        setError(result.lockedUntil ? `PIN is locked until ${new Date(result.lockedUntil).toLocaleTimeString()}` : 'Incorrect PIN')
+        return
+      }
+      session.lockState.unlock()
+      const context = await session.refreshContext()
+      if (!context?.onboardingCompleted) {
+        navigate('/onboarding', { replace: true })
+        return
+      }
+      navigate('/select-tenant', { replace: true })
+    },
+    onError: (nextError) => {
+      setPin('')
+      setError(errorMessage(nextError))
+    },
+  })
+
+  return (
+    <form className="auth-form" onSubmit={(event) => event.preventDefault()}>
+      <div>
+        <h1>{returningDevice ? 'Unlock Ahadi' : title}</h1>
+        <p>{returningDevice ? 'Enter your four-digit application PIN for this authenticated device.' : subtitle}</p>
+      </div>
+      <div className="security-note">
+        <LockKeyhole size={20} aria-hidden />
+        <span>PIN unlocks this device only. Full logout, session expiry, or a new device requires OTP again.</span>
+      </div>
+      <label>
+        PIN
+        <input inputMode="numeric" type="password" maxLength={4} value={pin} onChange={(event) => setPin(event.target.value.replace(/\D/g, '').slice(0, 4))} />
+      </label>
+      {!returningDevice ? (
+        <label>
+          Confirm PIN
+          <input
+            inputMode="numeric"
+            type="password"
+            maxLength={4}
+            value={confirmPin}
+            onChange={(event) => setConfirmPin(event.target.value.replace(/\D/g, '').slice(0, 4))}
+          />
+        </label>
+      ) : null}
+      {error ? <p className="field-error">{error}{remaining !== null ? ` (${remaining} attempts left)` : ''}</p> : null}
+      <button className="primary-button" type="button" disabled={pin.length !== 4 || mutation.isPending} onClick={() => mutation.mutate()}>
+        {mutation.isPending ? 'Checking...' : returningDevice ? 'Unlock' : 'Continue'}
+      </button>
+    </form>
+  )
+}
+
+function OnboardingPage() {
+  const navigate = useNavigate()
+  const session = useSessionStore()
+  const [step, setStep] = useState(0)
+  const [error, setError] = useState<string | null>(null)
+  const [draft, setDraft] = useState<OnboardingDraft>(() => {
+    const stored = localStorage.getItem(onboardingDraftKey)
+    return stored ? ({ ...defaultDraft, ...JSON.parse(stored) } as OnboardingDraft) : defaultDraft
+  })
+  const plansQuery = useQuery({
+    queryKey: ['plans'],
+    queryFn: async () => (await api.plans()).data as SubscriptionPlan[],
+  })
+  const selectedPlan = plansQuery.data?.find((plan) => plan.code === draft.planCode)
+
+  useEffect(() => {
+    localStorage.setItem(onboardingDraftKey, JSON.stringify(draft))
+  }, [draft])
+
+  const mutation = useMutation({
+    mutationFn: async () => {
+      const payload: OnboardingPayload = {
+        planCode: draft.planCode,
+        tenantName: draft.tenantName,
+        tenantPhone: draft.tenantPhone || session.userContext?.profile?.phoneE164 || '',
+        tenantEmail: draft.tenantEmail || null,
+        adminFullName: draft.adminFullName,
+        adminEmail: draft.adminEmail || null,
+        preferredLanguage: draft.preferredLanguage,
+        firstEventName: draft.firstEventName,
+        eventType: draft.eventType,
+        customEventType: draft.customEventType || null,
+        eventDate: draft.eventDate || null,
+        venue: draft.venue || null,
+        targetAmount: draft.targetAmount ? Number(draft.targetAmount) : null,
+        pledgeDeadline: draft.pledgeDeadline || null,
+        idempotencyKey: crypto.randomUUID(),
+      }
+      return api.completeOnboarding(payload)
+    },
+    onSuccess: async (result) => {
+      localStorage.removeItem(onboardingDraftKey)
+      await session.refreshContext()
+      const onboardingResult = result as { tenant_id?: string; tenantId?: string; event_id?: string; eventId?: string }
+      const tenantId = onboardingResult.tenant_id ?? onboardingResult.tenantId
+      const eventId = onboardingResult.event_id ?? onboardingResult.eventId
+      if (tenantId) {
+        await session.selectTenant(tenantId)
+      }
+      navigate(eventId ? `/app/events/${eventId}` : '/app', { replace: true })
+    },
+    onError: (nextError) => setError(errorMessage(nextError)),
+  })
+
+  const setField = <K extends keyof OnboardingDraft>(key: K, value: OnboardingDraft[K]) => setDraft((current) => ({ ...current, [key]: value }))
+  const steps = ['Package', 'Organization', 'Admin', 'Event', 'Review']
+
+  return (
+    <main className="onboarding-layout">
+      <section className="onboarding-shell">
+        <header className="onboarding-header">
+          <div>
+            <p className="eyebrow">Step {step + 1} of 5</p>
+            <h1>{steps[step]}</h1>
+          </div>
+          <div className="progress-dots" aria-label="Onboarding progress">
+            {steps.map((item, index) => (
+              <span className={index <= step ? 'active' : ''} key={item} />
+            ))}
+          </div>
+        </header>
+        {step === 0 ? (
+          <div className="package-stack">
+            {(plansQuery.data ?? []).map((plan) => (
+              <button className={draft.planCode === plan.code ? 'package-card selected' : 'package-card'} key={plan.code} type="button" onClick={() => setField('planCode', plan.code)}>
+                <strong>{plan.name}</strong>
+                <MoneyDisplay amount={plan.priceAmount} />
+                <span>{plan.billingInterval.toLowerCase()} billing, {plan.trialDays} trial days</span>
+                <small>{plan.maxActiveEvents} active events · {plan.maxUsers} users · {plan.maxMembers} members · {plan.includedSms} SMS</small>
+              </button>
+            ))}
+          </div>
+        ) : null}
+        {step === 1 ? (
+          <div className="form-grid">
+            <Input label="Organization or committee name" value={draft.tenantName} onChange={(value) => setField('tenantName', value)} />
+            <Input label="Phone number" value={draft.tenantPhone || session.userContext?.profile?.phoneE164 || ''} inputMode="tel" onChange={(value) => setField('tenantPhone', value)} />
+            <Input label="Email optional" value={draft.tenantEmail} onChange={(value) => setField('tenantEmail', value)} />
+            <Readonly label="Country" value="Tanzania" />
+            <Readonly label="Currency" value="TZS" />
+            <Readonly label="Timezone" value="Africa/Dar_es_Salaam" />
+          </div>
+        ) : null}
+        {step === 2 ? (
+          <div className="form-grid">
+            <Input label="Full name" value={draft.adminFullName} onChange={(value) => setField('adminFullName', value)} />
+            <Readonly label="Authenticated phone" value={session.userContext?.profile?.phoneE164 ?? 'Verified phone'} />
+            <Input label="Email optional" value={draft.adminEmail} onChange={(value) => setField('adminEmail', value)} />
+            <label>
+              Preferred language
+              <select value={draft.preferredLanguage} onChange={(event) => setField('preferredLanguage', event.target.value as 'sw' | 'en')}>
+                <option value="sw">Kiswahili</option>
+                <option value="en">English</option>
+              </select>
+            </label>
+          </div>
+        ) : null}
+        {step === 3 ? (
+          <div className="form-grid">
+            <Input label="Event name" value={draft.firstEventName} onChange={(value) => setField('firstEventName', value)} />
+            <label>
+              Event type
+              <select value={draft.eventType} onChange={(event) => setField('eventType', event.target.value as OnboardingPayload['eventType'])}>
+                {['WEDDING', 'SENDOFF', 'FUNERAL', 'FUNDRAISER', 'BIRTHDAY', 'GRADUATION', 'RELIGIOUS', 'OTHER'].map((item) => (
+                  <option key={item} value={item}>{item}</option>
+                ))}
+              </select>
+            </label>
+            {draft.eventType === 'OTHER' ? <Input label="Custom event type" value={draft.customEventType} onChange={(value) => setField('customEventType', value)} /> : null}
+            <Input label="Event date optional" type="date" value={draft.eventDate} onChange={(value) => setField('eventDate', value)} />
+            <Input label="Venue optional" value={draft.venue} onChange={(value) => setField('venue', value)} />
+            <Input label="Target amount optional" inputMode="decimal" value={draft.targetAmount} onChange={(value) => setField('targetAmount', value)} />
+            <Input label="Pledge deadline optional" type="date" value={draft.pledgeDeadline} onChange={(value) => setField('pledgeDeadline', value)} />
+          </div>
+        ) : null}
+        {step === 4 ? (
+          <div className="review-stack">
+            <Review title="Package" value={selectedPlan ? `${selectedPlan.name} · ${selectedPlan.maxActiveEvents} active events` : 'Select a package'} />
+            <Review title="Organization" value={`${draft.tenantName || 'Not set'} · ${draft.tenantPhone || 'No phone'}`} />
+            <Review title="Administrator" value={`${draft.adminFullName || 'Not set'} · ${draft.preferredLanguage === 'sw' ? 'Kiswahili' : 'English'}`} />
+            <Review title="First event" value={`${draft.firstEventName || 'Not set'} · ${draft.eventType}`} />
+            <label className="checkbox-row">
+              <input type="checkbox" checked={draft.confirmed} onChange={(event) => setField('confirmed', event.target.checked)} />
+              I confirm these details are correct.
+            </label>
+          </div>
+        ) : null}
+        {error ? <p className="field-error">{error}</p> : null}
+      </section>
+      <div className="onboarding-action-bar">
+        <button type="button" disabled={step === 0 || mutation.isPending} onClick={() => setStep((value) => Math.max(0, value - 1))}>
+          <ArrowLeft size={18} aria-hidden />
+          Back
+        </button>
+        {step < 4 ? (
+          <button type="button" onClick={() => setStep((value) => Math.min(4, value + 1))}>Continue</button>
+        ) : (
+          <button type="button" disabled={!draft.confirmed || mutation.isPending} onClick={() => mutation.mutate()}>
+            {mutation.isPending ? 'Creating...' : 'Create Account'}
+          </button>
+        )}
+      </div>
+    </main>
+  )
+}
+
+function TenantSelectionPage({ title, subtitle }: Pick<AuthPageProps, 'title' | 'subtitle'>) {
+  const navigate = useNavigate()
+  const session = useSessionStore()
+  const memberships = session.userContext?.tenantMemberships ?? []
+
+  async function chooseTenant(membership: TenantMembershipContext) {
+    await session.selectTenant(membership.tenantId)
+    navigate('/app', { replace: true })
+  }
+
+  return (
+    <form className="auth-form" onSubmit={(event) => event.preventDefault()}>
+      <div>
+        <h1>{title}</h1>
+        <p>{subtitle}</p>
+      </div>
+      <div className="tenant-card-stack">
+        {memberships.map((membership) => (
+          <button type="button" className="tenant-card" key={membership.tenantId} onClick={() => void chooseTenant(membership)}>
+            <strong>{membership.tenantName}</strong>
+            <span>{membership.tenantCode} · {membership.subscription?.status ?? 'No subscription'}</span>
+            <small>{membership.roles.join(', ') || 'Member'} · {membership.accessibleEvents.filter((event) => event.status === 'ACTIVE').length} active events</small>
+            <StatusBadge tone={membership.tenantStatus === 'ACTIVE' || membership.tenantStatus === 'TRIAL' ? 'success' : 'danger'}>{membership.tenantStatus}</StatusBadge>
+          </button>
+        ))}
+      </div>
+      {session.userContext?.isPlatformUser ? (
+        <button type="button" className="text-button" onClick={() => navigate('/platform')}>
+          Open platform console
+        </button>
+      ) : null}
+    </form>
+  )
+}
+
+function Input({
+  label,
+  value,
+  onChange,
+  inputMode,
+  type = 'text',
+}: {
+  label: string
+  value: string
+  onChange: (value: string) => void
+  inputMode?: 'text' | 'tel' | 'numeric' | 'decimal'
+  type?: string
+}) {
+  return (
+    <label>
+      {label}
+      <input type={type} inputMode={inputMode} value={value} onChange={(event) => onChange(event.target.value)} />
+    </label>
+  )
+}
+
+function Readonly({ label, value }: { label: string; value: string }) {
+  return (
+    <label>
+      {label}
+      <input value={value} readOnly />
+    </label>
+  )
+}
+
+function Review({ title, value }: { title: string; value: string }) {
+  return (
+    <div className="review-card">
+      <CheckCircle2 size={18} aria-hidden />
+      <div>
+        <strong>{title}</strong>
+        <span>{value}</span>
+      </div>
+    </div>
   )
 }

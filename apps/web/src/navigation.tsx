@@ -11,7 +11,7 @@ import {
 } from 'lucide-react'
 import { NavLink } from 'react-router-dom'
 import { EventContextDisplay, TenantSwitcherDisplay } from './components/ui'
-import type { EventSummary, TenantSummary } from './types/auth'
+import type { EventSummary, TenantMembershipContext } from '@ahadi/types'
 
 const mobileNav = [
   { to: '/app', label: 'Home', icon: Home, end: true },
@@ -33,7 +33,7 @@ const desktopNav = [
   { to: '/app/settings', label: 'Settings', icon: Settings },
 ]
 
-export function MobileTopBar({ tenant, event }: { tenant: TenantSummary | null; event: EventSummary | null }) {
+export function MobileTopBar({ tenant, event }: { tenant: TenantMembershipContext | null; event: EventSummary | null }) {
   return (
     <header className="mobile-topbar">
       <TenantSwitcherDisplay tenant={tenant} />
@@ -55,7 +55,7 @@ export function MobileBottomNav() {
   )
 }
 
-export function DesktopSidebar({ tenant, event }: { tenant: TenantSummary | null; event: EventSummary | null }) {
+export function DesktopSidebar({ tenant, event }: { tenant: TenantMembershipContext | null; event: EventSummary | null }) {
   return (
     <aside className="desktop-sidebar">
       <div className="sidebar-brand">

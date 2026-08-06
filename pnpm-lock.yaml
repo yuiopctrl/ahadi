@@ -20,6 +20,9 @@ importers:
       prettier:
         specifier: ^3.9.6
         version: 3.9.6
+      tsx:
+        specifier: ^4.23.5
+        version: 4.23.5
       turbo:
         specifier: ^2.10.8
         version: 2.10.8
@@ -32,6 +35,18 @@ importers:
 
   apps/api:
     dependencies:
+      '@ahadi/config':
+        specifier: workspace:*
+        version: link:../../packages/config
+      '@ahadi/database':
+        specifier: workspace:*
+        version: link:../../packages/database
+      '@ahadi/types':
+        specifier: workspace:*
+        version: link:../../packages/types
+      '@ahadi/validation':
+        specifier: workspace:*
+        version: link:../../packages/validation
       '@supabase/supabase-js':
         specifier: ^2.112.0
         version: 2.112.0
@@ -78,6 +93,12 @@ importers:
 
   apps/web:
     dependencies:
+      '@ahadi/types':
+        specifier: workspace:*
+        version: link:../../packages/types
+      '@ahadi/validation':
+        specifier: workspace:*
+        version: link:../../packages/validation
       '@hookform/resolvers':
         specifier: ^5.7.1
         version: 5.7.1(ajv@8.20.0)(react-hook-form@7.84.0(react@19.2.8))(zod@4.4.3)
@@ -148,6 +169,9 @@ importers:
       tailwindcss:
         specifier: ^4.3.3
         version: 4.3.3
+      tsx:
+        specifier: ^4.23.5
+        version: 4.23.5
       typescript:
         specifier: ~6.0.2
         version: 6.0.3
@@ -191,7 +215,21 @@ importers:
 
   packages/ui: {}
 
-  packages/validation: {}
+  packages/validation:
+    dependencies:
+      zod:
+        specifier: ^4.4.3
+        version: 4.4.3
+    devDependencies:
+      '@types/node':
+        specifier: ^24.13.3
+        version: 24.13.3
+      tsx:
+        specifier: ^4.23.5
+        version: 4.23.5
+      typescript:
+        specifier: ~6.0.2
+        version: 6.0.3
 
 packages:
 
