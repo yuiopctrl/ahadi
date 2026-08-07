@@ -37,6 +37,24 @@ test('platform API routes require auth and platform permission without tenant co
   assert.doesNotMatch(platformBlock, /X-Tenant-ID/)
 })
 
+test('authenticated API responses disable browser cache validation', () => {
+  assert.match(app, /app\.disable\('etag'\)/)
+  assert.match(app, /app\.use\('\/api\/v1'/)
+  assert.match(app, /Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate'/)
+  assert.match(app, /Surrogate-Control', 'no-store'/)
+})
+
+test('development CORS allows common localhost web origins', () => {
+  assert.match(app, /developmentWebOrigins = new Set/)
+  assert.match(app, /'http:\/\/localhost:5173'/)
+  assert.match(app, /'http:\/\/127\.0\.0\.1:5173'/)
+  assert.match(app, /'http:\/\/localhost:5174'/)
+  assert.match(app, /'http:\/\/127\.0\.0\.1:5174'/)
+  assert.match(app, /callback\(null, origin \?\? true\)/)
+  assert.match(app, /'Cache-Control'/)
+  assert.match(app, /'Pragma'/)
+})
+
 test('platform middleware authorizes from platform permissions and returns 403 for inactive or missing permission', () => {
   assert.match(types, /\| 'PLATFORM_ACCESS_DENIED'/)
   assert.match(middleware, /context\.platformStatus !== 'ACTIVE'/)

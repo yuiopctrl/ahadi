@@ -23,6 +23,7 @@ import { createUserSupabase, supabasePublic } from './supabase.js'
 import { loadUserContext, requestIdMiddleware, requireAuth, requirePlatformPermission, requireTenantContext } from './middleware.js'
 
 export const app = express()
+app.disable('etag')
 
 interface SubscriptionPlanRow {
   billing_interval: string
@@ -275,6 +276,25 @@ const knownDatabaseCodes: ApiErrorCode[] = [
   'SUBSCRIPTION_BLOCKED',
 ]
 
+const developmentWebOrigins = new Set([
+  env.WEB_URL,
+  'http://localhost:5173',
+  'http://127.0.0.1:5173',
+  'http://localhost:5174',
+  'http://127.0.0.1:5174',
+])
+
+const corsOrigin: cors.CorsOptions['origin'] =
+  env.NODE_ENV === 'development'
+    ? (origin, callback) => {
+        if (!origin || developmentWebOrigins.has(origin)) {
+          callback(null, origin ?? true)
+          return
+        }
+        callback(new Error('CORS_ORIGIN_DENIED'))
+      }
+    : env.WEB_URL
+
 function databaseMessage(error: unknown): string {
   if (error instanceof Error) {
     return error.message
@@ -302,17 +322,28 @@ function tenantIdFromRequest(request: express.Request): string {
   return tenantId
 }
 
+function jsonArray(data: unknown): Record<string, unknown>[] {
+  return Array.isArray(data) ? data as Record<string, unknown>[] : []
+}
+
 app.use(helmet())
 app.use(requestIdMiddleware)
 app.post('/auth/hooks/send-sms', sendSmsHookLimiter, express.raw({ type: 'application/json', limit: '64kb' }), sendSmsHookHandler)
 app.use(
   cors({
-    origin: env.WEB_URL,
+    origin: corsOrigin,
     credentials: true,
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Tenant-ID', 'X-Request-ID'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Tenant-ID', 'X-Request-ID', 'Cache-Control', 'Pragma'],
   }),
 )
 app.use(express.json({ limit: '1mb' }))
+app.use('/api/v1', (_request, response, next) => {
+  response.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate')
+  response.setHeader('Pragma', 'no-cache')
+  response.setHeader('Expires', '0')
+  response.setHeader('Surrogate-Control', 'no-store')
+  next()
+})
 app.use(
   morgan(env.NODE_ENV === 'production' ? 'combined' : 'dev', {
     skip: (request) => request.path.startsWith('/api/v1/auth/verify'),
@@ -607,11 +638,11 @@ app.get('/api/v1/events/:eventId/members', requireAuth, loadUserContext, require
     const tenantId = tenantIdFromRequest(request)
     const eventId = uuidParamSchema.parse(request.params['eventId'])
     const client = createUserSupabase(request.auth?.accessToken ?? '')
-    const { data, error } = await client.from('v_event_members_list').select('*').eq('tenant_id', tenantId).eq('event_id', eventId).order('full_name')
+    const { data, error } = await client.rpc('rpc_list_event_members', { p_tenant_id: tenantId, p_event_id: eventId })
     if (error) {
       throwFinancialDatabaseError(error, 'EVENT_MEMBERS_LIST_FAILED')
     }
-    response.json({ data: data ?? [] })
+    response.json({ data: jsonArray(data) })
   } catch (error) {
     next(error)
   }
@@ -751,11 +782,11 @@ app.get('/api/v1/events/:eventId/pledges', requireAuth, loadUserContext, require
     const tenantId = tenantIdFromRequest(request)
     const eventId = uuidParamSchema.parse(request.params['eventId'])
     const client = createUserSupabase(request.auth?.accessToken ?? '')
-    const { data, error } = await client.from('v_event_pledges_list').select('*').eq('tenant_id', tenantId).eq('event_id', eventId).order('due_date', { ascending: true })
+    const { data, error } = await client.rpc('rpc_list_event_pledges', { p_tenant_id: tenantId, p_event_id: eventId })
     if (error) {
       throwFinancialDatabaseError(error, 'PLEDGES_LIST_FAILED')
     }
-    response.json({ data: data ?? [] })
+    response.json({ data: jsonArray(data) })
   } catch (error) {
     next(error)
   }
@@ -840,11 +871,11 @@ app.get('/api/v1/events/:eventId/payments', requireAuth, loadUserContext, requir
     const tenantId = tenantIdFromRequest(request)
     const eventId = uuidParamSchema.parse(request.params['eventId'])
     const client = createUserSupabase(request.auth?.accessToken ?? '')
-    const { data, error } = await client.from('v_event_payments_list').select('*').eq('tenant_id', tenantId).eq('event_id', eventId).order('payment_date', { ascending: false })
+    const { data, error } = await client.rpc('rpc_list_event_payments', { p_tenant_id: tenantId, p_event_id: eventId })
     if (error) {
       throwFinancialDatabaseError(error, 'PAYMENTS_LIST_FAILED')
     }
-    response.json({ data: data ?? [] })
+    response.json({ data: jsonArray(data) })
   } catch (error) {
     next(error)
   }

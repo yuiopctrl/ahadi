@@ -1,7 +1,7 @@
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { ArrowLeft, CheckCircle2, LockKeyhole } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import type { OnboardingPayload, SubscriptionPlan, TenantMembershipContext } from '@ahadi/types'
 import { normalizeTanzaniaPhone, onboardingPayloadSchema, setupPinSchema } from '@ahadi/validation'
 import { api, ApiClientError } from '../lib/api'
@@ -20,6 +20,7 @@ interface AuthPageProps {
 
 const phoneDraftKey = 'ahadi:verification-phone'
 const onboardingDraftKey = 'ahadi:onboarding-draft'
+const postAuthDestinationKey = 'ahadi:post-auth-destination'
 
 interface OnboardingDraft {
   planCode: string
@@ -151,6 +152,7 @@ export function AuthPage({ title, subtitle, mode }: AuthPageProps) {
 
 function LoginPage({ title, subtitle }: Pick<AuthPageProps, 'title' | 'subtitle'>) {
   const navigate = useNavigate()
+  const location = useLocation()
   const [phone, setPhone] = useState(localStorage.getItem(phoneDraftKey) ?? '')
   const [error, setError] = useState<string | null>(null)
   const mutation = useMutation({
@@ -158,6 +160,11 @@ function LoginPage({ title, subtitle }: Pick<AuthPageProps, 'title' | 'subtitle'
       const normalized = normalizeTanzaniaPhone(phone)
       await api.requestOtp(normalized)
       localStorage.setItem(phoneDraftKey, normalized)
+      if (location.pathname.startsWith('/platform')) {
+        localStorage.setItem(postAuthDestinationKey, '/platform')
+      } else {
+        localStorage.removeItem(postAuthDestinationKey)
+      }
       return normalized
     },
     onSuccess: () => navigate('/verify-otp'),
@@ -206,12 +213,18 @@ function OtpPage({ title, subtitle }: Pick<AuthPageProps, 'title' | 'subtitle'>)
     },
     onSuccess: async () => {
       const context = await session.refreshContext()
+      const preferredDestination = localStorage.getItem(postAuthDestinationKey)
       const hasPin = await api.hasPin()
       if (!hasPin.hasPin) {
         navigate('/setup-pin', { replace: true })
         return
       }
       session.lockState.unlock()
+      if (preferredDestination === '/platform' && hasActivePlatformAccess(context)) {
+        localStorage.removeItem(postAuthDestinationKey)
+        navigate('/platform', { replace: true })
+        return
+      }
       if (hasActivePlatformAccess(context) && !(context?.tenantMemberships.length ?? 0)) {
         navigate('/platform', { replace: true })
         return
@@ -300,6 +313,12 @@ function PinPage({ title, subtitle }: Pick<AuthPageProps, 'title' | 'subtitle'>)
       }
       session.lockState.unlock()
       const context = await session.refreshContext()
+      const preferredDestination = localStorage.getItem(postAuthDestinationKey)
+      if (preferredDestination === '/platform' && hasActivePlatformAccess(context)) {
+        localStorage.removeItem(postAuthDestinationKey)
+        navigate('/platform', { replace: true })
+        return
+      }
       if (hasActivePlatformAccess(context) && !(context?.tenantMemberships.length ?? 0)) {
         navigate('/platform', { replace: true })
         return

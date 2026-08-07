@@ -11,7 +11,7 @@ export function TenantAppLayout() {
 
   return (
     <div className="tenant-layout">
-      <MobileTopBar tenant={tenant} event={event} />
+      <MobileTopBar tenant={tenant} event={event} showPlatformLink={hasActivePlatformAccess(session.userContext)} />
       <DesktopSidebar tenant={tenant} event={event} showPlatformLink={hasActivePlatformAccess(session.userContext)} />
       <div className="tenant-content-shell">
         <Outlet />

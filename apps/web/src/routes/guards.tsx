@@ -1,7 +1,7 @@
 import { Navigate, Outlet, useLocation } from 'react-router-dom'
-import { LoadingState, PageContainer } from '../components/ui'
+import { ErrorState, LoadingState, PageContainer } from '../components/ui'
 import { useSessionStore } from '../stores/session-store'
-import { buildPlatformAccessDiagnostic, getPlatformRouteRedirect, getPublicRouteRedirect, getTenantRouteRedirect } from './access'
+import { buildPlatformAccessDiagnostic, getPlatformRouteRedirect, getPostAuthDestination, getTenantRouteRedirect } from './access'
 
 function FullScreenLoading() {
   return (
@@ -17,6 +17,7 @@ function postAuthDestination() {
 
 export function PublicRoute() {
   const session = useSessionStore()
+  const location = useLocation()
   if (session.isLoading) {
     return <FullScreenLoading />
   }
@@ -26,7 +27,8 @@ export function PublicRoute() {
   if (session.lockState.isLocked) {
     return <Navigate to="/setup-pin" replace />
   }
-  return <Navigate to={getPublicRouteRedirect(session.userContext)} replace />
+  const preferredDestination = location.pathname.startsWith('/platform') ? '/platform' : null
+  return <Navigate to={getPostAuthDestination(session.userContext, preferredDestination)} replace />
 }
 
 export function AuthenticatedRoute() {
@@ -76,7 +78,11 @@ export function PlatformOwnerRoute() {
     }))
   }
   if (redirectTarget) {
-    return <Navigate to={redirectTarget} replace />
+    return (
+      <PageContainer narrow>
+        <ErrorState title="Platform access is not enabled" message="This account does not have an ACTIVE platform_users row with platform.dashboard.view permission." />
+      </PageContainer>
+    )
   }
   return <Outlet />
 }

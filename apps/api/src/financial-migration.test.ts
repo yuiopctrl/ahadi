@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import test from 'node:test'
 
-const migrations = ['011_members_and_event_members.sql', '012_pledges_and_history.sql', '013_payments_allocations_and_receipts.sql', '014_member_pledge_payment_rpcs.sql', '015_financial_views.sql', '016_financial_permissions_and_rls.sql', '018_repair_event_financial_access.sql']
+const migrations = ['011_members_and_event_members.sql', '012_pledges_and_history.sql', '013_payments_allocations_and_receipts.sql', '014_member_pledge_payment_rpcs.sql', '015_financial_views.sql', '016_financial_permissions_and_rls.sql', '018_repair_event_financial_access.sql', '019_stabilize_financial_summary_shape.sql', '020_grant_financial_read_views.sql', '021_financial_list_rpcs.sql']
   .map((file) => readFileSync(new URL(`../../../supabase/migrations/${file}`, import.meta.url), 'utf8'))
   .join('\n')
 const app = readFileSync(new URL('./app.ts', import.meta.url), 'utf8')
@@ -26,7 +26,7 @@ test('financial migrations use tenant counters and do not SELECT MAX for member 
 })
 
 test('financial RPCs cover member, pledge, payment, reversal and summary workflows', () => {
-  for (const rpc of ['rpc_create_member_and_attach_to_event', 'rpc_attach_existing_member_to_event', 'rpc_create_or_update_pledge', 'rpc_record_installment_payment', 'rpc_reverse_payment', 'rpc_get_event_financial_summary']) {
+  for (const rpc of ['rpc_create_member_and_attach_to_event', 'rpc_attach_existing_member_to_event', 'rpc_create_or_update_pledge', 'rpc_record_installment_payment', 'rpc_reverse_payment', 'rpc_get_event_financial_summary', 'rpc_list_event_members', 'rpc_list_event_pledges', 'rpc_list_event_payments']) {
     assert.match(migrations, new RegExp(`create or replace function public\\.${rpc}`, 'i'))
     assert.match(app, new RegExp(rpc))
   }
@@ -44,11 +44,31 @@ test('financial access repair backfills permissions and allows event viewers to 
   assert.match(migrations, /p_min_assignment_level = 'MANAGE' and eua\.access_level = 'MANAGE'/)
 })
 
+test('financial summary returns zero-safe totals with stable allocated field names', () => {
+  assert.match(migrations, /019_stabilize_financial_summary_shape/)
+  assert.match(migrations, /'totalAllocated', allocated_total/)
+  assert.match(migrations, /'totalAllocatedToPledges', allocated_total/)
+  assert.match(migrations, /coalesce\(\(select sum\(amount\) from public\.payments/)
+  assert.match(migrations, /coalesce\(\(select sum\(pledged_amount\) from public\.pledges/)
+})
+
 test('financial read models and API routes are present', () => {
   for (const view of ['v_event_members_list', 'v_event_pledges_list', 'v_event_payments_list', 'v_event_outstanding_members', 'v_receipt_detail']) {
     assert.match(migrations, new RegExp(`view public\\.${view}`, 'i'))
   }
   for (const route of ['/api/v1/events/:eventId/members', '/api/v1/events/:eventId/pledges', '/api/v1/events/:eventId/payments', '/api/v1/receipts/:receiptId']) {
     assert.match(app, new RegExp(route.replace(/[/:]/g, (match) => `\\${match}`)))
+  }
+})
+
+test('financial read views and balance helpers are granted to authenticated clients', () => {
+  for (const view of ['v_event_members_list', 'v_event_pledges_list', 'v_event_payments_list', 'v_event_outstanding_members', 'v_receipt_detail']) {
+    assert.match(migrations, new RegExp(`public\\.${view}`))
+  }
+  for (const fn of ['payment_allocated_amount', 'payment_unallocated_amount', 'confirmed_pledge_allocated_amount', 'calculated_pledge_status']) {
+    assert.match(migrations, new RegExp(`grant execute on function public\\.${fn}\\(uuid\\) to authenticated`))
+  }
+  for (const fn of ['rpc_list_event_members', 'rpc_list_event_pledges', 'rpc_list_event_payments']) {
+    assert.match(migrations, new RegExp(`grant execute on function public\\.${fn}\\(uuid, uuid\\) to authenticated`))
   }
 })

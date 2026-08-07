@@ -38,6 +38,13 @@ export function getPublicRouteRedirect(context: UserContext | null): string {
   return hasActivePlatformAccess(context) ? '/platform' : '/onboarding'
 }
 
+export function getPostAuthDestination(context: UserContext | null, preferredDestination: string | null): string {
+  if (preferredDestination === '/platform' && hasActivePlatformAccess(context)) {
+    return '/platform'
+  }
+  return getPublicRouteRedirect(context)
+}
+
 export function getPlatformRouteDenialReason(context: UserContext | null, permission = requiredPlatformDashboardPermission): string | null {
   if (!context?.isPlatformUser) {
     return 'platform_user_not_found'

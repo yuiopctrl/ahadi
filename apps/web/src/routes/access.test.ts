@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import type { UserContext } from '@ahadi/types'
-import { buildPlatformAccessDiagnostic, getPlatformRouteDenialReason, getPlatformRouteRedirect, getPublicRouteRedirect, getTenantRouteRedirect, hasActivePlatformAccess } from './access'
+import { buildPlatformAccessDiagnostic, getPlatformRouteDenialReason, getPlatformRouteRedirect, getPostAuthDestination, getPublicRouteRedirect, getTenantRouteRedirect, hasActivePlatformAccess } from './access'
 
 function context(overrides: Partial<UserContext> = {}): UserContext {
   return {
@@ -63,6 +63,8 @@ test('dual platform and tenant owner can access both app contexts', () => {
   assert.equal(getPlatformRouteRedirect(dualRole), null)
   assert.equal(getTenantRouteRedirect(dualRole, 'tenant_1', false), null)
   assert.equal(getPublicRouteRedirect(dualRole), '/app')
+  assert.equal(getPostAuthDestination(dualRole, '/platform'), '/platform')
+  assert.equal(getPostAuthDestination(dualRole, null), '/app')
 })
 
 test('platform route guard depends on platform status and permissions, not tenant permissions', () => {

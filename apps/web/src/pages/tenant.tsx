@@ -16,7 +16,7 @@ import { useMemo, useState } from 'react'
 import type { FormEvent } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { EmptyState, ErrorState, LoadingState, PageContainer, PageHeader, SearchInput, StatCard, StatusBadge } from '../components/ui'
-import { api } from '../lib/api'
+import { api, ApiClientError } from '../lib/api'
 import { useSessionStore } from '../stores/session-store'
 
 type EventSection = 'overview' | 'members' | 'pledges' | 'payments' | 'messages'
@@ -48,22 +48,49 @@ function statusTone(status: unknown): 'success' | 'warning' | 'danger' | 'neutra
   return 'neutral'
 }
 
-function useTenantId() {
-  const session = useSessionStore()
-  const tenantId = session.selectedTenantId
-  if (!tenantId) {
-    throw new Error('Select a tenant first')
+function errorMessage(error: unknown, fallback: string) {
+  if (error instanceof ApiClientError) {
+    return `${error.code}${error.requestId ? ` · Request ${error.requestId}` : ''}`
   }
-  return tenantId
+  if (error instanceof Error) {
+    return error.message
+  }
+  return fallback
 }
 
-function useEventContext(eventId: string | undefined) {
+function useActiveEventContext(routeEventId: string | undefined) {
   const session = useSessionStore()
-  return session.selectedTenantContext?.events.find((event) => event.id === eventId) ?? session.selectedTenantContext?.events[0] ?? null
+  const tenantId = session.selectedTenantId
+  const tenantContext = session.selectedTenantContext
+  const fallbackEvent = tenantContext?.events[0] ?? null
+  const eventId = routeEventId ?? fallbackEvent?.id ?? ''
+  const event = eventId ? tenantContext?.events.find((candidate) => candidate.id === eventId) ?? null : null
+  const permissions = new Set(tenantContext?.permissions ?? session.userContext?.tenantMemberships.find((membership) => membership.tenantId === tenantId)?.permissions ?? [])
+  const error = !tenantId
+    ? 'Select a tenant first.'
+    : !tenantContext
+      ? 'Tenant context is not loaded.'
+      : !eventId
+        ? 'No active event is available for this tenant.'
+        : !event
+          ? 'This event does not belong to the selected tenant or is not accessible.'
+          : null
+
+  return {
+    event,
+    eventId,
+    tenantId,
+    eventStatus: event?.status ?? null,
+    canView: permissions.has('events.view') || permissions.has('members.view') || permissions.has('pledges.view') || permissions.has('payments.view'),
+    canCollect: permissions.has('members.create') || permissions.has('pledges.create') || permissions.has('payments.create'),
+    canManage: permissions.has('events.update') || permissions.has('payments.reverse'),
+    loading: session.isLoading,
+    error,
+  }
 }
 
 function invalidateEvent(queryClient: ReturnType<typeof useQueryClient>, tenantId: string, eventId: string) {
-  void queryClient.invalidateQueries({ queryKey: ['event-summary', tenantId, eventId] })
+  void queryClient.invalidateQueries({ queryKey: ['event-financial-summary', tenantId, eventId] })
   void queryClient.invalidateQueries({ queryKey: ['event-members', tenantId, eventId] })
   void queryClient.invalidateQueries({ queryKey: ['event-pledges', tenantId, eventId] })
   void queryClient.invalidateQueries({ queryKey: ['event-payments', tenantId, eventId] })
@@ -90,6 +117,15 @@ export function TenantListPage({ title, kind }: { title: string; kind: 'events' 
   const event = session.selectedTenantContext?.events[0] ?? null
   const eventLink = event ? `/app/events/${event.id}` : '/app'
 
+  if (!event) {
+    return (
+      <PageContainer>
+        <PageHeader title={title} description="Open an active event workspace to manage members, pledges, payments and receipts." />
+        <EmptyState title="No active event" message="This tenant does not have an accessible event yet." />
+      </PageContainer>
+    )
+  }
+
   return (
     <PageContainer>
       <PageHeader title={title} description="Open the active event workspace to manage members, pledges, payments and receipts." />
@@ -112,42 +148,48 @@ export function TenantListPage({ title, kind }: { title: string; kind: 'events' 
 
 export function EventDetailPage({ section = 'overview' }: { section?: EventSection }) {
   const params = useParams()
-  const tenantId = useTenantId()
-  const fallbackEvent = useEventContext(undefined)
-  const eventId = params.eventId ?? fallbackEvent?.id ?? ''
-  const event = useEventContext(eventId)
+  const activeEvent = useActiveEventContext(params.eventId)
+  const { tenantId, eventId, event, eventStatus } = activeEvent
   const [search] = useSearchParams()
   const queryClient = useQueryClient()
-  const summaryQuery = useQuery({ queryKey: ['event-summary', tenantId, eventId], queryFn: async () => (await api.eventFinancialSummary(tenantId, eventId)).data, enabled: Boolean(eventId) })
-  const membersQuery = useQuery({ queryKey: ['event-members', tenantId, eventId], queryFn: async () => (await api.eventMembers(tenantId, eventId)).data, enabled: Boolean(eventId) })
-  const pledgesQuery = useQuery({ queryKey: ['event-pledges', tenantId, eventId], queryFn: async () => (await api.eventPledges(tenantId, eventId)).data, enabled: Boolean(eventId) })
-  const paymentsQuery = useQuery({ queryKey: ['event-payments', tenantId, eventId], queryFn: async () => (await api.eventPayments(tenantId, eventId)).data, enabled: Boolean(eventId) })
+  const canQuery = Boolean(tenantId && eventId && !activeEvent.error)
+  const summaryQuery = useQuery({ queryKey: ['event-financial-summary', tenantId, eventId], queryFn: async () => (await api.eventFinancialSummary(tenantId ?? '', eventId)).data, enabled: canQuery })
+  const membersQuery = useQuery({ queryKey: ['event-members', tenantId, eventId], queryFn: async () => (await api.eventMembers(tenantId ?? '', eventId)).data, enabled: canQuery })
+  const pledgesQuery = useQuery({ queryKey: ['event-pledges', tenantId, eventId], queryFn: async () => (await api.eventPledges(tenantId ?? '', eventId)).data, enabled: canQuery })
+  const paymentsQuery = useQuery({ queryKey: ['event-payments', tenantId, eventId], queryFn: async () => (await api.eventPayments(tenantId ?? '', eventId)).data, enabled: canQuery })
 
   const summary = summaryQuery.data ?? {}
-  const collectionPercent = asNumber(summary.totalPledged) > 0 ? Math.round((asNumber(summary.totalAllocatedToPledges) / asNumber(summary.totalPledged)) * 100) : 0
+  const totalAllocated = asNumber(summary.totalAllocated ?? summary.totalAllocatedToPledges)
+  const collectionPercent = asNumber(summary.totalPledged) > 0 ? Math.round((totalAllocated / asNumber(summary.totalPledged)) * 100) : 0
 
-  if (summaryQuery.isLoading) {
+  if (activeEvent.loading || summaryQuery.isLoading) {
     return <LoadingState title="Loading event" message="Fetching pledge and payment totals." />
   }
+  if (activeEvent.error) {
+    return <ErrorState title="Unable to open event" message={activeEvent.error} />
+  }
   if (summaryQuery.isError) {
-    return <ErrorState title="Unable to load event" message="Check event access and tenant context." />
+    return <ErrorState title="Unable to load event" message={errorMessage(summaryQuery.error, 'Check event access and tenant context.')} />
+  }
+  if (!activeEvent.canView) {
+    return <ErrorState title="Event access denied" message="Your tenant role does not include permission to view this event." />
   }
 
   return (
     <PageContainer>
       <PageHeader
         title={event?.name ?? 'Event Overview'}
-        description={event?.eventDate ? `Event date ${asDate(event.eventDate)}` : 'Member pledges, installment collections and receipts.'}
+        description={eventStatus === 'ACTIVE' ? (event?.eventDate ? `Event date ${asDate(event.eventDate)}` : 'Member pledges, installment collections and receipts.') : `Event status is ${eventStatus ?? 'unknown'}. Payments require an ACTIVE event.`}
         action={
-          <Link className="desktop-primary-button" to={`/app/events/${eventId}/payments/new`}>
+          activeEvent.canCollect && eventStatus === 'ACTIVE' ? <Link className="desktop-primary-button" to={`/app/events/${eventId}/payments/new`}>
             <Plus size={18} aria-hidden />
             Record Payment
-          </Link>
+          </Link> : null
         }
       />
       <section className="stats-grid">
         <StatCard label="Total Pledged" value={moneyText(summary.totalPledged)} meta={`${asNumber(summary.membersWithPledges)} pledge members`} icon={Users} />
-        <StatCard label="Collected" value={moneyText(summary.totalAllocatedToPledges)} meta={`${collectionPercent}% collected`} icon={CheckCircle2} tone="success" />
+        <StatCard label="Collected" value={moneyText(totalAllocated)} meta={`${collectionPercent}% collected`} icon={CheckCircle2} tone="success" />
         <StatCard label="Outstanding" value={moneyText(summary.totalOutstanding)} meta={`${asNumber(summary.overdueCount)} overdue`} icon={Clock3} tone="warning" />
       </section>
       <nav className="event-tabs" aria-label="Event sections">
@@ -161,10 +203,21 @@ export function EventDetailPage({ section = 'overview' }: { section?: EventSecti
         <OverviewCards eventId={eventId} summary={summary} payments={paymentsQuery.data ?? []} pledges={pledgesQuery.data ?? []} />
       ) : null}
       {section === 'members' ? (
-        <MembersPanel tenantId={tenantId} eventId={eventId} members={membersQuery.data ?? []} refresh={() => invalidateEvent(queryClient, tenantId, eventId)} initialSearch={search.get('q') ?? ''} />
+        membersQuery.isLoading ? <LoadingState title="Loading members" message="Fetching event members." /> :
+          membersQuery.isError ? <ErrorState title="Unable to load members" message={errorMessage(membersQuery.error, 'Members could not be loaded.')} /> :
+            <MembersPanel tenantId={tenantId ?? ''} eventId={eventId} members={membersQuery.data ?? []} refresh={() => invalidateEvent(queryClient, tenantId ?? '', eventId)} initialSearch={search.get('q') ?? ''} canCreate={activeEvent.canCollect} />
       ) : null}
-      {section === 'pledges' ? <PledgesPanel tenantId={tenantId} eventId={eventId} pledges={pledgesQuery.data ?? []} members={membersQuery.data ?? []} refresh={() => invalidateEvent(queryClient, tenantId, eventId)} /> : null}
-      {section === 'payments' ? <PaymentsPanel tenantId={tenantId} eventId={eventId} payments={paymentsQuery.data ?? []} summary={summary} refresh={() => invalidateEvent(queryClient, tenantId, eventId)} /> : null}
+      {section === 'pledges' ? (
+        pledgesQuery.isLoading || membersQuery.isLoading ? <LoadingState title="Loading pledges" message="Fetching pledges and members." /> :
+          pledgesQuery.isError ? <ErrorState title="Unable to load pledges" message={errorMessage(pledgesQuery.error, 'Pledges could not be loaded.')} /> :
+            membersQuery.isError ? <ErrorState title="Unable to load members" message={errorMessage(membersQuery.error, 'Members could not be loaded for pledge creation.')} /> :
+              <PledgesPanel tenantId={tenantId ?? ''} eventId={eventId} pledges={pledgesQuery.data ?? []} members={membersQuery.data ?? []} refresh={() => invalidateEvent(queryClient, tenantId ?? '', eventId)} canCreate={activeEvent.canCollect} />
+      ) : null}
+      {section === 'payments' ? (
+        paymentsQuery.isLoading ? <LoadingState title="Loading payments" message="Fetching installment payments." /> :
+          paymentsQuery.isError ? <ErrorState title="Unable to load payments" message={errorMessage(paymentsQuery.error, 'Payments could not be loaded.')} /> :
+            <PaymentsPanel tenantId={tenantId ?? ''} eventId={eventId} payments={paymentsQuery.data ?? []} summary={summary} refresh={() => invalidateEvent(queryClient, tenantId ?? '', eventId)} canCreate={activeEvent.canCollect && eventStatus === 'ACTIVE'} />
+      ) : null}
     </PageContainer>
   )
 }
@@ -215,7 +268,7 @@ function OverviewCards({ eventId, summary, payments, pledges }: { eventId: strin
   )
 }
 
-function MembersPanel({ tenantId, eventId, members, refresh, initialSearch }: { tenantId: string; eventId: string; members: Row[]; refresh: () => void; initialSearch: string }) {
+function MembersPanel({ tenantId, eventId, members, refresh, initialSearch, canCreate }: { tenantId: string; eventId: string; members: Row[]; refresh: () => void; initialSearch: string; canCreate: boolean }) {
   const [query, setQuery] = useState(initialSearch)
   const [showForm, setShowForm] = useState(false)
   const filtered = members.filter((member) => `${member.full_name ?? ''} ${member.phone_e164 ?? ''} ${member.member_code ?? ''}`.toLowerCase().includes(query.toLowerCase()))
@@ -227,16 +280,18 @@ function MembersPanel({ tenantId, eventId, members, refresh, initialSearch }: { 
           <Search size={18} aria-hidden />
           <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search members" />
         </label>
-        <button className="desktop-primary-button" type="button" onClick={() => setShowForm(true)}>
+        {canCreate ? <button className="desktop-primary-button" type="button" onClick={() => setShowForm(true)}>
           <Plus size={18} aria-hidden />
           Add Member
-        </button>
+        </button> : null}
       </div>
       {showForm ? <MemberForm tenantId={tenantId} eventId={eventId} onDone={() => { setShowForm(false); refresh() }} /> : null}
       <div className="finance-card-list">
         {filtered.map((member) => <MemberCard key={asString(member.event_member_id)} member={member} eventId={eventId} />)}
+        {!members.length ? <EmptyState title="No members have been added to this event yet." message={canCreate ? 'Use Add Member to register the first contributor.' : 'You do not have permission to add members.'} /> : null}
+        {members.length > 0 && !filtered.length ? <EmptyState title="No members match your search." message="Try a different name, phone number or member code." /> : null}
       </div>
-      <button className="mobile-sticky-button" type="button" onClick={() => setShowForm(true)}>Add Member</button>
+      {canCreate ? <button className="mobile-sticky-button" type="button" onClick={() => setShowForm(true)}>Add Member</button> : null}
     </section>
   )
 }
@@ -289,7 +344,7 @@ function MemberCard({ member, eventId }: { member: Row; eventId: string }) {
   )
 }
 
-function PledgesPanel({ tenantId, eventId, pledges, members, refresh }: { tenantId: string; eventId: string; pledges: Row[]; members: Row[]; refresh: () => void }) {
+function PledgesPanel({ tenantId, eventId, pledges, members, refresh, canCreate }: { tenantId: string; eventId: string; pledges: Row[]; members: Row[]; refresh: () => void; canCreate: boolean }) {
   const [filter, setFilter] = useState('ALL')
   const [formOpen, setFormOpen] = useState(false)
   const filtered = pledges.filter((pledge) => filter === 'ALL' || pledge.status === filter)
@@ -308,10 +363,13 @@ function PledgesPanel({ tenantId, eventId, pledges, members, refresh }: { tenant
       <div className="segmented-row">
         {['ALL', 'PENDING', 'PARTIALLY_PAID', 'PAID', 'OVERDUE'].map((item) => <button className={filter === item ? 'active' : ''} key={item} type="button" onClick={() => setFilter(item)}>{item.replace('PARTIALLY_', '')}</button>)}
       </div>
-      <button className="desktop-primary-button" type="button" onClick={() => setFormOpen(true)}><Plus size={18} aria-hidden /> Record Pledge</button>
+      {canCreate ? <button className="desktop-primary-button" type="button" onClick={() => setFormOpen(true)}><Plus size={18} aria-hidden /> Record Pledge</button> : null}
       {formOpen ? <PledgeForm tenantId={tenantId} eventId={eventId} members={members} onDone={() => { setFormOpen(false); refresh() }} /> : null}
       <div className="finance-card-list">
         {filtered.map((pledge) => <PledgeCard key={asString(pledge.pledge_id)} pledge={pledge} eventId={eventId} />)}
+        {!members.length ? <EmptyState title="No members available for pledges." message="Add a member before creating a pledge." /> : null}
+        {members.length > 0 && !pledges.length ? <EmptyState title="No pledges have been recorded yet." message={canCreate ? 'Use Record Pledge to create the first pledge.' : 'You do not have permission to create pledges.'} /> : null}
+        {pledges.length > 0 && !filtered.length ? <EmptyState title="No pledges match this filter." message="Choose another pledge status." /> : null}
       </div>
     </section>
   )
@@ -325,13 +383,14 @@ function PledgeForm({ tenantId, eventId, members, onDone }: { tenantId: string; 
   })
   return (
     <form className="mobile-sheet form-grid" onSubmit={(event) => { event.preventDefault(); mutation.mutate() }}>
+      {!members.length ? <EmptyState title="No members available" message="Add a member before creating a pledge." /> : null}
       <label>Member<select value={form.eventMemberId} onChange={(event) => setForm((current) => ({ ...current, eventMemberId: event.target.value }))}><option value="">Select member</option>{members.map((member) => <option key={asString(member.event_member_id)} value={asString(member.event_member_id)}>{asString(member.full_name)}</option>)}</select></label>
       <Input label="Amount" inputMode="decimal" value={form.amount} onChange={(amount) => setForm((current) => ({ ...current, amount }))} />
       <Input label="Due date optional" type="date" value={form.dueDate} onChange={(dueDate) => setForm((current) => ({ ...current, dueDate }))} />
       <Input label="Notes optional" value={form.notes} onChange={(notes) => setForm((current) => ({ ...current, notes }))} />
       <Input label="Change reason when reducing" value={form.changeReason} onChange={(changeReason) => setForm((current) => ({ ...current, changeReason }))} />
       {mutation.error ? <p className="field-error">{mutation.error.message}</p> : null}
-      <div className="sheet-actions"><button type="button" onClick={onDone}>Cancel</button><button className="primary-button" type="submit">Save Pledge</button></div>
+      <div className="sheet-actions"><button type="button" onClick={onDone}>Cancel</button><button className="primary-button" type="submit" disabled={!form.eventMemberId || !form.amount || mutation.isPending}>{mutation.isPending ? 'Saving...' : 'Save Pledge'}</button></div>
     </form>
   )
 }
@@ -354,7 +413,7 @@ function PledgeCard({ pledge, eventId }: { pledge: Row; eventId: string }) {
   )
 }
 
-function PaymentsPanel({ tenantId, eventId, payments, summary, refresh }: { tenantId: string; eventId: string; payments: Row[]; summary: Row; refresh: () => void }) {
+function PaymentsPanel({ tenantId, eventId, payments, summary, refresh, canCreate }: { tenantId: string; eventId: string; payments: Row[]; summary: Row; refresh: () => void; canCreate: boolean }) {
   const today = payments.filter((payment) => new Date(asString(payment.payment_date)).toDateString() === new Date().toDateString())
   return (
     <section className="finance-section">
@@ -363,9 +422,10 @@ function PaymentsPanel({ tenantId, eventId, payments, summary, refresh }: { tena
         <StatCard label="Unallocated" value={moneyText(summary.totalUnallocated)} icon={Clock3} tone="warning" />
         <StatCard label="Confirmed" value={String(payments.filter((payment) => payment.status === 'CONFIRMED').length)} icon={CheckCircle2} tone="success" />
       </div>
-      <Link className="desktop-primary-button" to={`/app/events/${eventId}/payments/new`}><Plus size={18} aria-hidden /> Record Payment</Link>
+      {canCreate ? <Link className="desktop-primary-button" to={`/app/events/${eventId}/payments/new`}><Plus size={18} aria-hidden /> Record Payment</Link> : null}
       <div className="finance-card-list">
         {payments.map((payment) => <PaymentCard key={asString(payment.payment_id)} payment={payment} eventId={eventId} tenantId={tenantId} onReverse={refresh} />)}
+        {!payments.length ? <EmptyState title="No payments have been recorded yet." message={canCreate ? 'Use Record Payment after adding a member and pledge.' : 'You do not have permission to record payments.'} /> : null}
         {!today.length && payments.length ? <p className="privacy-note">No payments recorded today.</p> : null}
       </div>
     </section>
@@ -374,8 +434,9 @@ function PaymentsPanel({ tenantId, eventId, payments, summary, refresh }: { tena
 
 function PaymentCard({ payment, eventId, tenantId, onReverse }: { payment: Row; eventId: string; tenantId?: string; onReverse?: () => void }) {
   const [reason, setReason] = useState('')
+  const [idempotencyKey] = useState(() => crypto.randomUUID())
   const reverse = useMutation({
-    mutationFn: () => api.reversePayment(tenantId ?? '', eventId, asString(payment.payment_id), { reason, idempotencyKey: crypto.randomUUID() }),
+    mutationFn: () => api.reversePayment(tenantId ?? '', eventId, asString(payment.payment_id), { reason, idempotencyKey }),
     onSuccess: onReverse,
   })
   return (
@@ -399,10 +460,12 @@ function PaymentCard({ payment, eventId, tenantId, onReverse }: { payment: Row; 
 
 export function MemberDetailPage() {
   const { eventId = '', eventMemberId = '' } = useParams()
-  const tenantId = useTenantId()
-  const detail = useQuery({ queryKey: ['member-detail', tenantId, eventId, eventMemberId], queryFn: async () => (await api.eventMemberDetail(tenantId, eventId, eventMemberId)).data })
+  const activeEvent = useActiveEventContext(eventId)
+  const tenantId = activeEvent.tenantId
+  const detail = useQuery({ queryKey: ['member-detail', tenantId, eventId, eventMemberId], queryFn: async () => (await api.eventMemberDetail(tenantId ?? '', eventId, eventMemberId)).data, enabled: Boolean(tenantId && eventId && eventMemberId && !activeEvent.error) })
+  if (activeEvent.error) return <ErrorState title="Unable to open member" message={activeEvent.error} />
   if (detail.isLoading) return <LoadingState title="Loading member" />
-  if (detail.isError || !detail.data) return <ErrorState title="Unable to load member" />
+  if (detail.isError || !detail.data) return <ErrorState title="Unable to load member" message={errorMessage(detail.error, 'Member detail could not be loaded.')} />
   const member = detail.data.member
   return (
     <PageContainer>
@@ -412,7 +475,10 @@ export function MemberDetailPage() {
         <StatCard label="Paid" value={moneyText(member.total_allocated)} icon={CheckCircle2} tone="success" />
         <StatCard label="Outstanding" value={moneyText(member.outstanding_amount)} icon={Clock3} tone="warning" />
       </section>
-      <div className="finance-card-list">{detail.data.payments.map((payment) => <PaymentCard key={asString(payment.payment_id)} payment={payment} eventId={eventId} />)}</div>
+      <div className="finance-card-list">
+        {detail.data.payments.map((payment) => <PaymentCard key={asString(payment.payment_id)} payment={payment} eventId={eventId} />)}
+        {!detail.data.payments.length ? <EmptyState title="No payments for this member yet." message="Record a payment to generate the first receipt." /> : null}
+      </div>
     </PageContainer>
   )
 }
@@ -422,8 +488,11 @@ export function PaymentEntryPage() {
   const [search] = useSearchParams()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
-  const tenantId = useTenantId()
-  const members = useQuery({ queryKey: ['event-members', tenantId, eventId], queryFn: async () => (await api.eventMembers(tenantId, eventId)).data })
+  const activeEvent = useActiveEventContext(eventId)
+  const tenantId = activeEvent.tenantId
+  const members = useQuery({ queryKey: ['event-members', tenantId, eventId], queryFn: async () => (await api.eventMembers(tenantId ?? '', eventId)).data, enabled: Boolean(tenantId && eventId && !activeEvent.error) })
+  const [memberSearch, setMemberSearch] = useState('')
+  const [idempotencyKey, resetIdempotencyKey] = useState(() => crypto.randomUUID())
   const [form, setForm] = useState({
     eventMemberId: search.get('eventMemberId') ?? '',
     pledgeId: search.get('pledgeId') ?? '',
@@ -434,22 +503,42 @@ export function PaymentEntryPage() {
     providerName: '',
     notes: '',
   })
-  const selectedMember = members.data?.find((member) => member.event_member_id === form.eventMemberId)
+  const memberRows = members.data ?? []
+  const filteredMembers = memberRows.filter((member) => `${member.full_name ?? ''} ${member.phone_e164 ?? ''} ${member.member_code ?? ''}`.toLowerCase().includes(memberSearch.toLowerCase()))
+  const selectedMember = memberRows.find((member) => member.event_member_id === form.eventMemberId)
   const outstanding = asNumber(selectedMember?.outstanding_amount)
+  const paymentAmount = asNumber(form.amount)
   const mutation = useMutation({
-    mutationFn: () => api.recordPayment(tenantId, eventId, { ...form, amount: Number(form.amount), paymentDate: new Date(form.paymentDate).toISOString(), idempotencyKey: crypto.randomUUID(), pledgeId: form.pledgeId || null }),
+    mutationFn: () => api.recordPayment(tenantId ?? '', eventId, { ...form, amount: Number(form.amount), paymentDate: new Date(form.paymentDate).toISOString(), idempotencyKey, pledgeId: form.pledgeId || null }),
     onSuccess: (result) => {
-      invalidateEvent(queryClient, tenantId, eventId)
+      if (tenantId) {
+        invalidateEvent(queryClient, tenantId, eventId)
+      }
+      resetIdempotencyKey(crypto.randomUUID())
       const receiptId = asString(result.data.receipt_id)
       navigate(receiptId ? `/app/receipts/${receiptId}` : `/app/events/${eventId}/payments`, { replace: true })
     },
   })
+  if (activeEvent.error) return <ErrorState title="Unable to record payment" message={activeEvent.error} />
+  if (activeEvent.eventStatus !== 'ACTIVE') return <ErrorState title="Payments require an active event" message={`This event is ${activeEvent.eventStatus ?? 'not active'}.`} />
+  if (members.isLoading) return <LoadingState title="Loading members" message="Fetching members for payment entry." />
+  if (members.isError) return <ErrorState title="Unable to load members" message={errorMessage(members.error, 'Members could not be loaded for payment entry.')} />
   return (
     <PageContainer narrow>
       <PageHeader title="Record Payment" description="Select a member, confirm the amount and generate a receipt." action={<Link to={`/app/events/${eventId}`}><ArrowLeft size={18} aria-hidden /> Back</Link>} />
       <form className="payment-flow" onSubmit={(event: FormEvent) => { event.preventDefault(); if (!mutation.isPending) mutation.mutate() }}>
-        <label>Member<select value={form.eventMemberId} onChange={(event) => setForm((current) => ({ ...current, eventMemberId: event.target.value, pledgeId: asString(members.data?.find((member) => member.event_member_id === event.target.value)?.pledge_id) }))}><option value="">Select member</option>{(members.data ?? []).map((member) => <option key={asString(member.event_member_id)} value={asString(member.event_member_id)}>{asString(member.full_name)} - {moneyText(member.outstanding_amount)} outstanding</option>)}</select></label>
-        {selectedMember ? <div className="review-stack"><ReviewLine label="Pledge" value={moneyText(selectedMember.pledged_amount)} /><ReviewLine label="Outstanding" value={moneyText(selectedMember.outstanding_amount)} /><ReviewLine label="Excess warning" value={form.amount && Number(form.amount) > outstanding ? moneyText(Number(form.amount) - outstanding) : 'None'} /></div> : null}
+        <label>Search member<input type="search" value={memberSearch} onChange={(event) => setMemberSearch(event.target.value)} placeholder="Name, phone or member code" /></label>
+        <label>Member<select value={form.eventMemberId} onChange={(event) => setForm((current) => ({ ...current, eventMemberId: event.target.value, pledgeId: asString(memberRows.find((member) => member.event_member_id === event.target.value)?.pledge_id) }))}><option value="">Select member</option>{filteredMembers.map((member) => <option key={asString(member.event_member_id)} value={asString(member.event_member_id)}>{asString(member.full_name)} - {moneyText(member.outstanding_amount)} outstanding</option>)}</select></label>
+        {!memberRows.length ? <EmptyState title="No members have been added to this event yet." message="Add a member before recording a payment." /> : null}
+        {memberRows.length > 0 && !filteredMembers.length ? <EmptyState title="No members match your search." message="Try a different name, phone number or member code." /> : null}
+        {selectedMember ? <div className="review-stack">
+          <ReviewLine label="Member" value={`${asString(selectedMember.full_name)} · ${asString(selectedMember.member_code)}`} />
+          <ReviewLine label="Pledge" value={moneyText(selectedMember.pledged_amount)} />
+          <ReviewLine label="Paid" value={moneyText(selectedMember.total_allocated)} />
+          <ReviewLine label="Outstanding before payment" value={moneyText(selectedMember.outstanding_amount)} />
+          <ReviewLine label="Outstanding after payment" value={moneyText(Math.max(outstanding - paymentAmount, 0))} />
+          <ReviewLine label="Excess / unallocated amount" value={form.amount && paymentAmount > outstanding ? moneyText(paymentAmount - outstanding) : 'None'} />
+        </div> : null}
         <Input label="Amount received" inputMode="decimal" value={form.amount} onChange={(amount) => setForm((current) => ({ ...current, amount }))} />
         <div className="quick-amounts"><button type="button" onClick={() => setForm((current) => ({ ...current, amount: String(outstanding) }))}>Outstanding</button><button type="button" onClick={() => setForm((current) => ({ ...current, amount: String(Math.round(outstanding / 2)) }))}>Half</button><button type="button" onClick={() => setForm((current) => ({ ...current, amount: String(asNumber(selectedMember?.pledged_amount)) }))}>Pledged</button></div>
         <label>Payment method<select value={form.paymentMethod} onChange={(event) => setForm((current) => ({ ...current, paymentMethod: event.target.value }))}>{paymentMethods.map((method) => <option key={method} value={method}>{method}</option>)}</select></label>
@@ -458,7 +547,7 @@ export function PaymentEntryPage() {
         <Input label="Provider name optional" value={form.providerName} onChange={(providerName) => setForm((current) => ({ ...current, providerName }))} />
         <Input label="Notes optional" value={form.notes} onChange={(notes) => setForm((current) => ({ ...current, notes }))} />
         {mutation.error ? <p className="field-error">{mutation.error.message}</p> : null}
-        <button className="primary-button" type="submit" disabled={mutation.isPending || !form.eventMemberId || !form.amount}>{mutation.isPending ? 'Recording...' : 'Confirm and Generate Receipt'}</button>
+        <button className="primary-button" type="submit" disabled={mutation.isPending || !form.eventMemberId || !form.amount || !tenantId}>{mutation.isPending ? 'Recording...' : 'Confirm and Generate Receipt'}</button>
       </form>
     </PageContainer>
   )
@@ -466,10 +555,12 @@ export function PaymentEntryPage() {
 
 export function ReceiptPage() {
   const { receiptId = '' } = useParams()
-  const tenantId = useTenantId()
-  const receipt = useQuery({ queryKey: ['receipt', tenantId, receiptId], queryFn: async () => (await api.receipt(tenantId, receiptId)).data })
+  const session = useSessionStore()
+  const tenantId = session.selectedTenantId
+  const receipt = useQuery({ queryKey: ['receipt', tenantId, receiptId], queryFn: async () => (await api.receipt(tenantId ?? '', receiptId)).data, enabled: Boolean(tenantId && receiptId) })
+  if (!tenantId) return <ErrorState title="Unable to load receipt" message="Select a tenant before opening receipts." />
   if (receipt.isLoading) return <LoadingState title="Loading receipt" />
-  if (receipt.isError || !receipt.data) return <ErrorState title="Unable to load receipt" />
+  if (receipt.isError || !receipt.data) return <ErrorState title="Unable to load receipt" message={errorMessage(receipt.error, 'Receipt could not be loaded.')} />
   const data = receipt.data
   return (
     <PageContainer narrow>

@@ -2,6 +2,17 @@
 
 Platform ownership is a manual bootstrap operation after the intended administrator has authenticated at least once. It is not created by tenant registration, tenant onboarding, or any public API route.
 
+Find the intended authenticated user. Confirm the person manually before using the UUID:
+
+```sql
+select
+  p.id,
+  p.full_name,
+  p.phone_e164
+from public.profiles p
+order by p.created_at desc;
+```
+
 Check whether a known authenticated user is already a platform user:
 
 ```sql

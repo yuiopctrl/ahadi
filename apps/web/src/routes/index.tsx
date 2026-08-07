@@ -15,6 +15,7 @@ export const router = createBrowserRouter([
         element: <AuthLayout />,
         children: [
           { path: '/login', element: <AuthPage mode="login" title="Welcome back" subtitle="Sign in with your phone number to continue." /> },
+          { path: '/platform/login', element: <AuthPage mode="login" title="Platform Login" subtitle="Sign in with your phone number to open the platform console." /> },
           { path: '/verify-otp', element: <AuthPage mode="otp" title="Verify OTP" subtitle="Enter the code sent to your phone." /> },
           { path: '/register', element: <AuthPage mode="register" title="Register" subtitle="Create a tenant workspace for your committee." /> },
         ],

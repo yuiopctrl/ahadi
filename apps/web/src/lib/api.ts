@@ -4,10 +4,12 @@ import { supabase } from './supabase'
 
 export class ApiClientError extends Error {
   code: ApiErrorCode
+  requestId: string | null
 
-  constructor(code: ApiErrorCode, message: string) {
+  constructor(code: ApiErrorCode, message: string, requestId: string | null = null) {
     super(message)
     this.code = code
+    this.requestId = requestId
   }
 }
 
@@ -19,6 +21,8 @@ async function getAccessToken(): Promise<string | null> {
 async function apiFetch<T>(path: string, options: RequestInit & { tenantId?: string; auth?: boolean } = {}): Promise<T> {
   const headers = new Headers(options.headers)
   headers.set('Content-Type', 'application/json')
+  headers.set('Cache-Control', 'no-cache')
+  headers.set('Pragma', 'no-cache')
   if (options.auth !== false) {
     const token = await getAccessToken()
     if (token) {
@@ -32,12 +36,13 @@ async function apiFetch<T>(path: string, options: RequestInit & { tenantId?: str
   const response = await fetch(`${env.apiUrl}${path}`, {
     ...options,
     headers,
+    cache: 'no-store',
   })
   const payload = (await response.json().catch(() => null)) as unknown
 
   if (!response.ok) {
-    const errorPayload = payload as { error?: { code?: ApiErrorCode; message?: string } } | null
-    throw new ApiClientError(errorPayload?.error?.code ?? 'INTERNAL_ERROR', errorPayload?.error?.message ?? 'Request failed')
+    const errorPayload = payload as { error?: { code?: ApiErrorCode; message?: string; requestId?: string } } | null
+    throw new ApiClientError(errorPayload?.error?.code ?? 'INTERNAL_ERROR', errorPayload?.error?.message ?? 'Request failed', errorPayload?.error?.requestId ?? response.headers.get('X-Request-ID'))
   }
 
   return payload as T
