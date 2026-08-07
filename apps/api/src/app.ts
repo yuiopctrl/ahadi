@@ -255,6 +255,39 @@ const resendBalanceReminderSchema = z.object({
   idempotencyKey: z.string().uuid(),
 })
 
+const whatsappShareFormatSchema = z.enum(['DETAILED', 'PRIVACY', 'PAYMENT_PROGRESS', 'OUTSTANDING_FOLLOW_UP'])
+const whatsappShareSortSchema = z.enum(['ORIGINAL', 'NAME_ASC', 'PLEDGED_DESC', 'PAID_FIRST', 'OUTSTANDING_FIRST'])
+const whatsappShareStatusSchema = z.enum(['ALL', 'PAID', 'PARTIAL', 'UNPAID', 'OVERDUE'])
+const whatsappPhoneFilterSchema = z.enum(['ALL', 'WITH_PHONE', 'WITHOUT_PHONE'])
+
+const whatsappSharePreviewSchema = z.object({
+  format: whatsappShareFormatSchema.default('DETAILED'),
+  statusFilter: whatsappShareStatusSchema.default('ALL'),
+  categoryId: z.string().uuid().optional().nullable(),
+  sort: whatsappShareSortSchema.default('ORIGINAL'),
+  includeSummary: z.boolean().optional().nullable(),
+  includeEventDate: z.boolean().optional().nullable(),
+  includeEventPaymentInstructions: z.boolean().optional().nullable(),
+  includeMobileMoneyInstructions: z.boolean().optional().nullable(),
+  includeBankInstructions: z.boolean().optional().nullable(),
+  includeWithoutPledges: z.boolean().optional().default(false),
+  phoneFilter: whatsappPhoneFilterSchema.default('ALL'),
+  search: z.string().trim().max(120).optional().default(''),
+})
+
+const whatsappShareSettingsSchema = z.object({
+  headerText: z.string().trim().max(500).optional().nullable(),
+  footerText: z.string().trim().max(500).optional().nullable(),
+  includeEventName: z.boolean().optional().default(true),
+  includeEventDate: z.boolean().optional().default(false),
+  includeEventPaymentInstructions: z.boolean().optional().default(false),
+  includeMobileMoneyInstructions: z.boolean().optional().default(false),
+  includeBankInstructions: z.boolean().optional().default(false),
+  defaultListFormat: whatsappShareFormatSchema.default('DETAILED'),
+  defaultSort: whatsappShareSortSchema.default('ORIGINAL'),
+  defaultIncludeSummary: z.boolean().optional().default(true),
+})
+
 const updateMemberSchema = z.object({
   fullName: z.string().trim().min(2).max(160).optional(),
   phoneE164: z.string().trim().optional().nullable(),
@@ -282,6 +315,9 @@ const knownDatabaseCodes: ApiErrorCode[] = [
   'SMS_TEMPLATE_INVALID',
   'REMINDER_BATCH_TOO_LARGE',
   'REMINDER_BATCH_EMPTY',
+  'SHARE_WHATSAPP_ACCESS_DENIED',
+  'SHARE_WHATSAPP_FINANCIAL_REQUIRED',
+  'SHARE_SETTINGS_ACCESS_DENIED',
   'MEMBER_NOT_FOUND',
   'MEMBER_PHONE_ALREADY_EXISTS',
   'MEMBER_ALREADY_IN_EVENT',
@@ -846,6 +882,82 @@ app.get('/api/v1/events/:eventId/outstanding-members', requireAuth, loadUserCont
       throwFinancialDatabaseError(error, 'OUTSTANDING_MEMBERS_LIST_FAILED')
     }
     response.json({ data: jsonArray(data) })
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.get('/api/v1/events/:eventId/share/whatsapp-settings', requireAuth, loadUserContext, requireTenantContext, async (request, response, next) => {
+  try {
+    const tenantId = tenantIdFromRequest(request)
+    const eventId = uuidParamSchema.parse(request.params['eventId'])
+    const client = createUserSupabase(request.auth?.accessToken ?? '')
+    const { data, error } = await client.rpc('rpc_get_event_whatsapp_share_settings', { p_tenant_id: tenantId, p_event_id: eventId })
+    if (error) {
+      throwFinancialDatabaseError(error, 'WHATSAPP_SHARE_SETTINGS_GET_FAILED')
+    }
+    response.json({ data: jsonRecord(data) })
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.put('/api/v1/events/:eventId/share/whatsapp-settings', requireAuth, loadUserContext, requireTenantContext, async (request, response, next) => {
+  try {
+    const tenantId = tenantIdFromRequest(request)
+    const eventId = uuidParamSchema.parse(request.params['eventId'])
+    const input = whatsappShareSettingsSchema.parse(request.body)
+    const client = createUserSupabase(request.auth?.accessToken ?? '')
+    const { data, error } = await client.rpc('rpc_update_event_whatsapp_share_settings', {
+      p_tenant_id: tenantId,
+      p_event_id: eventId,
+      p_header_text: input.headerText || null,
+      p_footer_text: input.footerText || null,
+      p_include_event_name: input.includeEventName,
+      p_include_event_date: input.includeEventDate,
+      p_include_event_payment_instructions: input.includeEventPaymentInstructions,
+      p_include_mobile_money_instructions: input.includeMobileMoneyInstructions,
+      p_include_bank_instructions: input.includeBankInstructions,
+      p_default_list_format: input.defaultListFormat,
+      p_default_sort: input.defaultSort,
+      p_default_include_summary: input.defaultIncludeSummary,
+    })
+    if (error) {
+      throwFinancialDatabaseError(error, 'WHATSAPP_SHARE_SETTINGS_SAVE_FAILED')
+    }
+    response.json({ data: jsonRecord(data) })
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.post('/api/v1/events/:eventId/share/whatsapp-preview', requireAuth, loadUserContext, requireTenantContext, async (request, response, next) => {
+  try {
+    const tenantId = tenantIdFromRequest(request)
+    const eventId = uuidParamSchema.parse(request.params['eventId'])
+    const input = whatsappSharePreviewSchema.parse(request.body)
+    const client = createUserSupabase(request.auth?.accessToken ?? '')
+    const { data, error } = await client.rpc('rpc_generate_event_whatsapp_share_preview', {
+      p_tenant_id: tenantId,
+      p_event_id: eventId,
+      p_format: input.format,
+      p_status_filter: input.statusFilter,
+      p_category_id: input.categoryId || null,
+      p_sort: input.sort,
+      p_include_summary: input.includeSummary,
+      p_include_event_date: input.includeEventDate,
+      p_include_event_payment_instructions: input.includeEventPaymentInstructions,
+      p_include_mobile_money_instructions: input.includeMobileMoneyInstructions,
+      p_include_bank_instructions: input.includeBankInstructions,
+      p_include_without_pledges: input.includeWithoutPledges,
+      p_phone_filter: input.phoneFilter,
+      p_search: input.search,
+      p_safe_char_limit: env.WHATSAPP_SHARE_SAFE_CHAR_LIMIT,
+    })
+    if (error) {
+      throwFinancialDatabaseError(error, 'WHATSAPP_SHARE_PREVIEW_FAILED')
+    }
+    response.json({ data: jsonRecord(data) })
   } catch (error) {
     next(error)
   }

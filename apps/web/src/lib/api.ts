@@ -85,6 +85,11 @@ export const api = {
     apiFetch<{ data: Record<string, unknown> }>(`/events/${eventId}/members/${eventMemberId}/remove`, { tenantId, method: 'POST' }),
   eventPledges: (tenantId: string, eventId: string) => apiFetch<{ data: Record<string, unknown>[] }>(`/events/${eventId}/pledges`, { tenantId }),
   eventOutstandingMembers: (tenantId: string, eventId: string) => apiFetch<{ data: Record<string, unknown>[] }>(`/events/${eventId}/outstanding-members`, { tenantId }),
+  whatsappShareSettings: (tenantId: string, eventId: string) => apiFetch<{ data: Record<string, unknown> }>(`/events/${eventId}/share/whatsapp-settings`, { tenantId }),
+  saveWhatsappShareSettings: (tenantId: string, eventId: string, payload: Record<string, unknown>) =>
+    apiFetch<{ data: Record<string, unknown> }>(`/events/${eventId}/share/whatsapp-settings`, { tenantId, method: 'PUT', body: JSON.stringify(payload) }),
+  whatsappSharePreview: (tenantId: string, eventId: string, payload: Record<string, unknown>) =>
+    apiFetch<{ data: Record<string, unknown> }>(`/events/${eventId}/share/whatsapp-preview`, { tenantId, method: 'POST', body: JSON.stringify(payload) }),
   sendBalanceReminder: (tenantId: string, eventId: string, payload: Record<string, unknown>) =>
     apiFetch<{ data: Record<string, unknown> }>(`/events/${eventId}/reminders/balance`, { tenantId, method: 'POST', body: JSON.stringify(payload) }),
   sendBulkBalanceReminders: (tenantId: string, eventId: string, payload: Record<string, unknown>) =>

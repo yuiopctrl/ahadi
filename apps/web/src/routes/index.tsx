@@ -4,7 +4,7 @@ import { PlatformAppLayout } from '../layouts/PlatformAppLayout'
 import { TenantAppLayout } from '../layouts/TenantAppLayout'
 import { AuthPage } from '../pages/auth'
 import { PlatformPage } from '../pages/platform'
-import { EventDetailPage, MemberDetailPage, OutstandingPage, PaymentEntryPage, ReceiptPage, ReportsPage, SmsHistoryPage, TenantDashboardPage, TenantListPage, TenantSettingsPage, TenantUsersPage } from '../pages/tenant'
+import { EventDetailPage, MemberDetailPage, OutstandingPage, PaymentEntryPage, ReceiptPage, ReportsPage, ShareListPage, SmsHistoryPage, TenantDashboardPage, TenantListPage, TenantSettingsPage, TenantUsersPage } from '../pages/tenant'
 import { AuthenticatedRoute, OnboardingRoute, PinUnlockedRoute, PlatformOwnerRoute, PublicRoute, TenantRoute } from './guards'
 
 export const router = createBrowserRouter([
@@ -59,6 +59,7 @@ export const router = createBrowserRouter([
                   { path: 'events/:eventId/members/:eventMemberId', element: <MemberDetailPage /> },
                   { path: 'events/:eventId/pledges', element: <EventDetailPage section="pledges" /> },
                   { path: 'events/:eventId/outstanding', element: <OutstandingPage /> },
+                  { path: 'events/:eventId/share', element: <ShareListPage /> },
                   { path: 'events/:eventId/payments', element: <EventDetailPage section="payments" /> },
                   { path: 'events/:eventId/payments/new', element: <PaymentEntryPage /> },
                   { path: 'events/:eventId/messages', element: <EventDetailPage section="messages" /> },

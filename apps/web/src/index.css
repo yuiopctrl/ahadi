@@ -1176,6 +1176,101 @@ th {
   padding: 0 14px;
 }
 
+.share-layout {
+  display: grid;
+  gap: 16px;
+}
+
+.share-controls {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+
+.share-preview-panel {
+  position: sticky;
+  top: 20px;
+  align-self: start;
+  min-width: 0;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: white;
+  padding: 14px;
+}
+
+.radio-card-grid,
+.settings-grid {
+  display: grid;
+  gap: 10px;
+}
+
+.radio-card {
+  display: grid;
+  min-height: 72px;
+  gap: 4px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: white;
+  color: var(--color-text);
+  padding: 12px;
+  text-align: left;
+}
+
+.radio-card.active {
+  border-color: var(--color-primary);
+  background: var(--color-primary-soft);
+}
+
+.radio-card span {
+  color: var(--color-muted);
+  font-size: 13px;
+}
+
+.whatsapp-preview {
+  width: 100%;
+  max-height: 520px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: #f8fbf9;
+  color: var(--color-text);
+  padding: 14px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.whatsapp-preview.compact {
+  max-height: 260px;
+}
+
+.share-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.share-actions button {
+  display: inline-flex;
+  min-height: 42px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: white;
+  color: var(--color-primary);
+  padding: 0 12px;
+  font-weight: 800;
+}
+
+.split-parts {
+  display: grid;
+  gap: 10px;
+}
+
 .receipt-document {
   background: white;
 }
@@ -1192,6 +1287,15 @@ th {
 
   .finance-grid .content-panel:first-child {
     grid-column: span 2;
+  }
+
+  .share-layout {
+    grid-template-columns: minmax(0, 1fr) minmax(320px, 0.8fr);
+    align-items: start;
+  }
+
+  .radio-card-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 

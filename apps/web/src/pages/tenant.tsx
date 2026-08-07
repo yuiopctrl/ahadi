@@ -4,11 +4,14 @@ import {
   CalendarDays,
   CheckCircle2,
   Clock3,
+  Copy,
   CreditCard,
   FileText,
+  MessageCircle,
   Plus,
   Printer,
   Search,
+  Send,
   Share2,
   Users,
 } from 'lucide-react'
@@ -24,6 +27,26 @@ type EventSection = 'overview' | 'members' | 'pledges' | 'payments' | 'messages'
 type Row = Record<string, unknown>
 
 const paymentMethods = ['CASH', 'M_PESA', 'AIRTEL_MONEY', 'MIX_BY_YAS', 'HALOPESA', 'BANK_TRANSFER', 'CHEQUE', 'OTHER']
+const whatsappFormats = [
+  { value: 'DETAILED', label: 'Detailed', description: 'Pledged and paid amounts with symbols.' },
+  { value: 'PRIVACY', label: 'Privacy-Friendly', description: 'Names and status symbols only.' },
+  { value: 'PAYMENT_PROGRESS', label: 'Payment Progress', description: 'Committee paid / pledged view.' },
+  { value: 'OUTSTANDING_FOLLOW_UP', label: 'Outstanding Follow-Up', description: 'Members who still owe money.' },
+]
+const whatsappSorts = [
+  ['ORIGINAL', 'Original Order'],
+  ['NAME_ASC', 'Name A-Z'],
+  ['PLEDGED_DESC', 'Pledged Amount: High to Low'],
+  ['PAID_FIRST', 'Paid First'],
+  ['OUTSTANDING_FIRST', 'Outstanding First'],
+]
+const whatsappStatuses = [
+  ['ALL', 'All'],
+  ['PAID', 'Paid'],
+  ['PARTIAL', 'Partial'],
+  ['UNPAID', 'Unpaid'],
+  ['OVERDUE', 'Overdue'],
+]
 
 function asString(value: unknown, fallback = '') {
   return typeof value === 'string' && value ? value : fallback
@@ -97,6 +120,26 @@ function jsonRecord(value: unknown): Row {
 function maskPhone(value: unknown) {
   const phone = asString(value, '')
   return phone ? phone.replace(/[0-9](?=[0-9]{3})/g, '*') : 'No phone'
+}
+
+function isFinancialWhatsappFormat(format: string) {
+  return format !== 'PRIVACY'
+}
+
+async function copyPlainText(text: string) {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text)
+    return
+  }
+  const textarea = document.createElement('textarea')
+  textarea.value = text
+  textarea.setAttribute('readonly', 'true')
+  textarea.style.position = 'fixed'
+  textarea.style.left = '-9999px'
+  document.body.appendChild(textarea)
+  textarea.select()
+  document.execCommand('copy')
+  textarea.remove()
 }
 
 function useActiveEventContext(routeEventId: string | undefined) {
@@ -281,6 +324,7 @@ function OverviewCards({ eventId, summary, payments, pledges }: { eventId: strin
         </div>
         <div className="card-actions">
           <Link className="primary-button inline-action" to={`/app/events/${eventId}/payments/new`}>Record Payment</Link>
+          <Link to={`/app/events/${eventId}/share`}><Share2 size={16} aria-hidden /> Share List</Link>
           <Link to={`/app/events/${eventId}/outstanding`}>Send Reminders</Link>
         </div>
       </article>
@@ -726,6 +770,197 @@ function BalanceReminderSheet({ tenantId, eventId, member, onClose, onSent }: { 
         <button className="primary-button" type="button" disabled={mutation.isPending} onClick={() => mutation.mutate()}>{mutation.isPending ? 'Queueing...' : 'Send Reminder'}</button>
       </div>
     </section>
+  )
+}
+
+export function ShareListPage() {
+  const { eventId = '' } = useParams()
+  const activeEvent = useActiveEventContext(eventId)
+  const tenantId = activeEvent.tenantId
+  const sessionPermissions = new Set(useSessionStore().selectedTenantContext?.permissions ?? [])
+  const [format, setFormat] = useState('')
+  const [statusFilter, setStatusFilter] = useState('ALL')
+  const [categoryId, setCategoryId] = useState('')
+  const [sort, setSort] = useState('')
+  const [search, setSearch] = useState('')
+  const [phoneFilter, setPhoneFilter] = useState('ALL')
+  const [includeWithoutPledges, setIncludeWithoutPledges] = useState(false)
+  const [includeSummary, setIncludeSummary] = useState<boolean | null>(null)
+  const [includeEventDate, setIncludeEventDate] = useState<boolean | null>(null)
+  const [includeEventPaymentInstructions, setIncludeEventPaymentInstructions] = useState<boolean | null>(null)
+  const [includeMobileMoneyInstructions, setIncludeMobileMoneyInstructions] = useState<boolean | null>(null)
+  const [includeBankInstructions, setIncludeBankInstructions] = useState<boolean | null>(null)
+  const [headerText, setHeaderText] = useState<string | null>(null)
+  const [footerText, setFooterText] = useState<string | null>(null)
+  const [copyMessage, setCopyMessage] = useState('')
+  const [selectedPart, setSelectedPart] = useState(0)
+  const canQuery = Boolean(tenantId && eventId && !activeEvent.error)
+  const settings = useQuery({ queryKey: ['whatsapp-share-settings', tenantId, eventId], queryFn: async () => (await api.whatsappShareSettings(tenantId ?? '', eventId)).data, enabled: canQuery })
+  const canFinancial = Boolean(settings.data?.canUseFinancialFormats) || sessionPermissions.has('shares.whatsapp.financial')
+  const effectiveFormat = !canFinancial && isFinancialWhatsappFormat(format) ? 'PRIVACY' : (format || asString(settings.data?.defaultListFormat, canFinancial ? 'DETAILED' : 'PRIVACY'))
+  const effectiveSort = sort || asString(settings.data?.defaultSort, 'ORIGINAL')
+  const effectiveIncludeSummary = effectiveFormat === 'PRIVACY' && includeSummary === null ? false : (includeSummary ?? settings.data?.defaultIncludeSummary !== false)
+  const effectiveIncludeEventDate = includeEventDate ?? (settings.data?.includeEventDate === true)
+  const effectiveIncludeEventPaymentInstructions = includeEventPaymentInstructions ?? (settings.data?.includeEventPaymentInstructions === true)
+  const effectiveIncludeMobileMoneyInstructions = includeMobileMoneyInstructions ?? (settings.data?.includeMobileMoneyInstructions === true)
+  const effectiveIncludeBankInstructions = includeBankInstructions ?? (settings.data?.includeBankInstructions === true)
+  const effectiveHeaderText = headerText ?? asString(settings.data?.headerText, '')
+  const effectiveFooterText = footerText ?? asString(settings.data?.footerText, '')
+
+  const previewPayload = {
+    format: effectiveFormat,
+    statusFilter,
+    categoryId: categoryId || null,
+    sort: effectiveSort,
+    includeSummary: effectiveIncludeSummary,
+    includeEventDate: effectiveIncludeEventDate,
+    includeEventPaymentInstructions: effectiveIncludeEventPaymentInstructions,
+    includeMobileMoneyInstructions: effectiveIncludeMobileMoneyInstructions,
+    includeBankInstructions: effectiveIncludeBankInstructions,
+    includeWithoutPledges,
+    phoneFilter,
+    search,
+  }
+  const preview = useQuery({
+    queryKey: ['whatsapp-share-preview', tenantId, eventId, previewPayload],
+    queryFn: async () => (await api.whatsappSharePreview(tenantId ?? '', eventId, previewPayload)).data,
+    enabled: canQuery && !settings.isLoading,
+  })
+  const saveSettings = useMutation({
+    mutationFn: () => api.saveWhatsappShareSettings(tenantId ?? '', eventId, {
+      headerText: effectiveHeaderText || null,
+      footerText: effectiveFooterText || null,
+      includeEventName: true,
+      includeEventDate: effectiveIncludeEventDate,
+      includeEventPaymentInstructions: effectiveIncludeEventPaymentInstructions,
+      includeMobileMoneyInstructions: effectiveIncludeMobileMoneyInstructions,
+      includeBankInstructions: effectiveIncludeBankInstructions,
+      defaultListFormat: effectiveFormat,
+      defaultSort: effectiveSort,
+      defaultIncludeSummary: effectiveIncludeSummary,
+    }),
+    onSuccess: () => {
+      void settings.refetch()
+      setCopyMessage('Settings saved')
+    },
+  })
+  const data = preview.data ?? {}
+  const text = asString(data.text, '')
+  const parts = Array.isArray(data.parts) ? data.parts.map(jsonRecord) : []
+  const safeSelectedPart = Math.min(selectedPart, Math.max(parts.length - 1, 0))
+  const currentPart = parts[safeSelectedPart] ?? parts[0] ?? null
+  const categories = Array.isArray(data.categories) ? data.categories.map(jsonRecord) : []
+  const shareAvailable = typeof navigator.share === 'function'
+
+  async function copyText(value: string, label = 'List copied') {
+    await copyPlainText(value)
+    setCopyMessage(label)
+  }
+
+  async function shareText(value: string) {
+    if (!navigator.share) return
+    await navigator.share({ text: value })
+    setCopyMessage('Share opened')
+  }
+
+  function openWhatsApp(value: string) {
+    window.open(`https://wa.me/?text=${encodeURIComponent(value)}`, '_blank', 'noopener,noreferrer')
+  }
+
+  if (activeEvent.error) return <ErrorState title="Unable to open share list" message={activeEvent.error} />
+  if (settings.isLoading) return <LoadingState title="Loading share settings" message="Preparing WhatsApp list defaults." />
+  if (settings.isError) return <ErrorState title="Unable to load share list" message={errorMessage(settings.error, 'Share settings could not be loaded.')} />
+
+  return (
+    <PageContainer>
+      <PageHeader title="Share List" description="Generate WhatsApp-ready contributor lists from current event balances." action={<Link to={`/app/events/${eventId}`}><ArrowLeft size={18} aria-hidden /> Back</Link>} />
+      <section className="share-layout">
+        <div className="share-controls">
+          <article className="content-panel">
+            <div className="panel-header">
+              <div>
+                <h2>List Format</h2>
+                <p>{canFinancial ? 'Choose a public or committee-facing format.' : 'Your role can generate Privacy-Friendly lists only.'}</p>
+              </div>
+            </div>
+            <div className="radio-card-grid">
+              {whatsappFormats.filter((item) => canFinancial || !isFinancialWhatsappFormat(item.value)).map((item) => (
+                <button className={effectiveFormat === item.value ? 'radio-card active' : 'radio-card'} type="button" key={item.value} onClick={() => {
+                  setFormat(item.value)
+                  if (item.value === 'PRIVACY') setIncludeSummary(false)
+                }}>
+                  <strong>{item.label}</strong>
+                  <span>{item.description}</span>
+                </button>
+              ))}
+            </div>
+          </article>
+          <article className="content-panel">
+            <div className="panel-header"><h2>Filters</h2></div>
+            <section className="filter-bar">
+              <label>Status<select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>{whatsappStatuses.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+              <label>Category<select value={categoryId} onChange={(event) => setCategoryId(event.target.value)}><option value="">All categories</option>{categories.map((category) => <option key={asString(category.id)} value={asString(category.id)}>{asString(category.name)}</option>)}</select></label>
+              <label>Sort<select value={effectiveSort} onChange={(event) => setSort(event.target.value)}>{whatsappSorts.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+              <label>Phone<select value={phoneFilter} onChange={(event) => setPhoneFilter(event.target.value)}><option value="ALL">All</option><option value="WITH_PHONE">Members with Phone</option><option value="WITHOUT_PHONE">Members without Phone</option></select></label>
+              <label>Search<input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Member or code" /></label>
+            </section>
+            <label className="checkbox-row"><input type="checkbox" checked={includeWithoutPledges} onChange={(event) => setIncludeWithoutPledges(event.target.checked)} disabled={effectiveFormat !== 'PRIVACY'} /> Include registered members without pledges</label>
+          </article>
+          <article className="content-panel">
+            <div className="panel-header"><h2>Options</h2></div>
+            <div className="settings-grid">
+              <label className="checkbox-row"><input type="checkbox" checked={effectiveIncludeSummary} onChange={(event) => setIncludeSummary(event.target.checked)} disabled={effectiveFormat === 'PRIVACY' && !canFinancial} /> Include Summary</label>
+              <label className="checkbox-row"><input type="checkbox" checked={effectiveIncludeEventDate} onChange={(event) => setIncludeEventDate(event.target.checked)} /> Include Event Date</label>
+              <label className="checkbox-row"><input type="checkbox" checked={effectiveIncludeEventPaymentInstructions} onChange={(event) => setIncludeEventPaymentInstructions(event.target.checked)} /> Include Event Payment Instructions</label>
+              <label className="checkbox-row"><input type="checkbox" checked={effectiveIncludeMobileMoneyInstructions} onChange={(event) => setIncludeMobileMoneyInstructions(event.target.checked)} /> Include Mobile Money</label>
+              <label className="checkbox-row"><input type="checkbox" checked={effectiveIncludeBankInstructions} onChange={(event) => setIncludeBankInstructions(event.target.checked)} /> Include Bank Instructions</label>
+            </div>
+            <label>Header Text<textarea value={effectiveHeaderText} onChange={(event) => setHeaderText(event.target.value)} rows={3} placeholder={asString(settings.data?.defaultHeaderText)} /></label>
+            <label>Footer Text<textarea value={effectiveFooterText} onChange={(event) => setFooterText(event.target.value)} rows={3} placeholder="Karibuni sana kwa michango na ahadi." /></label>
+            {saveSettings.error ? <p className="field-error">{errorMessage(saveSettings.error, 'Share settings could not be saved.')}</p> : null}
+            <div className="sheet-actions">
+              <button type="button" onClick={() => { setHeaderText(''); setFooterText('') }}>Reset to Default</button>
+              {canFinancial ? <button className="primary-button" type="button" disabled={saveSettings.isPending} onClick={() => saveSettings.mutate()}>{saveSettings.isPending ? 'Saving...' : 'Save Settings'}</button> : null}
+            </div>
+          </article>
+        </div>
+        <aside className="share-preview-panel">
+          <div className="panel-header">
+            <div>
+              <h2>Live Preview</h2>
+              <p>{asNumber(data.memberCount)} contributors · {asNumber(data.textLength)} characters</p>
+            </div>
+            <StatusBadge tone={data.isLong ? 'warning' : 'success'}>{data.isLong ? 'Long' : 'Ready'}</StatusBadge>
+          </div>
+          {preview.isLoading ? <LoadingState title="Generating preview" /> : null}
+          {preview.isError ? <ErrorState title="Unable to generate preview" message={errorMessage(preview.error, 'Preview could not be generated.')} /> : null}
+          {data.isLong ? <p className="field-error">This list is long and may be difficult to send as one WhatsApp message.</p> : null}
+          <pre className="whatsapp-preview">{text || 'No contributors match these filters.'}</pre>
+          {parts.length > 1 ? (
+            <section className="split-parts">
+              <div className="card-title-row">
+                <strong>Part {asNumber(currentPart?.part)} of {asNumber(currentPart?.totalParts)}</strong>
+                <div className="card-actions">
+                  <button type="button" disabled={safeSelectedPart <= 0} onClick={() => setSelectedPart((value) => Math.max(value - 1, 0))}>Previous</button>
+                  <button type="button" disabled={safeSelectedPart >= parts.length - 1} onClick={() => setSelectedPart((value) => Math.min(value + 1, parts.length - 1))}>Next Part</button>
+                </div>
+              </div>
+              <pre className="whatsapp-preview compact">{asString(currentPart?.text)}</pre>
+            </section>
+          ) : null}
+          {copyMessage ? <p className="privacy-note">{copyMessage}</p> : null}
+          <div className="share-actions">
+            <button className="primary-button" type="button" disabled={!text} onClick={() => void copyText(text)}>
+              <Copy size={18} aria-hidden /> Copy List
+            </button>
+            {parts.length > 1 ? <button type="button" onClick={() => void copyText(parts.map((part) => asString(part.text)).join('\n\n---\n\n'), 'All parts copied')}>Copy All Parts</button> : null}
+            {parts.length > 1 && currentPart ? <button type="button" onClick={() => void copyText(asString(currentPart.text), `Part ${asNumber(currentPart.part)} copied`)}>Copy Part {asNumber(currentPart.part)}</button> : null}
+            {shareAvailable ? <button type="button" disabled={!text} onClick={() => void shareText(parts.length > 1 && currentPart ? asString(currentPart.text) : text)}><Send size={18} aria-hidden /> Share</button> : null}
+            <button type="button" disabled={!text} onClick={() => openWhatsApp(parts.length > 1 && currentPart ? asString(currentPart.text) : text)}><MessageCircle size={18} aria-hidden /> Open WhatsApp</button>
+          </div>
+        </aside>
+      </section>
+    </PageContainer>
   )
 }
 

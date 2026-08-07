@@ -24,6 +24,7 @@ export const apiEnvSchema = z.object({
   BALANCE_REMINDER_COOLDOWN_HOURS: z.coerce.number().int().nonnegative().default(24),
   BALANCE_REMINDER_DUE_SOON_DAYS: z.coerce.number().int().nonnegative().max(60).default(7),
   BALANCE_REMINDER_MAX_BATCH_SIZE: z.coerce.number().int().positive().max(100).default(100),
+  WHATSAPP_SHARE_SAFE_CHAR_LIMIT: z.coerce.number().int().positive().max(20000).default(3500),
 })
 
 export type ApiEnv = z.infer<typeof apiEnvSchema>

@@ -8,6 +8,7 @@ import {
   MessageSquareText,
   PieChart,
   Settings,
+  Share2,
   ShieldCheck,
   Users,
 } from 'lucide-react'
@@ -31,6 +32,7 @@ function desktopNav(event: EventSummary | null) {
     { to: event ? `${eventBase}/members` : '/app/members', label: 'Members', icon: Users },
     { to: event ? `${eventBase}/pledges` : '/app/events', label: 'Pledges', icon: PieChart },
     { to: event ? `${eventBase}/outstanding` : '/app/events', label: 'Outstanding', icon: Clock3 },
+    { to: event ? `${eventBase}/share` : '/app/events', label: 'Share List', icon: Share2 },
     { to: event ? `${eventBase}/payments` : '/app/payments', label: 'Payments', icon: CreditCard },
     { to: '/app/messages', label: 'Messages', icon: MessageSquareText },
     { to: '/app/reports', label: 'Reports', icon: PieChart },
