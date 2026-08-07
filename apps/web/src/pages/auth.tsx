@@ -6,6 +6,7 @@ import type { OnboardingPayload, SubscriptionPlan, TenantMembershipContext } fro
 import { normalizeTanzaniaPhone, onboardingPayloadSchema, setupPinSchema } from '@ahadi/validation'
 import { api, ApiClientError } from '../lib/api'
 import { supabase } from '../lib/supabase'
+import { hasActivePlatformAccess } from '../routes/access'
 import { getSingleActiveMembership, useSessionStore } from '../stores/session-store'
 import { MoneyDisplay, StatusBadge } from '../components/ui'
 
@@ -211,6 +212,10 @@ function OtpPage({ title, subtitle }: Pick<AuthPageProps, 'title' | 'subtitle'>)
         return
       }
       session.lockState.unlock()
+      if (hasActivePlatformAccess(context) && !(context?.tenantMemberships.length ?? 0)) {
+        navigate('/platform', { replace: true })
+        return
+      }
       if (!context?.onboardingCompleted) {
         navigate('/onboarding', { replace: true })
         return
@@ -219,10 +224,6 @@ function OtpPage({ title, subtitle }: Pick<AuthPageProps, 'title' | 'subtitle'>)
       if (singleTenant) {
         await session.selectTenant(singleTenant.tenantId)
         navigate('/app', { replace: true })
-        return
-      }
-      if (context?.isPlatformUser && !context.tenantMemberships.length) {
-        navigate('/platform', { replace: true })
         return
       }
       navigate('/select-tenant', { replace: true })
@@ -299,6 +300,10 @@ function PinPage({ title, subtitle }: Pick<AuthPageProps, 'title' | 'subtitle'>)
       }
       session.lockState.unlock()
       const context = await session.refreshContext()
+      if (hasActivePlatformAccess(context) && !(context?.tenantMemberships.length ?? 0)) {
+        navigate('/platform', { replace: true })
+        return
+      }
       if (!context?.onboardingCompleted) {
         navigate('/onboarding', { replace: true })
         return
@@ -531,9 +536,9 @@ function TenantSelectionPage({ title, subtitle }: Pick<AuthPageProps, 'title' | 
           </button>
         ))}
       </div>
-      {session.userContext?.isPlatformUser ? (
+      {session.userContext?.isPlatformUser && session.userContext.platformStatus === 'ACTIVE' && session.userContext.platformPermissions.includes('platform.dashboard.view') ? (
         <button type="button" className="text-button" onClick={() => navigate('/platform')}>
-          Open platform console
+          Open Platform Console
         </button>
       ) : null}
     </form>

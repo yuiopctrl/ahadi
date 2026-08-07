@@ -8,6 +8,7 @@ import {
   Settings,
 } from 'lucide-react'
 import { NavLink, Outlet } from 'react-router-dom'
+import { useSessionStore } from '../stores/session-store'
 
 const platformNav = [
   { to: '/platform', label: 'Overview', icon: Gauge, end: true },
@@ -20,6 +21,9 @@ const platformNav = [
 ]
 
 export function PlatformAppLayout() {
+  const session = useSessionStore()
+  const canOpenTenantApp = Boolean(session.selectedTenantId || session.userContext?.tenantMemberships.length)
+
   return (
     <div className="platform-layout">
       <aside className="platform-sidebar">
@@ -31,6 +35,12 @@ export function PlatformAppLayout() {
           </div>
         </div>
         <nav aria-label="Platform navigation">
+          {canOpenTenantApp ? (
+            <NavLink to={session.selectedTenantId ? '/app' : '/select-tenant'}>
+              <Gauge size={18} aria-hidden />
+              Tenant App
+            </NavLink>
+          ) : null}
           {platformNav.map(({ to, label, icon: Icon, end }) => (
             <NavLink key={label} to={to} end={end}>
               <Icon size={18} aria-hidden />

@@ -7,6 +7,7 @@ export type EventType = 'WEDDING' | 'SENDOFF' | 'FUNERAL' | 'FUNDRAISER' | 'BIRT
 export type EventStatus = 'DRAFT' | 'ACTIVE' | 'CLOSED' | 'CANCELLED' | 'ARCHIVED'
 export type EventAccessLevel = 'VIEW' | 'COLLECT' | 'MANAGE'
 export type PlatformRole = 'PLATFORM_OWNER' | 'PLATFORM_ADMIN' | 'PLATFORM_SUPPORT' | 'PLATFORM_AUDITOR'
+export type PlatformUserStatus = 'ACTIVE' | 'SUSPENDED' | 'DISABLED'
 export type TenantAccessState = 'ACTIVE' | 'TRIAL' | 'READ_ONLY' | 'BLOCKED'
 
 export type ApiErrorCode =
@@ -20,6 +21,7 @@ export type ApiErrorCode =
   | 'PIN_INVALID'
   | 'PIN_LOCKED'
   | 'TENANT_ACCESS_DENIED'
+  | 'PLATFORM_ACCESS_DENIED'
   | 'ONBOARDING_ALREADY_COMPLETED'
   | 'PLAN_NOT_AVAILABLE'
   | 'SUBSCRIPTION_INACTIVE'
@@ -208,6 +210,8 @@ export interface UserContext {
   profile: UserProfile | null
   isPlatformUser: boolean
   platformRole: PlatformRole | null
+  platformStatus: PlatformUserStatus | null
+  platformPermissions: string[]
   onboardingCompleted: boolean
   tenantMemberships: TenantMembershipContext[]
 }

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import test from 'node:test'
 
-const migrations = ['011_members_and_event_members.sql', '012_pledges_and_history.sql', '013_payments_allocations_and_receipts.sql', '014_member_pledge_payment_rpcs.sql', '015_financial_views.sql', '016_financial_permissions_and_rls.sql']
+const migrations = ['011_members_and_event_members.sql', '012_pledges_and_history.sql', '013_payments_allocations_and_receipts.sql', '014_member_pledge_payment_rpcs.sql', '015_financial_views.sql', '016_financial_permissions_and_rls.sql', '018_repair_event_financial_access.sql']
   .map((file) => readFileSync(new URL(`../../../supabase/migrations/${file}`, import.meta.url), 'utf8'))
   .join('\n')
 const app = readFileSync(new URL('./app.ts', import.meta.url), 'utf8')
@@ -33,6 +33,15 @@ test('financial RPCs cover member, pledge, payment, reversal and summary workflo
   assert.match(migrations, /auth\.uid\(\)/)
   assert.match(migrations, /least\(p_amount, outstanding\)/)
   assert.match(migrations, /PAYMENT_ALREADY_REVERSED/)
+})
+
+test('financial access repair backfills permissions and allows event viewers to load read summaries', () => {
+  assert.match(migrations, /018_repair_event_financial_access/)
+  assert.match(migrations, /where r\.code = 'TENANT_OWNER' and p\.code not like 'platform\.%'/)
+  assert.match(migrations, /public\.has_tenant_permission\(p_tenant_id, 'events\.view'\)/)
+  assert.match(migrations, /p_min_assignment_level = 'VIEW'/)
+  assert.match(migrations, /p_min_assignment_level = 'COLLECT' and eua\.access_level in \('COLLECT', 'MANAGE'\)/)
+  assert.match(migrations, /p_min_assignment_level = 'MANAGE' and eua\.access_level = 'MANAGE'/)
 })
 
 test('financial read models and API routes are present', () => {

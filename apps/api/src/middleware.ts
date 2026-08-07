@@ -52,19 +52,13 @@ export async function loadUserContext(request: Request, _response: Response, nex
 export function requirePlatformPermission(permission: string) {
   return (request: Request, _response: Response, next: NextFunction) => {
     const context = request.auth?.context
-    if (!context?.isPlatformUser) {
-      next(new AppError('TENANT_ACCESS_DENIED'))
+    if (!context?.isPlatformUser || context.platformStatus !== 'ACTIVE') {
+      next(new AppError('PLATFORM_ACCESS_DENIED', 'Active platform access is required'))
       return
     }
-    if (context.platformRole !== 'PLATFORM_OWNER') {
-      const allowed =
-        context.platformRole === 'PLATFORM_ADMIN' ||
-        (context.platformRole === 'PLATFORM_SUPPORT' && ['platform.dashboard.view', 'platform.tenants.view', 'platform.sms.view'].includes(permission)) ||
-        (context.platformRole === 'PLATFORM_AUDITOR' && ['platform.dashboard.view', 'platform.audit.view'].includes(permission))
-      if (!allowed) {
-        next(new AppError('TENANT_ACCESS_DENIED'))
-        return
-      }
+    if (!context.platformPermissions.includes(permission)) {
+      next(new AppError('PLATFORM_ACCESS_DENIED', `Missing platform permission: ${permission}`))
+      return
     }
     next()
   }

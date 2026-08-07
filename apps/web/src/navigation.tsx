@@ -7,6 +7,7 @@ import {
   MessageSquareText,
   PieChart,
   Settings,
+  ShieldCheck,
   Users,
 } from 'lucide-react'
 import { NavLink } from 'react-router-dom'
@@ -55,7 +56,7 @@ export function MobileBottomNav() {
   )
 }
 
-export function DesktopSidebar({ tenant, event }: { tenant: TenantMembershipContext | null; event: EventSummary | null }) {
+export function DesktopSidebar({ tenant, event, showPlatformLink = false }: { tenant: TenantMembershipContext | null; event: EventSummary | null; showPlatformLink?: boolean }) {
   return (
     <aside className="desktop-sidebar">
       <div className="sidebar-brand">
@@ -68,6 +69,12 @@ export function DesktopSidebar({ tenant, event }: { tenant: TenantMembershipCont
       <TenantSwitcherDisplay tenant={tenant} />
       <EventContextDisplay event={event} />
       <nav aria-label="Tenant navigation">
+        {showPlatformLink ? (
+          <NavLink to="/platform">
+            <ShieldCheck size={18} aria-hidden />
+            Platform Console
+          </NavLink>
+        ) : null}
         {desktopNav.map(({ to, label, icon: Icon, end }) => (
           <NavLink key={label} to={to} end={end}>
             <Icon size={18} aria-hidden />

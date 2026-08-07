@@ -1,6 +1,7 @@
 import { Navigate, Outlet, useLocation } from 'react-router-dom'
 import { LoadingState, PageContainer } from '../components/ui'
-import { getSingleActiveMembership, useSessionStore } from '../stores/session-store'
+import { useSessionStore } from '../stores/session-store'
+import { buildPlatformAccessDiagnostic, getPlatformRouteRedirect, getPublicRouteRedirect, getTenantRouteRedirect } from './access'
 
 function FullScreenLoading() {
   return (
@@ -25,17 +26,7 @@ export function PublicRoute() {
   if (session.lockState.isLocked) {
     return <Navigate to="/setup-pin" replace />
   }
-  if (!session.userContext?.onboardingCompleted) {
-    return <Navigate to="/onboarding" replace />
-  }
-  const singleTenant = getSingleActiveMembership(session.userContext)
-  if (singleTenant) {
-    return <Navigate to="/app" replace />
-  }
-  if (session.userContext?.tenantMemberships.length) {
-    return <Navigate to="/select-tenant" replace />
-  }
-  return session.userContext?.isPlatformUser ? <Navigate to="/platform" replace /> : <Navigate to="/onboarding" replace />
+  return <Navigate to={getPublicRouteRedirect(session.userContext)} replace />
 }
 
 export function AuthenticatedRoute() {
@@ -60,22 +51,32 @@ export function PinUnlockedRoute() {
 
 export function TenantRoute() {
   const session = useSessionStore()
-  if (!session.userContext?.onboardingCompleted) {
-    return <Navigate to="/onboarding" replace />
-  }
-  if (!session.selectedTenantId) {
-    return <Navigate to="/select-tenant" replace />
-  }
-  if (!session.selectedTenantContext || session.selectedTenantContext.accessState === 'BLOCKED') {
-    return <Navigate to="/select-tenant" replace />
+  const redirectTarget = getTenantRouteRedirect(
+    session.userContext,
+    session.selectedTenantId,
+    !session.selectedTenantContext || session.selectedTenantContext.accessState === 'BLOCKED',
+  )
+  if (redirectTarget) {
+    return <Navigate to={redirectTarget} replace />
   }
   return <Outlet />
 }
 
 export function PlatformOwnerRoute() {
   const session = useSessionStore()
-  if (!session.userContext?.isPlatformUser) {
-    return <Navigate to="/app" replace />
+  const location = useLocation()
+  const redirectTarget = getPlatformRouteRedirect(session.userContext)
+  if (import.meta.env.DEV) {
+    console.info('Ahadi platform access diagnostic', buildPlatformAccessDiagnostic({
+      authenticated: Boolean(session.session),
+      lockState: session.lockState,
+      context: session.userContext,
+      attemptedRoute: location.pathname,
+      redirectTarget,
+    }))
+  }
+  if (redirectTarget) {
+    return <Navigate to={redirectTarget} replace />
   }
   return <Outlet />
 }
