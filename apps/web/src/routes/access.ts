@@ -1,6 +1,6 @@
 import type { UserContext } from '@ahadi/types'
 import type { SessionLockState } from '../stores/session-store'
-import { getSingleActiveMembership } from '../stores/session-selection'
+import { getSingleActiveMembership, isAccessibleTenantMembership } from '../stores/session-selection'
 
 const requiredPlatformDashboardPermission = 'platform.dashboard.view'
 
@@ -22,7 +22,8 @@ export function hasActivePlatformAccess(context: UserContext | null, permission 
 }
 
 export function getPublicRouteRedirect(context: UserContext | null): string {
-  if (hasActivePlatformAccess(context) && !context?.tenantMemberships.length) {
+  const accessibleMemberships = context?.tenantMemberships.filter(isAccessibleTenantMembership) ?? []
+  if (hasActivePlatformAccess(context) && !accessibleMemberships.length) {
     return '/platform'
   }
   if (!context?.onboardingCompleted) {
@@ -32,7 +33,7 @@ export function getPublicRouteRedirect(context: UserContext | null): string {
   if (singleTenant) {
     return '/app'
   }
-  if (context?.tenantMemberships.length) {
+  if (accessibleMemberships.length) {
     return '/select-tenant'
   }
   return hasActivePlatformAccess(context) ? '/platform' : '/onboarding'
@@ -66,7 +67,8 @@ export function getTenantRouteRedirect(context: UserContext | null, selectedTena
   if (!context?.onboardingCompleted) {
     return hasActivePlatformAccess(context) ? '/platform' : '/onboarding'
   }
-  if (!selectedTenantId || selectedTenantBlocked) {
+  const selectedMembership = context.tenantMemberships.find((membership) => membership.tenantId === selectedTenantId)
+  if (!selectedTenantId || selectedTenantBlocked || (selectedMembership && !isAccessibleTenantMembership(selectedMembership))) {
     return '/select-tenant'
   }
   return null

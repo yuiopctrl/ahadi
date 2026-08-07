@@ -44,6 +44,7 @@ export type ApiErrorCode =
   | 'PAYMENT_IDEMPOTENCY_CONFLICT'
   | 'EVENT_NOT_ACTIVE'
   | 'EVENT_ACCESS_DENIED'
+  | 'EVENT_LIMIT_REACHED'
   | 'RECEIPT_NOT_FOUND'
   | 'SUBSCRIPTION_READ_ONLY'
   | 'SUBSCRIPTION_BLOCKED'
@@ -189,6 +190,8 @@ export interface EventSummary {
   eventType: EventType
   status: EventStatus
   eventDate: string | null
+  pledgeDeadline: string | null
+  targetAmount?: number | null
 }
 
 export interface TenantMembershipContext {

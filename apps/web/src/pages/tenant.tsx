@@ -15,6 +15,7 @@ import {
 import { useMemo, useState } from 'react'
 import type { FormEvent } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import type { EventSummary } from '@ahadi/types'
 import { EmptyState, ErrorState, LoadingState, PageContainer, PageHeader, SearchInput, StatCard, StatusBadge } from '../components/ui'
 import { api, ApiClientError } from '../lib/api'
 import { useSessionStore } from '../stores/session-store'
@@ -31,6 +32,13 @@ function asString(value: unknown, fallback = '') {
 function asNumber(value: unknown) {
   const number = Number(value)
   return Number.isFinite(number) ? number : 0
+}
+
+function displayValue(value: unknown, fallback = 'Not set') {
+  if (typeof value === 'string' && value) return value
+  if (typeof value === 'number' && Number.isFinite(value)) return String(value)
+  if (typeof value === 'boolean') return value ? 'Yes' : 'No'
+  return fallback
 }
 
 function asDate(value: unknown) {
@@ -227,13 +235,13 @@ export function EventDetailPage({ section = 'overview' }: { section?: EventSecti
       {section === 'members' ? (
         membersQuery.isLoading ? <LoadingState title="Loading members" message="Fetching event members." /> :
           membersQuery.isError ? <ErrorState title="Unable to load members" message={errorMessage(membersQuery.error, 'Members could not be loaded.')} /> :
-            <MembersPanel tenantId={tenantId ?? ''} eventId={eventId} members={membersQuery.data ?? []} refresh={() => invalidateEvent(queryClient, tenantId ?? '', eventId)} initialSearch={search.get('q') ?? ''} canCreate={activeEvent.canCollect} />
+            <MembersPanel tenantId={tenantId ?? ''} event={event} eventId={eventId} members={membersQuery.data ?? []} refresh={() => invalidateEvent(queryClient, tenantId ?? '', eventId)} initialSearch={search.get('q') ?? ''} canCreate={activeEvent.canCollect} />
       ) : null}
       {section === 'pledges' ? (
         pledgesQuery.isLoading || membersQuery.isLoading ? <LoadingState title="Loading pledges" message="Fetching pledges and members." /> :
           pledgesQuery.isError ? <ErrorState title="Unable to load pledges" message={errorMessage(pledgesQuery.error, 'Pledges could not be loaded.')} /> :
             membersQuery.isError ? <ErrorState title="Unable to load members" message={errorMessage(membersQuery.error, 'Members could not be loaded for pledge creation.')} /> :
-              <PledgesPanel tenantId={tenantId ?? ''} eventId={eventId} pledges={pledgesQuery.data ?? []} members={membersQuery.data ?? []} refresh={() => invalidateEvent(queryClient, tenantId ?? '', eventId)} canCreate={activeEvent.canCollect} />
+              <PledgesPanel tenantId={tenantId ?? ''} event={event} eventId={eventId} pledges={pledgesQuery.data ?? []} members={membersQuery.data ?? []} refresh={() => invalidateEvent(queryClient, tenantId ?? '', eventId)} canCreate={activeEvent.canCollect} />
       ) : null}
       {section === 'payments' ? (
         paymentsQuery.isLoading ? <LoadingState title="Loading payments" message="Fetching installment payments." /> :
@@ -290,7 +298,7 @@ function OverviewCards({ eventId, summary, payments, pledges }: { eventId: strin
   )
 }
 
-function MembersPanel({ tenantId, eventId, members, refresh, initialSearch, canCreate }: { tenantId: string; eventId: string; members: Row[]; refresh: () => void; initialSearch: string; canCreate: boolean }) {
+function MembersPanel({ tenantId, event, eventId, members, refresh, initialSearch, canCreate }: { tenantId: string; event: EventSummary | null; eventId: string; members: Row[]; refresh: () => void; initialSearch: string; canCreate: boolean }) {
   const [query, setQuery] = useState(initialSearch)
   const [showForm, setShowForm] = useState(false)
   const filtered = members.filter((member) => `${member.full_name ?? ''} ${member.phone_e164 ?? ''} ${member.member_code ?? ''}`.toLowerCase().includes(query.toLowerCase()))
@@ -307,7 +315,7 @@ function MembersPanel({ tenantId, eventId, members, refresh, initialSearch, canC
           Add Member
         </button> : null}
       </div>
-      {showForm ? <MemberForm tenantId={tenantId} eventId={eventId} onDone={() => { setShowForm(false); refresh() }} /> : null}
+      {showForm ? <MemberForm tenantId={tenantId} event={event} eventId={eventId} onDone={() => { setShowForm(false); refresh() }} /> : null}
       <div className="finance-card-list">
         {filtered.map((member) => <MemberCard key={asString(member.event_member_id)} member={member} eventId={eventId} />)}
         {!members.length ? <EmptyState title="No members have been added to this event yet." message={canCreate ? 'Use Add Member to register the first contributor.' : 'You do not have permission to add members.'} /> : null}
@@ -318,7 +326,7 @@ function MembersPanel({ tenantId, eventId, members, refresh, initialSearch, canC
   )
 }
 
-function MemberForm({ tenantId, eventId, onDone }: { tenantId: string; eventId: string; onDone: () => void }) {
+function MemberForm({ tenantId, event, eventId, onDone }: { tenantId: string; event: EventSummary | null; eventId: string; onDone: () => void }) {
   const [form, setForm] = useState({ fullName: '', phone: '', alternativePhone: '', email: '', location: '', notes: '', smsEnabled: true, initialPledgeAmount: '', initialPledgeDueDate: '' })
   const mutation = useMutation({
     mutationFn: () => api.createEventMember(tenantId, eventId, { ...form, initialPledgeAmount: form.initialPledgeAmount ? Number(form.initialPledgeAmount) : null, initialPledgeDueDate: form.initialPledgeDueDate || null }),
@@ -332,7 +340,8 @@ function MemberForm({ tenantId, eventId, onDone }: { tenantId: string; eventId: 
       <Input label="Email optional" value={form.email} onChange={(email) => setForm((current) => ({ ...current, email }))} />
       <Input label="Location optional" value={form.location} onChange={(location) => setForm((current) => ({ ...current, location }))} />
       <Input label="Initial pledge optional" inputMode="decimal" value={form.initialPledgeAmount} onChange={(initialPledgeAmount) => setForm((current) => ({ ...current, initialPledgeAmount }))} />
-      <Input label="Pledge due date optional" type="date" value={form.initialPledgeDueDate} onChange={(initialPledgeDueDate) => setForm((current) => ({ ...current, initialPledgeDueDate }))} />
+      <Input label="Custom pledge due date optional" type="date" value={form.initialPledgeDueDate} onChange={(initialPledgeDueDate) => setForm((current) => ({ ...current, initialPledgeDueDate }))} />
+      <p className="privacy-note">Default due date: {asDate(event?.pledgeDeadline)}. Leave blank to follow the event deadline.</p>
       <Input label="Notes optional" value={form.notes} onChange={(notes) => setForm((current) => ({ ...current, notes }))} />
       <label className="switch-row">
         <span><strong>Send SMS notifications</strong><small>{form.phone ? 'Payment confirmations will be queued after receipt creation.' : 'Add a phone number to send payment confirmations.'}</small></span>
@@ -348,6 +357,7 @@ function MemberForm({ tenantId, eventId, onDone }: { tenantId: string; eventId: 
 }
 
 function MemberCard({ member, eventId }: { member: Row; eventId: string }) {
+  const dueDate = member.effective_due_date ?? member.due_date
   return (
     <article className="finance-card">
       <div className="card-title-row">
@@ -362,6 +372,7 @@ function MemberCard({ member, eventId }: { member: Row; eventId: string }) {
         <span><small>Paid</small>{moneyText(member.total_allocated)}</span>
         <span><small>Outstanding</small>{moneyText(member.outstanding_amount)}</span>
       </div>
+      {member.pledge_id ? <p className="privacy-note">Due {asDate(dueDate)} · {member.has_custom_due_date ? 'custom' : 'event default'}</p> : null}
       <div className="card-actions">
         <Link to={`/app/events/${eventId}/payments/new?eventMemberId=${asString(member.event_member_id)}&pledgeId=${asString(member.pledge_id)}`}>Record Payment</Link>
         <Link to={`/app/events/${eventId}/members/${asString(member.event_member_id)}`}>Details</Link>
@@ -370,7 +381,7 @@ function MemberCard({ member, eventId }: { member: Row; eventId: string }) {
   )
 }
 
-function PledgesPanel({ tenantId, eventId, pledges, members, refresh, canCreate }: { tenantId: string; eventId: string; pledges: Row[]; members: Row[]; refresh: () => void; canCreate: boolean }) {
+function PledgesPanel({ tenantId, event, eventId, pledges, members, refresh, canCreate }: { tenantId: string; event: EventSummary | null; eventId: string; pledges: Row[]; members: Row[]; refresh: () => void; canCreate: boolean }) {
   const [filter, setFilter] = useState('ALL')
   const [formOpen, setFormOpen] = useState(false)
   const filtered = pledges.filter((pledge) => filter === 'ALL' || pledge.status === filter)
@@ -390,7 +401,7 @@ function PledgesPanel({ tenantId, eventId, pledges, members, refresh, canCreate 
         {['ALL', 'PENDING', 'PARTIALLY_PAID', 'PAID', 'OVERDUE'].map((item) => <button className={filter === item ? 'active' : ''} key={item} type="button" onClick={() => setFilter(item)}>{item.replace('PARTIALLY_', '')}</button>)}
       </div>
       {canCreate ? <button className="desktop-primary-button" type="button" onClick={() => setFormOpen(true)}><Plus size={18} aria-hidden /> Record Pledge</button> : null}
-      {formOpen ? <PledgeForm tenantId={tenantId} eventId={eventId} members={members} onDone={() => { setFormOpen(false); refresh() }} /> : null}
+      {formOpen ? <PledgeForm tenantId={tenantId} event={event} eventId={eventId} members={members} onDone={() => { setFormOpen(false); refresh() }} /> : null}
       <div className="finance-card-list">
         {filtered.map((pledge) => <PledgeCard key={asString(pledge.pledge_id)} pledge={pledge} eventId={eventId} />)}
         {!members.length ? <EmptyState title="No members available for pledges." message="Add a member before creating a pledge." /> : null}
@@ -401,7 +412,7 @@ function PledgesPanel({ tenantId, eventId, pledges, members, refresh, canCreate 
   )
 }
 
-function PledgeForm({ tenantId, eventId, members, onDone }: { tenantId: string; eventId: string; members: Row[]; onDone: () => void }) {
+function PledgeForm({ tenantId, event, eventId, members, onDone }: { tenantId: string; event: EventSummary | null; eventId: string; members: Row[]; onDone: () => void }) {
   const [form, setForm] = useState({ eventMemberId: '', amount: '', dueDate: '', notes: '', changeReason: '' })
   const mutation = useMutation({
     mutationFn: () => api.upsertPledge(tenantId, eventId, { eventMemberId: form.eventMemberId, amount: Number(form.amount), dueDate: form.dueDate || null, notes: form.notes || null, changeReason: form.changeReason || null }),
@@ -412,7 +423,8 @@ function PledgeForm({ tenantId, eventId, members, onDone }: { tenantId: string; 
       {!members.length ? <EmptyState title="No members available" message="Add a member before creating a pledge." /> : null}
       <label>Member<select value={form.eventMemberId} onChange={(event) => setForm((current) => ({ ...current, eventMemberId: event.target.value }))}><option value="">Select member</option>{members.map((member) => <option key={asString(member.event_member_id)} value={asString(member.event_member_id)}>{asString(member.full_name)}</option>)}</select></label>
       <Input label="Amount" inputMode="decimal" value={form.amount} onChange={(amount) => setForm((current) => ({ ...current, amount }))} />
-      <Input label="Due date optional" type="date" value={form.dueDate} onChange={(dueDate) => setForm((current) => ({ ...current, dueDate }))} />
+      <Input label="Custom due date optional" type="date" value={form.dueDate} onChange={(dueDate) => setForm((current) => ({ ...current, dueDate }))} />
+      <p className="privacy-note">Default due date: {asDate(event?.pledgeDeadline)}. Leave blank to follow the event deadline.</p>
       <Input label="Notes optional" value={form.notes} onChange={(notes) => setForm((current) => ({ ...current, notes }))} />
       <Input label="Change reason when reducing" value={form.changeReason} onChange={(changeReason) => setForm((current) => ({ ...current, changeReason }))} />
       {mutation.error ? <p className="field-error">{mutation.error.message}</p> : null}
@@ -422,10 +434,12 @@ function PledgeForm({ tenantId, eventId, members, onDone }: { tenantId: string; 
 }
 
 function PledgeCard({ pledge, eventId }: { pledge: Row; eventId: string }) {
+  const dueDate = pledge.effective_due_date ?? pledge.due_date
+  const dueType = pledge.has_custom_due_date ? 'custom' : 'event default'
   return (
     <article className="finance-card">
       <div className="card-title-row">
-        <div><strong>{asString(pledge.member_name, 'Member')}</strong><span>{asString(pledge.phone_e164, 'No phone')} · Due {asDate(pledge.due_date)}</span></div>
+        <div><strong>{asString(pledge.member_name, 'Member')}</strong><span>{asString(pledge.phone_e164, 'No phone')} · Due {asDate(dueDate)} · {dueType}</span></div>
         <StatusBadge tone={statusTone(pledge.status)}>{asString(pledge.status)}</StatusBadge>
       </div>
       <progress max={Math.max(asNumber(pledge.pledged_amount), 1)} value={asNumber(pledge.total_allocated)} />
@@ -493,6 +507,7 @@ export function MemberDetailPage() {
   if (detail.isLoading) return <LoadingState title="Loading member" />
   if (detail.isError || !detail.data) return <ErrorState title="Unable to load member" message={errorMessage(detail.error, 'Member detail could not be loaded.')} />
   const member = detail.data.member
+  const dueDate = member.effective_due_date ?? member.due_date
   return (
     <PageContainer>
       <PageHeader title={asString(member.full_name, 'Member')} description={`${asString(member.phone_e164, 'No phone')} · ${asString(member.category, 'No category')}`} action={<Link className="desktop-primary-button" to={`/app/events/${eventId}/payments/new?eventMemberId=${eventMemberId}&pledgeId=${asString(member.pledge_id)}`}>Record Payment</Link>} />
@@ -500,6 +515,19 @@ export function MemberDetailPage() {
         <StatCard label="Pledged" value={moneyText(member.pledged_amount)} icon={FileText} />
         <StatCard label="Paid" value={moneyText(member.total_allocated)} icon={CheckCircle2} tone="success" />
         <StatCard label="Outstanding" value={moneyText(member.outstanding_amount)} icon={Clock3} tone="warning" />
+      </section>
+      <section className="content-panel">
+        <div className="panel-header">
+          <div>
+            <h2>Member Profile</h2>
+            <p>{asString(member.member_code, 'No member code')} · Event member {eventMemberId}</p>
+          </div>
+          <StatusBadge tone={statusTone(member.event_member_status)}>{asString(member.event_member_status, 'ACTIVE')}</StatusBadge>
+        </div>
+        <ReviewLine label="Alternative phone" value={asString(member.alternative_phone_e164, 'Not set')} />
+        <ReviewLine label="Email" value={asString(member.email, 'Not set')} />
+        <ReviewLine label="Location" value={asString(member.location, 'Not set')} />
+        <ReviewLine label="Pledge due date" value={`${asDate(dueDate)} (${member.has_custom_due_date ? 'custom' : 'event default'})`} />
       </section>
       <div className="finance-card-list">
         {detail.data.payments.map((payment) => <PaymentCard key={asString(payment.payment_id)} payment={payment} eventId={eventId} />)}
@@ -555,12 +583,36 @@ export function PaymentEntryPage() {
     <PageContainer narrow>
       <PageHeader title="Record Payment" description="Select a member, confirm the amount and generate a receipt." action={<Link to={`/app/events/${eventId}`}><ArrowLeft size={18} aria-hidden /> Back</Link>} />
       <form className="payment-flow" onSubmit={(event: FormEvent) => { event.preventDefault(); if (!mutation.isPending) mutation.mutate() }}>
-        <label>Search member<input type="search" value={memberSearch} onChange={(event) => setMemberSearch(event.target.value)} placeholder="Name, phone or member code" /></label>
-        <label>Member<select value={form.eventMemberId} onChange={(event) => setForm((current) => ({ ...current, eventMemberId: event.target.value, pledgeId: asString(memberRows.find((member) => member.event_member_id === event.target.value)?.pledge_id) }))}><option value="">Select member</option>{filteredMembers.map((member) => <option key={asString(member.event_member_id)} value={asString(member.event_member_id)}>{asString(member.full_name)} - {moneyText(member.outstanding_amount)} outstanding</option>)}</select></label>
-        {!memberRows.length ? <EmptyState title="No members have been added to this event yet." message="Add a member before recording a payment." /> : null}
-        {memberRows.length > 0 && !filteredMembers.length ? <EmptyState title="No members match your search." message="Try a different name, phone number or member code." /> : null}
+        {!selectedMember ? (
+          <>
+            <label>Search member<input type="search" value={memberSearch} onChange={(event) => setMemberSearch(event.target.value)} placeholder="Name, phone or member code" /></label>
+            <div className="finance-card-list">
+              {filteredMembers.slice(0, 8).map((member) => (
+                <button
+                  className="finance-card"
+                  key={asString(member.event_member_id)}
+                  type="button"
+                  onClick={() => setForm((current) => ({ ...current, eventMemberId: asString(member.event_member_id), pledgeId: asString(member.pledge_id) }))}
+                >
+                  <div className="card-title-row">
+                    <div><strong>{asString(member.full_name, 'Member')}</strong><span>{asString(member.phone_e164, 'No phone')} · {asString(member.member_code)}</span></div>
+                    <StatusBadge tone={statusTone(member.pledge_status)}>{moneyText(member.outstanding_amount)} outstanding</StatusBadge>
+                  </div>
+                </button>
+              ))}
+            </div>
+            {!memberRows.length ? <EmptyState title="No members have been added to this event yet." message="Add a member before recording a payment." /> : null}
+            {memberRows.length > 0 && !filteredMembers.length ? <EmptyState title="No members match your search." message="Try a different name, phone number or member code." /> : null}
+          </>
+        ) : null}
         {selectedMember ? <div className="review-stack">
-          <ReviewLine label="Member" value={`${asString(selectedMember.full_name)} · ${asString(selectedMember.member_code)}`} />
+          <div className="panel-header">
+            <div>
+              <h2>{asString(selectedMember.full_name, 'Selected member')}</h2>
+              <p>{asString(selectedMember.member_code)} · {asString(selectedMember.phone_e164, 'No phone')}</p>
+            </div>
+            <button type="button" onClick={() => setForm((current) => ({ ...current, eventMemberId: '', pledgeId: '' }))}>Change</button>
+          </div>
           <ReviewLine label="Pledge" value={moneyText(selectedMember.pledged_amount)} />
           <ReviewLine label="Paid" value={moneyText(selectedMember.total_allocated)} />
           <ReviewLine label="Outstanding before payment" value={moneyText(selectedMember.outstanding_amount)} />
@@ -672,6 +724,139 @@ export function SmsHistoryPage() {
         {!rows.length ? <EmptyState title="No SMS messages yet." message="Payment confirmations will appear here after payments are recorded." /> : null}
         {rows.length > 0 && !filtered.length ? <EmptyState title="No messages match these filters." message="Change the status, event, or search text." /> : null}
       </div>
+    </PageContainer>
+  )
+}
+
+export function TenantUsersPage() {
+  const session = useSessionStore()
+  const tenantId = session.selectedTenantId
+  const permissions = new Set(session.selectedTenantContext?.permissions ?? [])
+  const users = useQuery({ queryKey: ['tenant-users', tenantId], queryFn: async () => (await api.tenantUsers(tenantId ?? '')).data, enabled: Boolean(tenantId) })
+
+  if (!tenantId) return <ErrorState title="Unable to load users" message="Select a tenant first." />
+  if (!permissions.has('users.view')) return <ErrorState title="Users access denied" message="Your tenant role does not include user management access." />
+  if (users.isLoading) return <LoadingState title="Loading users" message="Fetching tenant team members." />
+  if (users.isError) return <ErrorState title="Unable to load users" message={errorMessage(users.error, 'Tenant users could not be loaded.')} />
+
+  const rows = users.data ?? []
+  return (
+    <PageContainer>
+      <PageHeader
+        title="Users"
+        description="Tenant team members, tenant roles and event assignments."
+        action={permissions.has('users.invite') ? <button className="desktop-primary-button" type="button" disabled>Invite User</button> : null}
+      />
+      <div className="finance-card-list">
+        {rows.map((user) => {
+          const roles = Array.isArray(user.roles) ? user.roles.map(String) : []
+          const assignedEvents = Array.isArray(user.assigned_events) ? user.assigned_events.map(jsonRecord) : []
+          return (
+            <article className="finance-card" key={asString(user.tenant_user_id)}>
+              <div className="card-title-row">
+                <div>
+                  <strong>{asString(user.full_name, 'User')}</strong>
+                  <span>{asString(user.phone_e164, 'No phone')} · {asString(user.email, 'No email')}</span>
+                </div>
+                <StatusBadge tone={statusTone(user.status)}>{asString(user.status, 'ACTIVE')}</StatusBadge>
+              </div>
+              <div className="amount-triplet">
+                <span><small>Roles</small>{roles.join(', ') || 'No role'}</span>
+                <span><small>Events</small>{assignedEvents.map((event) => asString(event.name)).filter(Boolean).join(', ') || 'All permitted events'}</span>
+                <span><small>Joined</small>{asDate(user.joined_at ?? user.created_at)}</span>
+              </div>
+              <div className="card-actions">
+                {permissions.has('users.manage_roles') ? <button type="button" disabled>Manage Roles</button> : null}
+                {permissions.has('users.suspend') && !roles.includes('TENANT_OWNER') ? <button type="button" disabled>Suspend</button> : null}
+              </div>
+            </article>
+          )
+        })}
+        {!rows.length ? <EmptyState title="No tenant users found." message="Tenant owners appear here after onboarding and invitations." /> : null}
+      </div>
+    </PageContainer>
+  )
+}
+
+export function TenantSettingsPage() {
+  const session = useSessionStore()
+  const tenantId = session.selectedTenantId
+  const settings = useQuery({ queryKey: ['tenant-settings-summary', tenantId], queryFn: async () => (await api.settingsSummary(tenantId ?? '')).data, enabled: Boolean(tenantId) })
+
+  if (!tenantId) return <ErrorState title="Unable to load settings" message="Select a tenant first." />
+  if (settings.isLoading) return <LoadingState title="Loading settings" message="Fetching tenant configuration." />
+  if (settings.isError || !settings.data) return <ErrorState title="Unable to load settings" message={errorMessage(settings.error, 'Settings could not be loaded.')} />
+
+  const data = settings.data
+  const organization = jsonRecord(data.organization)
+  const receipts = jsonRecord(data.receipts)
+  const payments = jsonRecord(data.payments)
+  const notifications = jsonRecord(data.notifications)
+  const subscription = jsonRecord(data.subscription)
+  const limits = jsonRecord(subscription.limits)
+  const security = jsonRecord(data.security)
+
+  return (
+    <PageContainer>
+      <PageHeader title="Settings" description="Tenant configuration summary. Provider secrets are intentionally hidden." />
+      <section className="finance-grid">
+        <SettingsPanel title="Organization" rows={[['Name', organization.name], ['Code', organization.code], ['Phone', organization.phoneE164], ['Email', organization.email], ['Timezone', organization.timezone], ['Currency', organization.currency], ['Status', organization.status]]} />
+        <SettingsPanel title="Receipts" rows={[['Receipt prefix', receipts.receiptPrefix], ['Logo', receipts.logoUrl ? 'Configured' : 'Not set'], ['Primary color', receipts.primaryColor]]} />
+        <SettingsPanel title="Payments" rows={[['Mobile money instructions', payments.mobileMoneyInstructions], ['Bank instructions', payments.bankPaymentInstructions]]} />
+        <SettingsPanel title="Notifications" rows={[['SMS sender', notifications.smsSenderName], ['Payment confirmations', notifications.paymentConfirmations ? 'Enabled' : 'Disabled']]} />
+        <SettingsPanel title="Subscription" rows={[['Package', subscription.planName], ['Status', subscription.status], ['Used slots', limits.usedEventSlots], ['Max slots', limits.maxEventSlots], ['Available slots', limits.availableEventSlots], ['Period ends', subscription.currentPeriodEnd]]} />
+        <SettingsPanel title="Security" rows={[['PIN required', security.pinRequired ? 'Yes' : 'No'], ['Tenant roles', Array.isArray(security.roles) ? security.roles.join(', ') : 'Not set']]} />
+      </section>
+    </PageContainer>
+  )
+}
+
+function SettingsPanel({ title, rows }: { title: string; rows: Array<[string, unknown]> }) {
+  return (
+    <article className="content-panel">
+      <div className="panel-header">
+        <div>
+          <h2>{title}</h2>
+        </div>
+      </div>
+      {rows.map(([label, value]) => <ReviewLine key={label} label={label} value={displayValue(value)} />)}
+    </article>
+  )
+}
+
+export function ReportsPage() {
+  const session = useSessionStore()
+  const event = session.selectedTenantContext?.events[0] ?? null
+  const tenantId = session.selectedTenantId
+  const summary = useQuery({ queryKey: ['reports-financial-summary', tenantId, event?.id], queryFn: async () => (await api.eventFinancialSummary(tenantId ?? '', event?.id ?? '')).data, enabled: Boolean(tenantId && event?.id) })
+
+  if (!tenantId || !event) return <ErrorState title="Unable to load reports" message="Open a tenant with an accessible event first." />
+  if (summary.isLoading) return <LoadingState title="Loading reports" message="Fetching event financial summary." />
+  if (summary.isError) return <ErrorState title="Unable to load reports" message={errorMessage(summary.error, 'Reports could not be loaded.')} />
+
+  const data = summary.data ?? {}
+  return (
+    <PageContainer>
+      <PageHeader title="Reports" description={`${event.name} financial summary and forthcoming report modules.`} />
+      <section className="stats-grid">
+        <StatCard label="Total pledged" value={moneyText(data.totalPledged)} icon={FileText} />
+        <StatCard label="Collected" value={moneyText(data.totalAllocated ?? data.totalAllocatedToPledges)} icon={CheckCircle2} tone="success" />
+        <StatCard label="Outstanding" value={moneyText(data.totalOutstanding)} icon={Clock3} tone="warning" />
+      </section>
+      <section className="finance-grid">
+        <article className="content-panel">
+          <div className="panel-header"><div><h2>Collection Summary</h2><p>{asNumber(data.memberCount)} members, {asNumber(data.membersWithPledges)} with pledges.</p></div></div>
+          <ReviewLine label="Fully paid" value={String(asNumber(data.fullyPaidCount))} />
+          <ReviewLine label="Partially paid" value={String(asNumber(data.partiallyPaidCount))} />
+          <ReviewLine label="Unpaid" value={String(asNumber(data.unpaidCount))} />
+          <ReviewLine label="Overdue" value={String(asNumber(data.overdueCount))} />
+        </article>
+        {['Member Statement', 'Outstanding Pledges', 'Payment Export', 'SMS Delivery'].map((title) => (
+          <article className="content-panel" key={title}>
+            <div className="panel-header"><div><h2>{title}</h2><p>Forthcoming report module.</p></div><StatusBadge>Forthcoming</StatusBadge></div>
+          </article>
+        ))}
+      </section>
     </PageContainer>
   )
 }

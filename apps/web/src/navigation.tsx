@@ -32,7 +32,7 @@ function desktopNav(event: EventSummary | null) {
     { to: event ? `${eventBase}/payments` : '/app/payments', label: 'Payments', icon: CreditCard },
     { to: '/app/messages', label: 'Messages', icon: MessageSquareText },
     { to: '/app/reports', label: 'Reports', icon: PieChart },
-    { to: '/app/settings', label: 'Users', icon: Users },
+    { to: '/app/users', label: 'Users', icon: Users },
     { to: '/app/settings', label: 'Settings', icon: Settings },
   ]
 }

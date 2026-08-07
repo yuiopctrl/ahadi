@@ -253,6 +253,7 @@ const knownDatabaseCodes: ApiErrorCode[] = [
   'INVALID_INPUT',
   'SESSION_REQUIRED',
   'TENANT_ACCESS_DENIED',
+  'PLATFORM_ACCESS_DENIED',
   'MEMBER_NOT_FOUND',
   'MEMBER_PHONE_ALREADY_EXISTS',
   'MEMBER_ALREADY_IN_EVENT',
@@ -272,6 +273,7 @@ const knownDatabaseCodes: ApiErrorCode[] = [
   'PAYMENT_IDEMPOTENCY_CONFLICT',
   'EVENT_NOT_ACTIVE',
   'EVENT_ACCESS_DENIED',
+  'EVENT_LIMIT_REACHED',
   'RECEIPT_NOT_FOUND',
   'SUBSCRIPTION_READ_ONLY',
   'SUBSCRIPTION_BLOCKED',
@@ -554,32 +556,11 @@ app.get('/api/v1/tenant-context', requireAuth, loadUserContext, requireTenantCon
 app.get('/api/v1/platform/dashboard', requireAuth, loadUserContext, requirePlatformPermission('platform.dashboard.view'), async (request, response, next) => {
   try {
     const client = createUserSupabase(request.auth?.accessToken ?? '')
-    const [tenants, events, expiring] = await Promise.all([
-      client.from('tenants').select('status', { count: 'exact', head: false }),
-      client.from('events').select('id', { count: 'exact', head: true }),
-      client
-        .from('tenant_subscriptions')
-        .select('id', { count: 'exact', head: true })
-        .lte('current_period_end', new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString())
-        .in('status', ['TRIAL', 'ACTIVE']),
-    ])
-    if (tenants.error ?? events.error ?? expiring.error) {
-      throw tenants.error ?? events.error ?? expiring.error
+    const { data, error } = await client.rpc('rpc_get_platform_dashboard')
+    if (error) {
+      throwFinancialDatabaseError(error, 'PLATFORM_DASHBOARD_FAILED')
     }
-    const statusCounts = (tenants.data ?? []).reduce<Record<string, number>>((counts, tenant) => {
-      counts[tenant.status] = (counts[tenant.status] ?? 0) + 1
-      return counts
-    }, {})
-    response.json({
-      data: {
-        totalTenants: tenants.count ?? tenants.data?.length ?? 0,
-        trialTenants: statusCounts['TRIAL'] ?? 0,
-        activeTenants: statusCounts['ACTIVE'] ?? 0,
-        suspendedTenants: statusCounts['SUSPENDED'] ?? 0,
-        totalEvents: events.count ?? 0,
-        subscriptionsExpiringSoon: expiring.count ?? 0,
-      },
-    })
+    response.json({ data })
   } catch (error) {
     next(error)
   }
@@ -588,14 +569,11 @@ app.get('/api/v1/platform/dashboard', requireAuth, loadUserContext, requirePlatf
 app.get('/api/v1/platform/tenants', requireAuth, loadUserContext, requirePlatformPermission('platform.tenants.view'), async (request, response, next) => {
   try {
     const client = createUserSupabase(request.auth?.accessToken ?? '')
-    const { data, error } = await client
-      .from('tenants')
-      .select('id, code, name, phone_e164, status, created_at, tenant_subscriptions(status, trial_ends_at, current_period_end, subscription_plans(code, name)), events(id, status)')
-      .order('created_at', { ascending: false })
+    const { data, error } = await client.rpc('rpc_list_platform_tenants')
     if (error) {
-      throw error
+      throwFinancialDatabaseError(error, 'PLATFORM_TENANTS_FAILED')
     }
-    response.json({ data })
+    response.json({ data: jsonArray(data) })
   } catch (error) {
     next(error)
   }
@@ -618,11 +596,11 @@ app.get('/api/v1/platform/tenants/:tenantId', requireAuth, loadUserContext, requ
 app.get('/api/v1/platform/plans', requireAuth, loadUserContext, requirePlatformPermission('platform.plans.view'), async (request, response, next) => {
   try {
     const client = createUserSupabase(request.auth?.accessToken ?? '')
-    const { data, error } = await client.from('subscription_plans').select('*').order('display_order')
+    const { data, error } = await client.rpc('rpc_list_platform_plans')
     if (error) {
-      throw error
+      throwFinancialDatabaseError(error, 'PLATFORM_PLANS_FAILED')
     }
-    response.json({ data })
+    response.json({ data: jsonArray(data) })
   } catch (error) {
     next(error)
   }
@@ -636,6 +614,34 @@ app.get('/api/v1/events/:eventId/financial-summary', requireAuth, loadUserContex
     const { data, error } = await client.rpc('rpc_get_event_financial_summary', { p_tenant_id: tenantId, p_event_id: eventId })
     if (error) {
       throwFinancialDatabaseError(error, 'EVENT_FINANCIAL_SUMMARY_FAILED')
+    }
+    response.json({ data })
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.get('/api/v1/users', requireAuth, loadUserContext, requireTenantContext, async (request, response, next) => {
+  try {
+    const tenantId = tenantIdFromRequest(request)
+    const client = createUserSupabase(request.auth?.accessToken ?? '')
+    const { data, error } = await client.rpc('rpc_list_tenant_users', { p_tenant_id: tenantId })
+    if (error) {
+      throwFinancialDatabaseError(error, 'TENANT_USERS_LIST_FAILED')
+    }
+    response.json({ data: jsonArray(data) })
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.get('/api/v1/settings-summary', requireAuth, loadUserContext, requireTenantContext, async (request, response, next) => {
+  try {
+    const tenantId = tenantIdFromRequest(request)
+    const client = createUserSupabase(request.auth?.accessToken ?? '')
+    const { data, error } = await client.rpc('rpc_get_tenant_settings_summary', { p_tenant_id: tenantId })
+    if (error) {
+      throwFinancialDatabaseError(error, 'TENANT_SETTINGS_SUMMARY_FAILED')
     }
     response.json({ data })
   } catch (error) {
@@ -707,17 +713,11 @@ app.get('/api/v1/events/:eventId/members/:eventMemberId', requireAuth, loadUserC
     const eventId = uuidParamSchema.parse(request.params['eventId'])
     const eventMemberId = uuidParamSchema.parse(request.params['eventMemberId'])
     const client = createUserSupabase(request.auth?.accessToken ?? '')
-    const [member, payments] = await Promise.all([
-      client.from('v_event_members_list').select('*').eq('tenant_id', tenantId).eq('event_id', eventId).eq('event_member_id', eventMemberId).single(),
-      client.from('v_event_payments_list').select('*').eq('tenant_id', tenantId).eq('event_id', eventId).eq('event_member_id', eventMemberId).order('payment_date', { ascending: false }),
-    ])
-    if (member.error) {
-      throwFinancialDatabaseError(member.error, 'EVENT_MEMBER_DETAIL_FAILED')
+    const { data, error } = await client.rpc('rpc_get_event_member_detail', { p_tenant_id: tenantId, p_event_id: eventId, p_event_member_id: eventMemberId })
+    if (error) {
+      throwFinancialDatabaseError(error, 'EVENT_MEMBER_DETAIL_FAILED')
     }
-    if (payments.error) {
-      throwFinancialDatabaseError(payments.error, 'EVENT_MEMBER_PAYMENTS_FAILED')
-    }
-    response.json({ data: { member: member.data, payments: payments.data ?? [] } })
+    response.json({ data })
   } catch (error) {
     next(error)
   }
@@ -974,18 +974,11 @@ app.get('/api/v1/receipts/:receiptId', requireAuth, loadUserContext, requireTena
     const tenantId = tenantIdFromRequest(request)
     const receiptId = uuidParamSchema.parse(request.params['receiptId'])
     const client = createUserSupabase(request.auth?.accessToken ?? '')
-    const { data, error } = await client.from('v_receipt_detail').select('*').eq('tenant_id', tenantId).eq('receipt_id', receiptId).single()
+    const { data, error } = await client.rpc('rpc_get_receipt_detail', { p_tenant_id: tenantId, p_receipt_id: receiptId })
     if (error) {
       throwFinancialDatabaseError(error, 'RECEIPT_DETAIL_FAILED')
     }
-    const sms = await client
-      .from('sms_outbox')
-      .select('status, last_error_code, last_error_message, sent_at, delivered_at, failed_at')
-      .eq('tenant_id', tenantId)
-      .eq('receipt_id', receiptId)
-      .eq('template_code', 'PAYMENT_CONFIRMATION')
-      .maybeSingle()
-    response.json({ data: { ...(jsonRecord(data)), smsConfirmation: sms.error ? null : sms.data } })
+    response.json({ data })
   } catch (error) {
     next(error)
   }
@@ -1010,7 +1003,7 @@ app.get('/api/v1/receipts/:receiptId/print', requireAuth, loadUserContext, requi
     const tenantId = tenantIdFromRequest(request)
     const receiptId = uuidParamSchema.parse(request.params['receiptId'])
     const client = createUserSupabase(request.auth?.accessToken ?? '')
-    const { data, error } = await client.from('v_receipt_detail').select('*').eq('tenant_id', tenantId).eq('receipt_id', receiptId).single()
+    const { data, error } = await client.rpc('rpc_get_receipt_detail', { p_tenant_id: tenantId, p_receipt_id: receiptId })
     if (error) {
       throwFinancialDatabaseError(error, 'RECEIPT_PRINT_FAILED')
     }

@@ -10,7 +10,21 @@ select
   p.full_name,
   p.phone_e164
 from public.profiles p
+where p.phone_e164 = '<OWNER_PHONE_E164>'
 order by p.created_at desc;
+```
+
+If the phone number is uncertain, inspect recent authenticated profiles first and verify out-of-band before copying a UUID.
+
+```sql
+select
+  p.id,
+  p.full_name,
+  p.phone_e164,
+  p.created_at
+from public.profiles p
+order by p.created_at desc
+limit 20;
 ```
 
 Check whether a known authenticated user is already a platform user:

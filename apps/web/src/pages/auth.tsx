@@ -101,6 +101,10 @@ function formatBillingInterval(plan: Pick<SubscriptionPlan, 'billingInterval'>) 
   return (plan.billingInterval ?? 'CUSTOM').toLowerCase()
 }
 
+function activeEventLimitLabel(count: number) {
+  return count === 1 ? '1 active event' : `Up to ${count} active events`
+}
+
 const onboardingFieldLabels: Record<string, string> = {
   adminEmail: 'administrator email',
   adminFullName: 'administrator full name',
@@ -126,9 +130,21 @@ function onboardingValidationMessage(error: { issues: { message: string; path: P
 
 function errorMessage(error: unknown) {
   if (error instanceof ApiClientError) {
+    if (error.code === 'PIN_TOO_WEAK') {
+      return 'Choose a stronger 4-digit PIN. Avoid repeated, sequential, or very common numbers.'
+    }
+    if (error.code === 'PIN_INVALID') {
+      return 'Incorrect PIN. Try again.'
+    }
+    if (error.code === 'PIN_LOCKED') {
+      return 'PIN is temporarily locked after too many attempts. Try again shortly.'
+    }
     return error.message
   }
   if (error instanceof Error) {
+    if (error.message.trim().startsWith('{') || error.message.includes('"code"')) {
+      return 'Check the PIN and try again.'
+    }
     return error.message
   }
   return 'Something went wrong'
@@ -327,6 +343,12 @@ function PinPage({ title, subtitle }: Pick<AuthPageProps, 'title' | 'subtitle'>)
         navigate('/onboarding', { replace: true })
         return
       }
+      const singleTenant = getSingleActiveMembership(context)
+      if (singleTenant) {
+        await session.selectTenant(singleTenant.tenantId)
+        navigate('/app', { replace: true })
+        return
+      }
       navigate('/select-tenant', { replace: true })
     },
     onError: (nextError) => {
@@ -451,7 +473,7 @@ function OnboardingPage() {
                 <strong>{plan.name}</strong>
                 <MoneyDisplay amount={plan.priceAmount} />
                 <span>{formatBillingInterval(plan)} billing, {plan.trialDays ?? 0} trial days</span>
-                <small>{plan.maxActiveEvents} active events · {plan.maxUsers} users · {plan.maxMembers} members · {plan.includedSms} SMS</small>
+                <small>{activeEventLimitLabel(plan.maxActiveEvents)} · {plan.maxUsers} users · {plan.maxMembers} members · {plan.includedSms} SMS</small>
               </button>
             ))}
           </div>
@@ -500,7 +522,7 @@ function OnboardingPage() {
         ) : null}
         {step === 4 ? (
           <div className="review-stack">
-            <Review title="Package" value={selectedPlan ? `${selectedPlan.name} · ${selectedPlan.maxActiveEvents} active events` : 'Select a package'} />
+            <Review title="Package" value={selectedPlan ? `${selectedPlan.name} · ${activeEventLimitLabel(selectedPlan.maxActiveEvents)}` : 'Select a package'} />
             <Review title="Organization" value={`${draft.tenantName || 'Not set'} · ${draft.tenantPhone || 'No phone'}`} />
             <Review title="Administrator" value={`${draft.adminFullName || 'Not set'} · ${draft.preferredLanguage === 'sw' ? 'Kiswahili' : 'English'}`} />
             <Review title="First event" value={`${draft.firstEventName || 'Not set'} · ${draft.eventType}`} />
@@ -532,7 +554,14 @@ function OnboardingPage() {
 function TenantSelectionPage({ title, subtitle }: Pick<AuthPageProps, 'title' | 'subtitle'>) {
   const navigate = useNavigate()
   const session = useSessionStore()
-  const memberships = session.userContext?.tenantMemberships ?? []
+  const memberships = session.userContext?.tenantMemberships.filter((membership) => membership.membershipStatus === 'ACTIVE' && (membership.tenantStatus === 'ACTIVE' || membership.tenantStatus === 'TRIAL')) ?? []
+
+  useEffect(() => {
+    const singleTenant = getSingleActiveMembership(session.userContext)
+    if (singleTenant) {
+      void session.selectTenant(singleTenant.tenantId).then(() => navigate('/app', { replace: true }))
+    }
+  }, [navigate, session])
 
   async function chooseTenant(membership: TenantMembershipContext) {
     await session.selectTenant(membership.tenantId)
