@@ -84,6 +84,11 @@ export const api = {
   removeEventMember: (tenantId: string, eventId: string, eventMemberId: string) =>
     apiFetch<{ data: Record<string, unknown> }>(`/events/${eventId}/members/${eventMemberId}/remove`, { tenantId, method: 'POST' }),
   eventPledges: (tenantId: string, eventId: string) => apiFetch<{ data: Record<string, unknown>[] }>(`/events/${eventId}/pledges`, { tenantId }),
+  eventOutstandingMembers: (tenantId: string, eventId: string) => apiFetch<{ data: Record<string, unknown>[] }>(`/events/${eventId}/outstanding-members`, { tenantId }),
+  sendBalanceReminder: (tenantId: string, eventId: string, payload: Record<string, unknown>) =>
+    apiFetch<{ data: Record<string, unknown> }>(`/events/${eventId}/reminders/balance`, { tenantId, method: 'POST', body: JSON.stringify(payload) }),
+  sendBulkBalanceReminders: (tenantId: string, eventId: string, payload: Record<string, unknown>) =>
+    apiFetch<{ data: Record<string, unknown> }>(`/events/${eventId}/reminders/balance/bulk`, { tenantId, method: 'POST', body: JSON.stringify(payload) }),
   upsertPledge: (tenantId: string, eventId: string, payload: Record<string, unknown>, pledgeId?: string) =>
     apiFetch<{ data: Record<string, unknown> }>(pledgeId ? `/events/${eventId}/pledges/${pledgeId}` : `/events/${eventId}/pledges`, {
       tenantId,
@@ -99,4 +104,9 @@ export const api = {
     apiFetch<{ data: Record<string, unknown> }>(`/events/${eventId}/payments/${paymentId}/reverse`, { tenantId, method: 'POST', body: JSON.stringify(payload) }),
   receipt: (tenantId: string, receiptId: string) => apiFetch<{ data: Record<string, unknown> }>(`/receipts/${receiptId}`, { tenantId }),
   messages: (tenantId: string) => apiFetch<{ data: Record<string, unknown>[] }>('/messages', { tenantId }),
+  balanceReminderTemplate: (tenantId: string) => apiFetch<{ data: Record<string, unknown> }>('/messages/templates/balance-reminder', { tenantId }),
+  saveBalanceReminderTemplate: (tenantId: string, body: string) => apiFetch<{ data: Record<string, unknown> }>('/messages/templates/balance-reminder', { tenantId, method: 'PUT', body: JSON.stringify({ body }) }),
+  resetBalanceReminderTemplate: (tenantId: string) => apiFetch<{ data: Record<string, unknown> }>('/messages/templates/balance-reminder/reset', { tenantId, method: 'POST' }),
+  resendBalanceReminder: (tenantId: string, outboxId: string, idempotencyKey: string) =>
+    apiFetch<{ data: Record<string, unknown> }>(`/messages/${outboxId}/resend-balance-reminder`, { tenantId, method: 'POST', body: JSON.stringify({ idempotencyKey }) }),
 }

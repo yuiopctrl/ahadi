@@ -1,5 +1,6 @@
 import {
   CalendarDays,
+  Clock3,
   CreditCard,
   Gauge,
   Home,
@@ -29,6 +30,7 @@ function desktopNav(event: EventSummary | null) {
     { to: '/app/events', label: 'Events', icon: CalendarDays },
     { to: event ? `${eventBase}/members` : '/app/members', label: 'Members', icon: Users },
     { to: event ? `${eventBase}/pledges` : '/app/events', label: 'Pledges', icon: PieChart },
+    { to: event ? `${eventBase}/outstanding` : '/app/events', label: 'Outstanding', icon: Clock3 },
     { to: event ? `${eventBase}/payments` : '/app/payments', label: 'Payments', icon: CreditCard },
     { to: '/app/messages', label: 'Messages', icon: MessageSquareText },
     { to: '/app/reports', label: 'Reports', icon: PieChart },

@@ -237,6 +237,24 @@ const reversePaymentSchema = z.object({
   idempotencyKey: z.string().uuid(),
 })
 
+const balanceReminderSchema = z.object({
+  eventMemberId: z.string().uuid(),
+  idempotencyKey: z.string().uuid(),
+})
+
+const bulkBalanceReminderSchema = z.object({
+  eventMemberIds: z.array(z.string().uuid()).min(1),
+  idempotencyKey: z.string().uuid(),
+})
+
+const templateBodySchema = z.object({
+  body: z.string().trim().min(1).max(918),
+})
+
+const resendBalanceReminderSchema = z.object({
+  idempotencyKey: z.string().uuid(),
+})
+
 const updateMemberSchema = z.object({
   fullName: z.string().trim().min(2).max(160).optional(),
   phoneE164: z.string().trim().optional().nullable(),
@@ -254,6 +272,16 @@ const knownDatabaseCodes: ApiErrorCode[] = [
   'SESSION_REQUIRED',
   'TENANT_ACCESS_DENIED',
   'PLATFORM_ACCESS_DENIED',
+  'BALANCE_REMINDER_NOT_ELIGIBLE',
+  'NO_OUTSTANDING_BALANCE',
+  'MEMBER_PHONE_MISSING',
+  'MEMBER_SMS_DISABLED',
+  'BALANCE_REMINDER_RECENTLY_SENT',
+  'SMS_LIMIT_REACHED',
+  'SMS_TEMPLATE_NOT_FOUND',
+  'SMS_TEMPLATE_INVALID',
+  'REMINDER_BATCH_TOO_LARGE',
+  'REMINDER_BATCH_EMPTY',
   'MEMBER_NOT_FOUND',
   'MEMBER_PHONE_ALREADY_EXISTS',
   'MEMBER_ALREADY_IN_EVENT',
@@ -803,6 +831,71 @@ app.get('/api/v1/events/:eventId/pledges', requireAuth, loadUserContext, require
   }
 })
 
+app.get('/api/v1/events/:eventId/outstanding-members', requireAuth, loadUserContext, requireTenantContext, async (request, response, next) => {
+  try {
+    const tenantId = tenantIdFromRequest(request)
+    const eventId = uuidParamSchema.parse(request.params['eventId'])
+    const client = createUserSupabase(request.auth?.accessToken ?? '')
+    const { data, error } = await client.rpc('rpc_list_event_outstanding_members', {
+      p_tenant_id: tenantId,
+      p_event_id: eventId,
+      p_due_soon_days: env.BALANCE_REMINDER_DUE_SOON_DAYS,
+      p_cooldown_hours: env.BALANCE_REMINDER_COOLDOWN_HOURS,
+    })
+    if (error) {
+      throwFinancialDatabaseError(error, 'OUTSTANDING_MEMBERS_LIST_FAILED')
+    }
+    response.json({ data: jsonArray(data) })
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.post('/api/v1/events/:eventId/reminders/balance', requireAuth, loadUserContext, requireTenantContext, async (request, response, next) => {
+  try {
+    const tenantId = tenantIdFromRequest(request)
+    const eventId = uuidParamSchema.parse(request.params['eventId'])
+    const input = balanceReminderSchema.parse(request.body)
+    const client = createUserSupabase(request.auth?.accessToken ?? '')
+    const { data, error } = await client.rpc('rpc_enqueue_balance_reminder_sms', {
+      p_tenant_id: tenantId,
+      p_event_id: eventId,
+      p_event_member_id: input.eventMemberId,
+      p_idempotency_key: input.idempotencyKey,
+      p_cooldown_hours: env.BALANCE_REMINDER_COOLDOWN_HOURS,
+    })
+    if (error) {
+      throwFinancialDatabaseError(error, 'BALANCE_REMINDER_QUEUE_FAILED')
+    }
+    response.status(201).json({ data })
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.post('/api/v1/events/:eventId/reminders/balance/bulk', requireAuth, loadUserContext, requireTenantContext, async (request, response, next) => {
+  try {
+    const tenantId = tenantIdFromRequest(request)
+    const eventId = uuidParamSchema.parse(request.params['eventId'])
+    const input = bulkBalanceReminderSchema.parse(request.body)
+    const client = createUserSupabase(request.auth?.accessToken ?? '')
+    const { data, error } = await client.rpc('rpc_enqueue_balance_reminder_bulk', {
+      p_tenant_id: tenantId,
+      p_event_id: eventId,
+      p_event_member_ids: input.eventMemberIds,
+      p_idempotency_key: input.idempotencyKey,
+      p_cooldown_hours: env.BALANCE_REMINDER_COOLDOWN_HOURS,
+      p_max_batch_size: env.BALANCE_REMINDER_MAX_BATCH_SIZE,
+    })
+    if (error) {
+      throwFinancialDatabaseError(error, 'BALANCE_REMINDER_BULK_QUEUE_FAILED')
+    }
+    response.status(201).json({ data })
+  } catch (error) {
+    next(error)
+  }
+})
+
 app.post('/api/v1/events/:eventId/pledges', requireAuth, loadUserContext, requireTenantContext, async (request, response, next) => {
   try {
     const tenantId = tenantIdFromRequest(request)
@@ -993,6 +1086,70 @@ app.get('/api/v1/messages', requireAuth, loadUserContext, requireTenantContext, 
       throwFinancialDatabaseError(error, 'SMS_HISTORY_LIST_FAILED')
     }
     response.json({ data: jsonArray(data) })
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.get('/api/v1/messages/templates/balance-reminder', requireAuth, loadUserContext, requireTenantContext, async (request, response, next) => {
+  try {
+    const tenantId = tenantIdFromRequest(request)
+    const client = createUserSupabase(request.auth?.accessToken ?? '')
+    const { data, error } = await client.rpc('rpc_get_balance_reminder_template', { p_tenant_id: tenantId })
+    if (error) {
+      throwFinancialDatabaseError(error, 'BALANCE_REMINDER_TEMPLATE_GET_FAILED')
+    }
+    response.json({ data })
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.put('/api/v1/messages/templates/balance-reminder', requireAuth, loadUserContext, requireTenantContext, async (request, response, next) => {
+  try {
+    const tenantId = tenantIdFromRequest(request)
+    const input = templateBodySchema.parse(request.body)
+    const client = createUserSupabase(request.auth?.accessToken ?? '')
+    const { data, error } = await client.rpc('rpc_upsert_balance_reminder_template', { p_tenant_id: tenantId, p_body: input.body })
+    if (error) {
+      throwFinancialDatabaseError(error, 'BALANCE_REMINDER_TEMPLATE_SAVE_FAILED')
+    }
+    response.json({ data })
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.post('/api/v1/messages/templates/balance-reminder/reset', requireAuth, loadUserContext, requireTenantContext, async (request, response, next) => {
+  try {
+    const tenantId = tenantIdFromRequest(request)
+    const client = createUserSupabase(request.auth?.accessToken ?? '')
+    const { data, error } = await client.rpc('rpc_reset_balance_reminder_template', { p_tenant_id: tenantId })
+    if (error) {
+      throwFinancialDatabaseError(error, 'BALANCE_REMINDER_TEMPLATE_RESET_FAILED')
+    }
+    response.json({ data })
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.post('/api/v1/messages/:outboxId/resend-balance-reminder', requireAuth, loadUserContext, requireTenantContext, async (request, response, next) => {
+  try {
+    const tenantId = tenantIdFromRequest(request)
+    const outboxId = uuidParamSchema.parse(request.params['outboxId'])
+    const input = resendBalanceReminderSchema.parse(request.body)
+    const client = createUserSupabase(request.auth?.accessToken ?? '')
+    const { data, error } = await client.rpc('rpc_resend_failed_balance_reminder', {
+      p_tenant_id: tenantId,
+      p_outbox_id: outboxId,
+      p_idempotency_key: input.idempotencyKey,
+      p_cooldown_hours: 0,
+    })
+    if (error) {
+      throwFinancialDatabaseError(error, 'BALANCE_REMINDER_RESEND_FAILED')
+    }
+    response.status(201).json({ data })
   } catch (error) {
     next(error)
   }

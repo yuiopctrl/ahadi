@@ -79,6 +79,17 @@ function smsStatusText(notification: unknown) {
   return 'Not queued'
 }
 
+function reminderStatusText(row: Row) {
+  const status = asString(row.lastBalanceReminderStatus, '')
+  const time = row.lastBalanceReminderAt
+  if (!status) return 'Never Sent'
+  return `${status}${time ? ` · ${asDateTime(time)}` : ''}`
+}
+
+function canSendBalanceReminder(row: Row) {
+  return asNumber(row.outstandingAmount ?? row.outstanding_amount) > 0 && Boolean(row.smsEnabled ?? row.sms_enabled) && Boolean(asString(row.phone ?? row.phone_e164, '')) && !row.ineligibleReason
+}
+
 function jsonRecord(value: unknown): Row {
   return typeof value === 'object' && value !== null && !Array.isArray(value) ? value as Row : {}
 }
@@ -268,7 +279,10 @@ function OverviewCards({ eventId, summary, payments, pledges }: { eventId: strin
           <span>Unpaid: {asNumber(summary.unpaidCount)}</span>
           <span>Overdue: {asNumber(summary.overdueCount)}</span>
         </div>
-        <Link className="primary-button inline-action" to={`/app/events/${eventId}/payments/new`}>Record Payment</Link>
+        <div className="card-actions">
+          <Link className="primary-button inline-action" to={`/app/events/${eventId}/payments/new`}>Record Payment</Link>
+          <Link to={`/app/events/${eventId}/outstanding`}>Send Reminders</Link>
+        </div>
       </article>
       <article className="content-panel">
         <div className="panel-header">
@@ -503,6 +517,8 @@ export function MemberDetailPage() {
   const activeEvent = useActiveEventContext(eventId)
   const tenantId = activeEvent.tenantId
   const detail = useQuery({ queryKey: ['member-detail', tenantId, eventId, eventMemberId], queryFn: async () => (await api.eventMemberDetail(tenantId ?? '', eventId, eventMemberId)).data, enabled: Boolean(tenantId && eventId && eventMemberId && !activeEvent.error) })
+  const permissions = new Set(useSessionStore().selectedTenantContext?.permissions ?? [])
+  const [reminderOpen, setReminderOpen] = useState(false)
   if (activeEvent.error) return <ErrorState title="Unable to open member" message={activeEvent.error} />
   if (detail.isLoading) return <LoadingState title="Loading member" />
   if (detail.isError || !detail.data) return <ErrorState title="Unable to load member" message={errorMessage(detail.error, 'Member detail could not be loaded.')} />
@@ -528,7 +544,12 @@ export function MemberDetailPage() {
         <ReviewLine label="Email" value={asString(member.email, 'Not set')} />
         <ReviewLine label="Location" value={asString(member.location, 'Not set')} />
         <ReviewLine label="Pledge due date" value={`${asDate(dueDate)} (${member.has_custom_due_date ? 'custom' : 'event default'})`} />
+        <ReviewLine label="Last reminder" value={reminderStatusText(member)} />
+        {permissions.has('messages.send') && canSendBalanceReminder({ ...member, outstandingAmount: member.outstanding_amount, smsEnabled: member.sms_enabled, phone: member.phone_e164, fullName: member.full_name, pledgedAmount: member.pledged_amount, totalPaid: member.total_allocated, dueDate }) ? (
+          <button className="primary-button inline-action" type="button" onClick={() => setReminderOpen(true)}>Send Reminder</button>
+        ) : null}
       </section>
+      {reminderOpen ? <BalanceReminderSheet tenantId={tenantId ?? ''} eventId={eventId} member={{ ...member, eventMemberId, fullName: member.full_name, phone: member.phone_e164, pledgedAmount: member.pledged_amount, totalPaid: member.total_allocated, outstandingAmount: member.outstanding_amount, dueDate, messagePreview: '' }} onClose={() => setReminderOpen(false)} onSent={() => { setReminderOpen(false); void detail.refetch() }} /> : null}
       <div className="finance-card-list">
         {detail.data.payments.map((payment) => <PaymentCard key={asString(payment.payment_id)} payment={payment} eventId={eventId} />)}
         {!detail.data.payments.length ? <EmptyState title="No payments for this member yet." message="Record a payment to generate the first receipt." /> : null}
@@ -677,20 +698,184 @@ export function ReceiptPage() {
   )
 }
 
+function BalanceReminderSheet({ tenantId, eventId, member, onClose, onSent }: { tenantId: string; eventId: string; member: Row; onClose: () => void; onSent: () => void }) {
+  const [idempotencyKey] = useState(() => crypto.randomUUID())
+  const mutation = useMutation({
+    mutationFn: () => api.sendBalanceReminder(tenantId, eventId, { eventMemberId: asString(member.eventMemberId ?? member.event_member_id), idempotencyKey }),
+    onSuccess: onSent,
+  })
+  return (
+    <section className="mobile-sheet form-grid">
+      <div className="panel-header">
+        <div>
+          <h2>Send Reminder</h2>
+          <p>{asString(member.fullName ?? member.full_name, 'Member')} · {maskPhone(member.phone ?? member.phone_e164)}</p>
+        </div>
+      </div>
+      <ReviewLine label="Pledged" value={moneyText(member.pledgedAmount ?? member.pledged_amount)} />
+      <ReviewLine label="Paid" value={moneyText(member.totalPaid ?? member.total_paid ?? member.total_allocated)} />
+      <ReviewLine label="Outstanding" value={moneyText(member.outstandingAmount ?? member.outstanding_amount)} />
+      <ReviewLine label="Due date" value={asDate(member.dueDate ?? member.effective_due_date ?? member.due_date)} />
+      <article className="content-panel">
+        <p>{asString(member.messagePreview, 'Preview will be rendered again by the server before queueing.')}</p>
+      </article>
+      {mutation.data?.data?.queued === false ? <p className="field-error">{asString(mutation.data.data.reason, 'Reminder was not queued.')}</p> : null}
+      {mutation.error ? <p className="field-error">{errorMessage(mutation.error, 'Reminder could not be queued.')}</p> : null}
+      <div className="sheet-actions">
+        <button type="button" onClick={onClose}>Cancel</button>
+        <button className="primary-button" type="button" disabled={mutation.isPending} onClick={() => mutation.mutate()}>{mutation.isPending ? 'Queueing...' : 'Send Reminder'}</button>
+      </div>
+    </section>
+  )
+}
+
+export function OutstandingPage() {
+  const { eventId = '' } = useParams()
+  const activeEvent = useActiveEventContext(eventId)
+  const tenantId = activeEvent.tenantId
+  const permissions = new Set(useSessionStore().selectedTenantContext?.permissions ?? [])
+  const [query, setQuery] = useState('')
+  const [filter, setFilter] = useState('ALL')
+  const [selectionMode, setSelectionMode] = useState(false)
+  const [selected, setSelected] = useState<string[]>([])
+  const [singleMember, setSingleMember] = useState<Row | null>(null)
+  const [bulkPreview, setBulkPreview] = useState(false)
+  const [bulkIdempotencyKey, resetBulkIdempotencyKey] = useState(() => crypto.randomUUID())
+  const queryClient = useQueryClient()
+  const outstanding = useQuery({ queryKey: ['event-outstanding-members', tenantId, eventId], queryFn: async () => (await api.eventOutstandingMembers(tenantId ?? '', eventId)).data, enabled: Boolean(tenantId && eventId && !activeEvent.error) })
+  const rows = outstanding.data ?? []
+  const filtered = rows.filter((row) => {
+    const searchText = `${row.fullName ?? ''} ${row.phone ?? ''} ${row.memberCode ?? ''}`.toLowerCase()
+    const matchesSearch = searchText.includes(query.toLowerCase())
+    const reason = asString(row.ineligibleReason, '')
+    const dueDate = row.dueDate
+    const matchesFilter =
+      filter === 'ALL' ||
+      (filter === 'OVERDUE' && asNumber(row.daysOverdue) > 0) ||
+      (filter === 'DUE_SOON' && row.isDueSoon === true) ||
+      (filter === 'PARTIAL' && row.pledgeStatus === 'PARTIALLY_PAID') ||
+      (filter === 'UNPAID' && row.pledgeStatus === 'PENDING') ||
+      (filter === 'NO_DUE_DATE' && !dueDate) ||
+      (filter === 'SMS_AVAILABLE' && !reason) ||
+      (filter === 'SMS_DISABLED' && reason === 'SMS_DISABLED')
+    return matchesSearch && matchesFilter
+  })
+  const eligibleVisible = filtered.filter(canSendBalanceReminder)
+  const selectedRows = rows.filter((row) => selected.includes(asString(row.eventMemberId)))
+  const bulkMutation = useMutation({
+    mutationFn: () => api.sendBulkBalanceReminders(tenantId ?? '', eventId, { eventMemberIds: selected, idempotencyKey: bulkIdempotencyKey }),
+    onSuccess: () => {
+      resetBulkIdempotencyKey(crypto.randomUUID())
+      setSelected([])
+      setBulkPreview(false)
+      setSelectionMode(false)
+      void queryClient.invalidateQueries({ queryKey: ['event-outstanding-members', tenantId, eventId] })
+      void queryClient.invalidateQueries({ queryKey: ['sms-history', tenantId] })
+    },
+  })
+
+  if (activeEvent.error) return <ErrorState title="Unable to load outstanding members" message={activeEvent.error} />
+  if (outstanding.isLoading) return <LoadingState title="Loading outstanding members" message="Fetching current balances and reminder state." />
+  if (outstanding.isError) return <ErrorState title="Unable to load outstanding members" message={errorMessage(outstanding.error, 'Outstanding members could not be loaded.')} />
+
+  const totalOutstanding = rows.reduce((sum, row) => sum + asNumber(row.outstandingAmount), 0)
+  const overdue = rows.filter((row) => asNumber(row.daysOverdue) > 0).length
+  const dueSoon = rows.filter((row) => row.isDueSoon === true).length
+  const noDueDate = rows.filter((row) => !row.dueDate).length
+  const skipped = {
+    noPhone: selectedRows.filter((row) => row.ineligibleReason === 'NO_PHONE').length,
+    smsDisabled: selectedRows.filter((row) => row.ineligibleReason === 'SMS_DISABLED').length,
+    recentlySent: selectedRows.filter((row) => row.ineligibleReason === 'RECENTLY_SENT').length,
+  }
+  const eligibleSelected = selectedRows.filter(canSendBalanceReminder)
+
+  return (
+    <PageContainer>
+      <PageHeader title="Outstanding" description="Current pledge balances and manual balance reminders." action={<Link to={`/app/events/${eventId}`}><ArrowLeft size={18} aria-hidden /> Back</Link>} />
+      <section className="stats-grid">
+        <StatCard label="Total Outstanding" value={moneyText(totalOutstanding)} icon={Clock3} tone="warning" />
+        <StatCard label="Members Outstanding" value={String(rows.length)} icon={Users} />
+        <StatCard label="Overdue" value={String(overdue)} icon={Clock3} tone="danger" />
+        <StatCard label="Due Soon" value={String(dueSoon)} meta={`${noDueDate} no due date`} icon={CalendarDays} />
+      </section>
+      <section className="filter-bar">
+        <label>Search<input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Name, phone or member code" /></label>
+        <label>Filter<select value={filter} onChange={(event) => setFilter(event.target.value)}>{['ALL', 'OVERDUE', 'DUE_SOON', 'PARTIAL', 'UNPAID', 'NO_DUE_DATE', 'SMS_AVAILABLE', 'SMS_DISABLED'].map((item) => <option key={item} value={item}>{item.replaceAll('_', ' ')}</option>)}</select></label>
+        {permissions.has('messages.send') ? <button type="button" onClick={() => setSelectionMode((value) => !value)}>{selectionMode ? 'Done' : 'Select'}</button> : null}
+        {selectionMode ? <button type="button" onClick={() => setSelected(eligibleVisible.map((row) => asString(row.eventMemberId)))}>Select All Visible</button> : null}
+      </section>
+      <div className="finance-card-list">
+        {filtered.map((row) => {
+          const eventMemberId = asString(row.eventMemberId)
+          const eligible = canSendBalanceReminder(row)
+          return (
+            <article className="finance-card" key={eventMemberId}>
+              <div className="card-title-row">
+                <div>
+                  <strong>{asString(row.fullName, 'Member')}</strong>
+                  <span>{asString(row.phone, 'No phone')} · {asString(row.memberCode)}</span>
+                </div>
+                <StatusBadge tone={eligible ? 'success' : 'warning'}>{eligible ? 'SMS Available' : asString(row.ineligibleReason, 'Not eligible')}</StatusBadge>
+              </div>
+              <div className="amount-triplet">
+                <span><small>Pledged</small>{moneyText(row.pledgedAmount)}</span>
+                <span><small>Paid</small>{moneyText(row.totalPaid)}</span>
+                <span><small>Outstanding</small>{moneyText(row.outstandingAmount)}</span>
+              </div>
+              <p className="privacy-note">Due {asDate(row.dueDate)} · {asNumber(row.daysOverdue) > 0 ? `${asNumber(row.daysOverdue)} days overdue` : row.isDueSoon ? 'due soon' : 'not overdue'} · Last reminder: {reminderStatusText(row)}</p>
+              <div className="card-actions">
+                {selectionMode ? <label className="checkbox-row"><input type="checkbox" disabled={!eligible} checked={selected.includes(eventMemberId)} onChange={(event) => setSelected((current) => event.target.checked ? [...current, eventMemberId] : current.filter((id) => id !== eventMemberId))} /> Select</label> : null}
+                {permissions.has('messages.send') && eligible ? <button type="button" onClick={() => setSingleMember(row)}>Send Reminder</button> : null}
+                <Link to={`/app/events/${eventId}/members/${eventMemberId}`}>View Member</Link>
+              </div>
+            </article>
+          )
+        })}
+        {!rows.length ? <EmptyState title="No outstanding balances." message="Members with unpaid pledge balances will appear here." /> : null}
+        {rows.length > 0 && !filtered.length ? <EmptyState title="No members match these filters." message="Change the filter or search text." /> : null}
+      </div>
+      {selectionMode && selected.length ? <div className="mobile-action-bar"><button type="button" onClick={() => setBulkPreview(true)}>Send Reminders ({selected.length})</button></div> : null}
+      {singleMember ? <BalanceReminderSheet tenantId={tenantId ?? ''} eventId={eventId} member={singleMember} onClose={() => setSingleMember(null)} onSent={() => { setSingleMember(null); void outstanding.refetch() }} /> : null}
+      {bulkPreview ? <section className="mobile-sheet form-grid">
+        <h2>Review Reminders</h2>
+        <ReviewLine label="Selected" value={String(selectedRows.length)} />
+        <ReviewLine label="Eligible" value={String(eligibleSelected.length)} />
+        <ReviewLine label="No Phone" value={String(skipped.noPhone)} />
+        <ReviewLine label="SMS Disabled" value={String(skipped.smsDisabled)} />
+        <ReviewLine label="Recently Sent" value={String(skipped.recentlySent)} />
+        <ReviewLine label="Estimated SMS" value={String(eligibleSelected.length)} />
+        <div className="finance-card-list">{eligibleSelected.slice(0, 3).map((row) => <article className="content-panel" key={asString(row.eventMemberId)}><p>{asString(row.messagePreview)}</p></article>)}</div>
+        {bulkMutation.data ? <p className="privacy-note">Queued: {asString(bulkMutation.data.data.queued)} · Batch {asString(bulkMutation.data.data.batchId)}</p> : null}
+        {bulkMutation.error ? <p className="field-error">{errorMessage(bulkMutation.error, 'Bulk reminders could not be queued.')}</p> : null}
+        <div className="sheet-actions"><button type="button" onClick={() => setBulkPreview(false)}>Back</button><button className="primary-button" type="button" disabled={!eligibleSelected.length || bulkMutation.isPending} onClick={() => bulkMutation.mutate()}>{bulkMutation.isPending ? 'Queueing...' : `Queue ${eligibleSelected.length} Reminders`}</button></div>
+      </section> : null}
+    </PageContainer>
+  )
+}
+
 export function SmsHistoryPage() {
   const session = useSessionStore()
   const tenantId = session.selectedTenantId
   const eventOptions = session.selectedTenantContext?.events ?? []
+  const permissions = new Set(session.selectedTenantContext?.permissions ?? [])
+  const queryClient = useQueryClient()
   const [status, setStatus] = useState('ALL')
+  const [type, setType] = useState('ALL')
   const [eventId, setEventId] = useState('ALL')
   const [query, setQuery] = useState('')
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
   const messages = useQuery({ queryKey: ['sms-history', tenantId], queryFn: async () => (await api.messages(tenantId ?? '')).data, enabled: Boolean(tenantId) })
+  const template = useQuery({ queryKey: ['balance-reminder-template', tenantId], queryFn: async () => (await api.balanceReminderTemplate(tenantId ?? '')).data, enabled: Boolean(tenantId && permissions.has('messages.manage_templates')) })
   const rows = messages.data ?? []
   const filtered = rows.filter((message) => {
     const statusMatches = status === 'ALL' || message.status === status
+    const typeMatches = type === 'ALL' || message.template_code === type
     const eventMatches = eventId === 'ALL' || message.event_id === eventId
     const queryMatches = `${message.member_name ?? ''} ${message.phone_e164 ?? ''} ${message.template_code ?? ''}`.toLowerCase().includes(query.toLowerCase())
-    return statusMatches && eventMatches && queryMatches
+    const createdAt = asString(message.created_at, '')
+    const dateMatches = (!dateFrom || createdAt >= new Date(dateFrom).toISOString()) && (!dateTo || createdAt <= new Date(`${dateTo}T23:59:59`).toISOString())
+    return statusMatches && typeMatches && eventMatches && queryMatches && dateMatches
   })
 
   if (!tenantId) return <ErrorState title="Unable to load SMS history" message="Select a tenant first." />
@@ -700,17 +885,21 @@ export function SmsHistoryPage() {
   return (
     <PageContainer>
       <PageHeader title="Messages" description="Payment confirmation SMS history for this tenant." />
+      {permissions.has('messages.manage_templates') ? <BalanceReminderTemplateEditor tenantId={tenantId} template={template.data ?? null} loading={template.isLoading} onSaved={() => void queryClient.invalidateQueries({ queryKey: ['balance-reminder-template', tenantId] })} /> : null}
       <section className="filter-bar">
+        <label>Type<select value={type} onChange={(event) => setType(event.target.value)}>{[['ALL', 'All messages'], ['PAYMENT_CONFIRMATION', 'Payment Confirmation'], ['BALANCE_REMINDER', 'Balance Reminder']].map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
         <label>Status<select value={status} onChange={(event) => setStatus(event.target.value)}>{['ALL', 'QUEUED', 'PROCESSING', 'SENT', 'DELIVERED', 'FAILED', 'CANCELLED'].map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
         <label>Event<select value={eventId} onChange={(event) => setEventId(event.target.value)}><option value="ALL">All events</option>{eventOptions.map((event) => <option key={event.id} value={event.id}>{event.name}</option>)}</select></label>
         <label>Search<input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Member or phone" /></label>
+        <label>From<input type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} /></label>
+        <label>To<input type="date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} /></label>
       </section>
       <div className="finance-card-list">
         {filtered.map((message) => <article className="finance-card" key={asString(message.id)}>
           <div className="card-title-row">
             <div>
               <strong>{asString(message.member_name, 'Recipient')}</strong>
-              <span>{maskPhone(message.phone_e164)} · {asString(message.event_name, 'No event')}</span>
+              <span>{maskPhone(message.phone_e164)} · {asString(message.message_type, asString(message.template_code, 'Message'))} · {asString(message.event_name, 'No event')}</span>
             </div>
             <StatusBadge tone={statusTone(message.status)}>{asString(message.status, 'QUEUED')}</StatusBadge>
           </div>
@@ -720,11 +909,84 @@ export function SmsHistoryPage() {
             <span><small>Sent</small>{asDateTime(message.sent_at)}</span>
           </div>
           {message.status === 'FAILED' ? <p className="field-error">{asString(message.last_error_message, 'SMS delivery failed.')}</p> : null}
+          {message.template_code === 'BALANCE_REMINDER' && message.status === 'FAILED' && permissions.has('messages.send') ? <ResendBalanceReminderButton tenantId={tenantId} outboxId={asString(message.id)} onDone={() => void messages.refetch()} /> : null}
         </article>)}
         {!rows.length ? <EmptyState title="No SMS messages yet." message="Payment confirmations will appear here after payments are recorded." /> : null}
         {rows.length > 0 && !filtered.length ? <EmptyState title="No messages match these filters." message="Change the status, event, or search text." /> : null}
       </div>
     </PageContainer>
+  )
+}
+
+function renderPreviewTemplate(body: string) {
+  return body
+    .replaceAll('{{member_name}}', 'Asha Mrema')
+    .replaceAll('{{ event_name }}', 'Harusi ya Asha')
+    .replaceAll('{{event_name}}', 'Harusi ya Asha')
+    .replaceAll('{{pledged_amount}}', '500,000')
+    .replaceAll('{{total_paid}}', '100,000')
+    .replaceAll('{{outstanding}}', '400,000')
+    .replaceAll('{{due_date}}', '15/08/2026')
+    .replaceAll('{{due_text}}', ' kabla ya 15/08/2026')
+}
+
+function BalanceReminderTemplateEditor({ tenantId, template, loading, onSaved }: { tenantId: string; template: Row | null; loading: boolean; onSaved: () => void }) {
+  const [body, setBody] = useState('')
+  const mutation = useMutation({
+    mutationFn: () => api.saveBalanceReminderTemplate(tenantId, body),
+    onSuccess: (result) => {
+      setBody(asString(result.data.body))
+      onSaved()
+    },
+  })
+  const reset = useMutation({
+    mutationFn: () => api.resetBalanceReminderTemplate(tenantId),
+    onSuccess: (result) => {
+      setBody(asString(result.data.body))
+      onSaved()
+    },
+  })
+
+  if (loading) {
+    return <LoadingState title="Loading reminder template" />
+  }
+  const currentBody = body || asString(template?.body)
+  return (
+    <section className="content-panel">
+      <div className="panel-header">
+        <div>
+          <h2>Balance Reminder Template</h2>
+          <p>{template?.hasTenantOverride ? 'Tenant override active.' : 'Using system default.'}</p>
+        </div>
+        <StatusBadge>{String(currentBody.length)} chars</StatusBadge>
+      </div>
+      <label>
+        Template
+        <textarea value={currentBody} onChange={(event) => setBody(event.target.value)} rows={5} />
+      </label>
+      <p className="privacy-note">{['{{member_name}}', '{{event_name}}', '{{pledged_amount}}', '{{total_paid}}', '{{outstanding}}', '{{due_date}}', '{{due_text}}'].join(' ')}</p>
+      <article className="content-panel"><p>{renderPreviewTemplate(currentBody)}</p></article>
+      {mutation.error ? <p className="field-error">{errorMessage(mutation.error, 'Template could not be saved.')}</p> : null}
+      {reset.error ? <p className="field-error">{errorMessage(reset.error, 'Template could not be reset.')}</p> : null}
+      <div className="sheet-actions">
+        <button type="button" disabled={reset.isPending} onClick={() => reset.mutate()}>Reset to System Default</button>
+        <button className="primary-button" type="button" disabled={mutation.isPending || !currentBody.trim()} onClick={() => mutation.mutate()}>{mutation.isPending ? 'Saving...' : 'Save'}</button>
+      </div>
+    </section>
+  )
+}
+
+function ResendBalanceReminderButton({ tenantId, outboxId, onDone }: { tenantId: string; outboxId: string; onDone: () => void }) {
+  const [idempotencyKey] = useState(() => crypto.randomUUID())
+  const mutation = useMutation({
+    mutationFn: () => api.resendBalanceReminder(tenantId, outboxId, idempotencyKey),
+    onSuccess: onDone,
+  })
+  return (
+    <div className="card-actions">
+      <button type="button" disabled={mutation.isPending} onClick={() => mutation.mutate()}>{mutation.isPending ? 'Queueing...' : 'Resend Current Balance'}</button>
+      {mutation.data?.data?.queued === false ? <span>{asString(mutation.data.data.reason)}</span> : null}
+    </div>
   )
 }
 

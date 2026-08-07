@@ -21,6 +21,9 @@ export const apiEnvSchema = z.object({
   SMS_USERNAME: z.string().min(1),
   SMS_PASSWORD: z.string().min(1),
   SMS_SENDER_ID: z.string().trim().min(1).max(20),
+  BALANCE_REMINDER_COOLDOWN_HOURS: z.coerce.number().int().nonnegative().default(24),
+  BALANCE_REMINDER_DUE_SOON_DAYS: z.coerce.number().int().nonnegative().max(60).default(7),
+  BALANCE_REMINDER_MAX_BATCH_SIZE: z.coerce.number().int().positive().max(100).default(100),
 })
 
 export type ApiEnv = z.infer<typeof apiEnvSchema>
