@@ -452,6 +452,43 @@ a {
   color: var(--color-primary);
 }
 
+.switch-row {
+  align-items: center;
+  display: flex;
+  flex-direction: row;
+  gap: 16px;
+  justify-content: space-between;
+}
+
+.switch-row span {
+  display: grid;
+  gap: 3px;
+}
+
+.switch-row small {
+  color: var(--color-muted);
+  font-size: 0.78rem;
+}
+
+.switch-row input[role='switch'] {
+  accent-color: var(--color-primary);
+  height: 22px;
+  width: 42px;
+}
+
+.filter-bar {
+  align-items: end;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: 1fr;
+  margin-bottom: 16px;
+}
+
+.filter-bar label {
+  display: grid;
+  gap: 6px;
+}
+
 .mobile-topbar .tenant-switcher {
   grid-column: 1;
 }
@@ -1186,6 +1223,10 @@ th {
 @media (min-width: 640px) {
   .stats-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .filter-bar {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
   .payment-card {

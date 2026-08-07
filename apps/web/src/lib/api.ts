@@ -96,4 +96,5 @@ export const api = {
   reversePayment: (tenantId: string, eventId: string, paymentId: string, payload: Record<string, unknown>) =>
     apiFetch<{ data: Record<string, unknown> }>(`/events/${eventId}/payments/${paymentId}/reverse`, { tenantId, method: 'POST', body: JSON.stringify(payload) }),
   receipt: (tenantId: string, receiptId: string) => apiFetch<{ data: Record<string, unknown> }>(`/receipts/${receiptId}`, { tenantId }),
+  messages: (tenantId: string) => apiFetch<{ data: Record<string, unknown>[] }>('/messages', { tenantId }),
 }

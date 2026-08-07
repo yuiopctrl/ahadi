@@ -37,6 +37,10 @@ function asDate(value: unknown) {
   return typeof value === 'string' && value ? new Date(value).toLocaleDateString('en-TZ') : 'Not set'
 }
 
+function asDateTime(value: unknown) {
+  return typeof value === 'string' && value ? new Date(value).toLocaleString('en-TZ') : 'Not set'
+}
+
 function moneyText(value: unknown) {
   return new Intl.NumberFormat('en-TZ', { style: 'currency', currency: 'TZS', maximumFractionDigits: 0 }).format(asNumber(value))
 }
@@ -56,6 +60,24 @@ function errorMessage(error: unknown, fallback: string) {
     return error.message
   }
   return fallback
+}
+
+function smsStatusText(notification: unknown) {
+  const value = jsonRecord(notification)
+  if (value.smsQueued === true) return 'Confirmation queued'
+  if (value.reason === 'NO_PHONE') return 'No phone number'
+  if (value.reason === 'SMS_DISABLED') return 'SMS disabled'
+  if (value.reason === 'PAYMENT_REVERSED') return 'Payment reversed'
+  return 'Not queued'
+}
+
+function jsonRecord(value: unknown): Row {
+  return typeof value === 'object' && value !== null && !Array.isArray(value) ? value as Row : {}
+}
+
+function maskPhone(value: unknown) {
+  const phone = asString(value, '')
+  return phone ? phone.replace(/[0-9](?=[0-9]{3})/g, '*') : 'No phone'
 }
 
 function useActiveEventContext(routeEventId: string | undefined) {
@@ -297,7 +319,7 @@ function MembersPanel({ tenantId, eventId, members, refresh, initialSearch, canC
 }
 
 function MemberForm({ tenantId, eventId, onDone }: { tenantId: string; eventId: string; onDone: () => void }) {
-  const [form, setForm] = useState({ fullName: '', phone: '', alternativePhone: '', email: '', location: '', notes: '', initialPledgeAmount: '', initialPledgeDueDate: '' })
+  const [form, setForm] = useState({ fullName: '', phone: '', alternativePhone: '', email: '', location: '', notes: '', smsEnabled: true, initialPledgeAmount: '', initialPledgeDueDate: '' })
   const mutation = useMutation({
     mutationFn: () => api.createEventMember(tenantId, eventId, { ...form, initialPledgeAmount: form.initialPledgeAmount ? Number(form.initialPledgeAmount) : null, initialPledgeDueDate: form.initialPledgeDueDate || null }),
     onSuccess: onDone,
@@ -312,6 +334,10 @@ function MemberForm({ tenantId, eventId, onDone }: { tenantId: string; eventId: 
       <Input label="Initial pledge optional" inputMode="decimal" value={form.initialPledgeAmount} onChange={(initialPledgeAmount) => setForm((current) => ({ ...current, initialPledgeAmount }))} />
       <Input label="Pledge due date optional" type="date" value={form.initialPledgeDueDate} onChange={(initialPledgeDueDate) => setForm((current) => ({ ...current, initialPledgeDueDate }))} />
       <Input label="Notes optional" value={form.notes} onChange={(notes) => setForm((current) => ({ ...current, notes }))} />
+      <label className="switch-row">
+        <span><strong>Send SMS notifications</strong><small>{form.phone ? 'Payment confirmations will be queued after receipt creation.' : 'Add a phone number to send payment confirmations.'}</small></span>
+        <input type="checkbox" role="switch" checked={form.smsEnabled && Boolean(form.phone)} disabled={!form.phone} onChange={(event) => setForm((current) => ({ ...current, smsEnabled: event.target.checked }))} />
+      </label>
       {mutation.error ? <p className="field-error">{mutation.error.message}</p> : null}
       <div className="sheet-actions">
         <button type="button" onClick={onDone}>Cancel</button>
@@ -516,7 +542,9 @@ export function PaymentEntryPage() {
       }
       resetIdempotencyKey(crypto.randomUUID())
       const receiptId = asString(result.data.receipt_id)
-      navigate(receiptId ? `/app/receipts/${receiptId}` : `/app/events/${eventId}/payments`, { replace: true })
+      const notification = jsonRecord(result.data.notification)
+      const sms = notification.smsQueued === true ? 'queued' : asString(notification.reason, 'not_queued').toLowerCase()
+      navigate(receiptId ? `/app/receipts/${receiptId}?paymentRecorded=1&sms=${encodeURIComponent(sms)}` : `/app/events/${eventId}/payments`, { replace: true })
     },
   })
   if (activeEvent.error) return <ErrorState title="Unable to record payment" message={activeEvent.error} />
@@ -555,6 +583,7 @@ export function PaymentEntryPage() {
 
 export function ReceiptPage() {
   const { receiptId = '' } = useParams()
+  const [search] = useSearchParams()
   const session = useSessionStore()
   const tenantId = session.selectedTenantId
   const receipt = useQuery({ queryKey: ['receipt', tenantId, receiptId], queryFn: async () => (await api.receipt(tenantId ?? '', receiptId)).data, enabled: Boolean(tenantId && receiptId) })
@@ -562,8 +591,19 @@ export function ReceiptPage() {
   if (receipt.isLoading) return <LoadingState title="Loading receipt" />
   if (receipt.isError || !receipt.data) return <ErrorState title="Unable to load receipt" message={errorMessage(receipt.error, 'Receipt could not be loaded.')} />
   const data = receipt.data
+  const successSms = search.get('sms')
+  const smsConfirmation = jsonRecord(data.smsConfirmation)
   return (
     <PageContainer narrow>
+      {search.get('paymentRecorded') ? <section className="content-panel">
+        <div className="panel-header">
+          <div>
+            <h2>Payment recorded successfully</h2>
+            <p>Receipt: {asString(data.receipt_number, 'Receipt')}</p>
+          </div>
+          <StatusBadge tone={successSms === 'queued' ? 'success' : 'neutral'}>{successSms === 'queued' ? 'Confirmation queued' : smsStatusText({ reason: successSms?.toUpperCase() })}</StatusBadge>
+        </div>
+      </section> : null}
       <article className="receipt-document">
         <header><strong>{asString(data.tenant_name, 'Ahadi')}</strong><span>{asString(data.event_name, 'Event')}</span></header>
         <h1>{asString(data.receipt_number, 'Receipt')}</h1>
@@ -578,8 +618,60 @@ export function ReceiptPage() {
         <ReviewLine label="Remaining pledge balance" value={moneyText(data.outstanding_amount)} />
         <ReviewLine label="Unallocated excess" value={moneyText(data.unallocated_excess)} />
         <ReviewLine label="Received by" value={asString(data.received_by, 'Ahadi user')} />
+        <ReviewLine label="SMS Confirmation" value={asString(smsConfirmation.status, successSms === 'queued' ? 'Queued' : 'Not queued')} />
         <footer className="receipt-actions"><button type="button" onClick={() => window.print()}><Printer size={18} aria-hidden /> Print</button><button type="button" onClick={() => void navigator.share?.({ title: asString(data.receipt_number), text: `${asString(data.receipt_number)} ${moneyText(data.payment_amount)}` })}><Share2 size={18} aria-hidden /> Share</button></footer>
       </article>
+    </PageContainer>
+  )
+}
+
+export function SmsHistoryPage() {
+  const session = useSessionStore()
+  const tenantId = session.selectedTenantId
+  const eventOptions = session.selectedTenantContext?.events ?? []
+  const [status, setStatus] = useState('ALL')
+  const [eventId, setEventId] = useState('ALL')
+  const [query, setQuery] = useState('')
+  const messages = useQuery({ queryKey: ['sms-history', tenantId], queryFn: async () => (await api.messages(tenantId ?? '')).data, enabled: Boolean(tenantId) })
+  const rows = messages.data ?? []
+  const filtered = rows.filter((message) => {
+    const statusMatches = status === 'ALL' || message.status === status
+    const eventMatches = eventId === 'ALL' || message.event_id === eventId
+    const queryMatches = `${message.member_name ?? ''} ${message.phone_e164 ?? ''} ${message.template_code ?? ''}`.toLowerCase().includes(query.toLowerCase())
+    return statusMatches && eventMatches && queryMatches
+  })
+
+  if (!tenantId) return <ErrorState title="Unable to load SMS history" message="Select a tenant first." />
+  if (messages.isLoading) return <LoadingState title="Loading messages" message="Fetching SMS confirmation history." />
+  if (messages.isError) return <ErrorState title="Unable to load messages" message={errorMessage(messages.error, 'SMS history could not be loaded.')} />
+
+  return (
+    <PageContainer>
+      <PageHeader title="Messages" description="Payment confirmation SMS history for this tenant." />
+      <section className="filter-bar">
+        <label>Status<select value={status} onChange={(event) => setStatus(event.target.value)}>{['ALL', 'QUEUED', 'PROCESSING', 'SENT', 'DELIVERED', 'FAILED', 'CANCELLED'].map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
+        <label>Event<select value={eventId} onChange={(event) => setEventId(event.target.value)}><option value="ALL">All events</option>{eventOptions.map((event) => <option key={event.id} value={event.id}>{event.name}</option>)}</select></label>
+        <label>Search<input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Member or phone" /></label>
+      </section>
+      <div className="finance-card-list">
+        {filtered.map((message) => <article className="finance-card" key={asString(message.id)}>
+          <div className="card-title-row">
+            <div>
+              <strong>{asString(message.member_name, 'Recipient')}</strong>
+              <span>{maskPhone(message.phone_e164)} · {asString(message.event_name, 'No event')}</span>
+            </div>
+            <StatusBadge tone={statusTone(message.status)}>{asString(message.status, 'QUEUED')}</StatusBadge>
+          </div>
+          <div className="amount-triplet">
+            <span><small>Template</small>{asString(message.template_code, 'Message')}</span>
+            <span><small>Created</small>{asDateTime(message.created_at)}</span>
+            <span><small>Sent</small>{asDateTime(message.sent_at)}</span>
+          </div>
+          {message.status === 'FAILED' ? <p className="field-error">{asString(message.last_error_message, 'SMS delivery failed.')}</p> : null}
+        </article>)}
+        {!rows.length ? <EmptyState title="No SMS messages yet." message="Payment confirmations will appear here after payments are recorded." /> : null}
+        {rows.length > 0 && !filtered.length ? <EmptyState title="No messages match these filters." message="Change the status, event, or search text." /> : null}
+      </div>
     </PageContainer>
   )
 }

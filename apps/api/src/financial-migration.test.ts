@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import test from 'node:test'
 
-const migrations = ['011_members_and_event_members.sql', '012_pledges_and_history.sql', '013_payments_allocations_and_receipts.sql', '014_member_pledge_payment_rpcs.sql', '015_financial_views.sql', '016_financial_permissions_and_rls.sql', '018_repair_event_financial_access.sql', '019_stabilize_financial_summary_shape.sql', '020_grant_financial_read_views.sql', '021_financial_list_rpcs.sql']
+const migrations = ['011_members_and_event_members.sql', '012_pledges_and_history.sql', '013_payments_allocations_and_receipts.sql', '014_member_pledge_payment_rpcs.sql', '015_financial_views.sql', '016_financial_permissions_and_rls.sql', '018_repair_event_financial_access.sql', '019_stabilize_financial_summary_shape.sql', '020_grant_financial_read_views.sql', '021_financial_list_rpcs.sql', '022_payment_confirmation_sms_outbox.sql']
   .map((file) => readFileSync(new URL(`../../../supabase/migrations/${file}`, import.meta.url), 'utf8'))
   .join('\n')
 const app = readFileSync(new URL('./app.ts', import.meta.url), 'utf8')
@@ -71,4 +71,20 @@ test('financial read views and balance helpers are granted to authenticated clie
   for (const fn of ['rpc_list_event_members', 'rpc_list_event_pledges', 'rpc_list_event_payments']) {
     assert.match(migrations, new RegExp(`grant execute on function public\\.${fn}\\(uuid, uuid\\) to authenticated`))
   }
+})
+
+test('payment confirmation SMS uses outbox tables and idempotent enqueue RPC', () => {
+  for (const table of ['sms_templates', 'sms_outbox']) {
+    assert.match(migrations, new RegExp(`create table if not exists public\\.${table}`, 'i'))
+    assert.match(migrations, new RegExp(`alter table public\\.${table} enable row level security`, 'i'))
+  }
+  assert.match(migrations, /'PAYMENT_CONFIRMATION'/)
+  assert.match(migrations, /PAYMENT_CONFIRMATION:' \|\| payment_record\.id::text/)
+  assert.match(migrations, /sms_outbox_idempotency_active_unique/)
+  assert.match(migrations, /sms_outbox_payment_confirmation_unique/)
+  assert.match(migrations, /member_record\.phone_e164 is null[\s\S]+NO_PHONE/)
+  assert.match(migrations, /member_record\.sms_enabled = false[\s\S]+SMS_DISABLED/)
+  assert.match(migrations, /rpc_claim_sms_outbox[\s\S]+for update of o skip locked/i)
+  assert.match(app, /rpc_enqueue_payment_confirmation_sms/)
+  assert.doesNotMatch(app, /record_installment_payment[\s\S]+sendAuthenticationSms/)
 })

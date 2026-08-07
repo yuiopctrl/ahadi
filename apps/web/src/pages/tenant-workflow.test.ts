@@ -5,6 +5,7 @@ import test from 'node:test'
 const tenantPage = readFileSync(new URL('./tenant.tsx', import.meta.url), 'utf8')
 const navigation = readFileSync(new URL('../navigation.tsx', import.meta.url), 'utf8')
 const apiClient = readFileSync(new URL('../lib/api.ts', import.meta.url), 'utf8')
+const routes = readFileSync(new URL('../routes/index.tsx', import.meta.url), 'utf8')
 
 test('tenant workflow does not depend on hardcoded demo event ids', () => {
   assert.doesNotMatch(navigation, /event_001/)
@@ -36,4 +37,21 @@ test('API client preserves structured errors and bypasses browser cache', () => 
   assert.match(apiClient, /requestId: string \| null/)
   assert.match(apiClient, /cache: 'no-store'/)
   assert.match(apiClient, /Cache-Control', 'no-cache'/)
+})
+
+test('payment confirmation SMS states are visible without waiting for delivery', () => {
+  assert.match(tenantPage, /Payment recorded successfully/)
+  assert.match(tenantPage, /Confirmation queued/)
+  assert.match(tenantPage, /No phone number/)
+  assert.match(tenantPage, /SMS disabled/)
+  assert.match(tenantPage, /Send SMS notifications/)
+  assert.match(tenantPage, /role="switch"/)
+})
+
+test('tenant SMS history route and cards are present', () => {
+  assert.match(routes, /path: 'messages', element: <SmsHistoryPage \/>/)
+  assert.match(apiClient, /messages: \(tenantId: string\)/)
+  assert.match(tenantPage, /Payment confirmation SMS history/)
+  assert.match(tenantPage, /No SMS messages yet/)
+  assert.match(tenantPage, /SMS delivery failed/)
 })

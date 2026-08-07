@@ -193,6 +193,7 @@ const createMemberSchema = z.object({
   location: optionalShortTextSchema,
   categoryId: z.string().uuid().optional().nullable(),
   notes: optionalTextSchema,
+  smsEnabled: z.boolean().optional(),
   initialPledgeAmount: z.coerce.number().finite().positive().optional().nullable(),
   initialPledgeDueDate: z.string().date().optional().nullable(),
 })
@@ -324,6 +325,15 @@ function tenantIdFromRequest(request: express.Request): string {
 
 function jsonArray(data: unknown): Record<string, unknown>[] {
   return Array.isArray(data) ? data as Record<string, unknown>[] : []
+}
+
+function jsonRecord(data: unknown): Record<string, unknown> {
+  return typeof data === 'object' && data !== null && !Array.isArray(data) ? data as Record<string, unknown> : {}
+}
+
+function notificationFromEnqueue(data: unknown): Record<string, unknown> {
+  const notification = jsonRecord(data)
+  return Object.keys(notification).length ? notification : { smsQueued: false, reason: 'ENQUEUE_FAILED' }
 }
 
 app.use(helmet())
@@ -664,6 +674,7 @@ app.post('/api/v1/events/:eventId/members', requireAuth, loadUserContext, requir
       p_location: input.location || null,
       p_category_id: input.categoryId || null,
       p_notes: input.notes || null,
+      p_sms_enabled: input.smsEnabled ?? true,
     })
     if (error) {
       throwFinancialDatabaseError(error, 'CREATE_MEMBER_FAILED')
@@ -903,7 +914,23 @@ app.post('/api/v1/events/:eventId/payments', requireAuth, loadUserContext, requi
     if (error) {
       throwFinancialDatabaseError(error, 'RECORD_PAYMENT_FAILED')
     }
-    response.status(201).json({ data })
+    const payment = jsonRecord(data)
+    let notification: Record<string, unknown> = { smsQueued: false, reason: 'PAYMENT_ID_MISSING' }
+    if (typeof payment['payment_id'] === 'string') {
+      const enqueue = await client.rpc('rpc_enqueue_payment_confirmation_sms', { p_tenant_id: tenantId, p_payment_id: payment['payment_id'] })
+      if (enqueue.error) {
+        console.error('Payment confirmation SMS enqueue failed', {
+          requestId: request.requestId,
+          tenantId,
+          paymentId: payment['payment_id'],
+          safeMessage: databaseMessage(enqueue.error).slice(0, 160),
+        })
+        notification = { smsQueued: false, reason: 'ENQUEUE_FAILED' }
+      } else {
+        notification = notificationFromEnqueue(enqueue.data)
+      }
+    }
+    response.status(201).json({ data: { ...payment, notification } })
   } catch (error) {
     next(error)
   }
@@ -951,7 +978,28 @@ app.get('/api/v1/receipts/:receiptId', requireAuth, loadUserContext, requireTena
     if (error) {
       throwFinancialDatabaseError(error, 'RECEIPT_DETAIL_FAILED')
     }
-    response.json({ data })
+    const sms = await client
+      .from('sms_outbox')
+      .select('status, last_error_code, last_error_message, sent_at, delivered_at, failed_at')
+      .eq('tenant_id', tenantId)
+      .eq('receipt_id', receiptId)
+      .eq('template_code', 'PAYMENT_CONFIRMATION')
+      .maybeSingle()
+    response.json({ data: { ...(jsonRecord(data)), smsConfirmation: sms.error ? null : sms.data } })
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.get('/api/v1/messages', requireAuth, loadUserContext, requireTenantContext, async (request, response, next) => {
+  try {
+    const tenantId = tenantIdFromRequest(request)
+    const client = createUserSupabase(request.auth?.accessToken ?? '')
+    const { data, error } = await client.rpc('rpc_list_sms_history', { p_tenant_id: tenantId })
+    if (error) {
+      throwFinancialDatabaseError(error, 'SMS_HISTORY_LIST_FAILED')
+    }
+    response.json({ data: jsonArray(data) })
   } catch (error) {
     next(error)
   }

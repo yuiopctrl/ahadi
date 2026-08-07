@@ -15,6 +15,7 @@
   "dependencies": {
     "@ahadi/config": "workspace:*",
     "@ahadi/database": "workspace:*",
+    "@ahadi/sms": "workspace:*",
     "@ahadi/types": "workspace:*",
     "@ahadi/validation": "workspace:*",
     "@supabase/supabase-js": "^2.112.0",

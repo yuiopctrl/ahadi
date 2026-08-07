@@ -41,6 +41,9 @@ importers:
       '@ahadi/database':
         specifier: workspace:*
         version: link:../../packages/database
+      '@ahadi/sms':
+        specifier: workspace:*
+        version: link:../../packages/sms
       '@ahadi/types':
         specifier: workspace:*
         version: link:../../packages/types
@@ -190,6 +193,9 @@ importers:
 
   apps/worker:
     dependencies:
+      '@ahadi/sms':
+        specifier: workspace:*
+        version: link:../../packages/sms
       '@supabase/supabase-js':
         specifier: ^2.112.0
         version: 2.112.0
@@ -213,6 +219,22 @@ importers:
   packages/config: {}
 
   packages/database: {}
+
+  packages/sms:
+    dependencies:
+      '@ahadi/validation':
+        specifier: workspace:*
+        version: link:../validation
+    devDependencies:
+      '@types/node':
+        specifier: ^24.13.3
+        version: 24.13.3
+      tsx:
+        specifier: ^4.23.5
+        version: 4.23.5
+      typescript:
+        specifier: ~6.0.2
+        version: 6.0.3
 
   packages/types: {}
 

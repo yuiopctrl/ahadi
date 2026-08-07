@@ -1,21 +1,19 @@
 {
-  "name": "@ahadi/worker",
+  "name": "@ahadi/sms",
   "private": true,
   "version": "0.0.1",
   "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
   "scripts": {
-    "dev": "node --watch --import tsx src/index.ts",
     "build": "tsc -p tsconfig.json",
-    "start": "node dist/index.js",
     "lint": "eslint src",
     "typecheck": "tsc --noEmit",
-    "test": "node --import tsx --test src/**/*.test.ts"
+    "test": "node --import tsx --test test/**/*.test.ts"
   },
   "dependencies": {
-    "@ahadi/sms": "workspace:*",
-    "@supabase/supabase-js": "^2.112.0",
-    "dotenv": "^17.4.2",
-    "zod": "^4.4.3"
+    "@ahadi/validation": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^24.13.3",
