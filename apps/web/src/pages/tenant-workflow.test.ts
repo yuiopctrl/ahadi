@@ -55,3 +55,41 @@ test('tenant SMS history route and cards are present', () => {
   assert.match(tenantPage, /No SMS messages yet/)
   assert.match(tenantPage, /SMS delivery failed/)
 })
+
+test('share list page fetches by tenant and event and exposes explicit states', () => {
+  assert.match(routes, /path: 'events\/:eventId\/share', element: <ShareListPage \/>/)
+  assert.match(apiClient, /whatsappSharePreview: \(tenantId: string, eventId: string, payload/)
+  assert.match(tenantPage, /queryKey: \['whatsapp-share-preview', tenantId, eventId, previewPayload\]/)
+  assert.match(tenantPage, /enabled: canQuery && !settings\.isLoading/)
+  assert.match(tenantPage, /Unable to load the share list\./)
+  assert.match(tenantPage, /No pledge records are available for this list\./)
+  assert.match(tenantPage, /Copy List/)
+})
+
+test('events page creates events from server subscription usage', () => {
+  assert.match(apiClient, /createEvent: \(tenantId: string, payload/)
+  assert.match(tenantPage, /subscriptionEventUsage\(subscription\)/)
+  assert.match(tenantPage, /usage\.available > 0/)
+  assert.match(tenantPage, /Your package allows \$\{usage\.limit\} active/)
+  assert.match(tenantPage, /CreateEventForm/)
+  assert.match(tenantPage, /await session\.selectTenant\(tenantId\)/)
+  assert.match(tenantPage, /await session\.refreshContext\(\)/)
+})
+
+test('batch 4 report routes and report states are implemented', () => {
+  for (const route of [
+    "path: 'events/:eventId/reports'",
+    "path: 'events/:eventId/reports/:reportType'",
+  ]) {
+    assert.match(routes, new RegExp(route.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
+  }
+  assert.match(apiClient, /eventReport: \(tenantId: string, eventId: string, reportType: string/)
+  for (const copy of ['Collection Summary', 'Pledge Report', 'Payment Methods', 'Collectors', 'Member Statement']) {
+    assert.match(tenantPage, new RegExp(copy))
+  }
+  assert.match(tenantPage, /No pledges match the selected filters\./)
+  assert.match(tenantPage, /No payments were found for this period\./)
+  assert.match(tenantPage, /All recorded pledges are fully paid\./)
+  assert.match(tenantPage, /Apply \{filterCount/)
+  assert.match(tenantPage, /queryKey: \['event-report', tenantId, eventId, reportType, payload\]/)
+})

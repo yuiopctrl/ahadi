@@ -237,6 +237,20 @@ const reversePaymentSchema = z.object({
   idempotencyKey: z.string().uuid(),
 })
 
+const createEventSchema = z.object({
+  name: z.string().trim().min(2).max(160),
+  eventType: z.enum(['WEDDING', 'SENDOFF', 'FUNERAL', 'FUNDRAISER', 'BIRTHDAY', 'GRADUATION', 'RELIGIOUS', 'OTHER']),
+  customEventType: optionalShortTextSchema,
+  eventDate: z.string().date().optional().nullable(),
+  venue: optionalShortTextSchema,
+  targetAmount: z.coerce.number().finite().positive().max(999_999_999_999.99).optional().nullable(),
+  pledgeDeadline: z.string().date().optional().nullable(),
+}).superRefine((value, context) => {
+  if (value.eventType === 'OTHER' && !value.customEventType) {
+    context.addIssue({ code: 'custom', path: ['customEventType'], message: 'Custom event type is required' })
+  }
+})
+
 const balanceReminderSchema = z.object({
   eventMemberId: z.string().uuid(),
   idempotencyKey: z.string().uuid(),
@@ -288,6 +302,25 @@ const whatsappShareSettingsSchema = z.object({
   defaultIncludeSummary: z.boolean().optional().default(true),
 })
 
+const reportTypeSchema = z.enum(['summary', 'pledges', 'payments', 'outstanding', 'payment-methods', 'collectors', 'member-statement'])
+const reportRequestSchema = z.object({
+  page: z.coerce.number().int().positive().optional().default(1),
+  pageSize: z.coerce.number().int().positive().max(100).optional().default(25),
+  status: z.string().trim().optional().default('ALL'),
+  category: z.string().trim().optional().nullable(),
+  dueFrom: z.string().date().optional().nullable(),
+  dueTo: z.string().date().optional().nullable(),
+  dateFrom: z.string().date().optional().nullable(),
+  dateTo: z.string().date().optional().nullable(),
+  paymentMethod: z.string().trim().optional().default('ALL'),
+  collectorId: z.string().uuid().optional().nullable(),
+  filter: z.string().trim().optional().default('ALL'),
+  search: z.string().trim().max(120).optional().default(''),
+  sort: z.string().trim().optional().default('DATE'),
+  direction: z.enum(['ASC', 'DESC']).optional().default('DESC'),
+  eventMemberId: z.string().uuid().optional().nullable(),
+})
+
 const updateMemberSchema = z.object({
   fullName: z.string().trim().min(2).max(160).optional(),
   phoneE164: z.string().trim().optional().nullable(),
@@ -318,6 +351,7 @@ const knownDatabaseCodes: ApiErrorCode[] = [
   'SHARE_WHATSAPP_ACCESS_DENIED',
   'SHARE_WHATSAPP_FINANCIAL_REQUIRED',
   'SHARE_SETTINGS_ACCESS_DENIED',
+  'REPORT_ACCESS_DENIED',
   'MEMBER_NOT_FOUND',
   'MEMBER_PHONE_ALREADY_EXISTS',
   'MEMBER_ALREADY_IN_EVENT',
@@ -617,6 +651,33 @@ app.get('/api/v1/tenant-context', requireAuth, loadUserContext, requireTenantCon
   response.json({ data: request.tenantContext })
 })
 
+app.post('/api/v1/events', requireAuth, loadUserContext, requireTenantContext, async (request, response, next) => {
+  try {
+    const tenantId = tenantIdFromRequest(request)
+    if (request.tenantContext?.accessState === 'READ_ONLY') {
+      throw new AppError('SUBSCRIPTION_READ_ONLY', 'Subscription is read-only')
+    }
+    const input = createEventSchema.parse(request.body)
+    const client = createUserSupabase(request.auth?.accessToken ?? '')
+    const { data, error } = await client.rpc('rpc_create_event', {
+      p_tenant_id: tenantId,
+      p_name: input.name,
+      p_event_type: input.eventType,
+      p_custom_event_type: input.customEventType || null,
+      p_event_date: input.eventDate || null,
+      p_venue: input.venue || null,
+      p_target_amount: input.targetAmount || null,
+      p_pledge_deadline: input.pledgeDeadline || null,
+    })
+    if (error) {
+      throwFinancialDatabaseError(error, 'EVENT_CREATE_FAILED')
+    }
+    response.status(201).json({ data: jsonRecord(data) })
+  } catch (error) {
+    next(error)
+  }
+})
+
 app.get('/api/v1/platform/dashboard', requireAuth, loadUserContext, requirePlatformPermission('platform.dashboard.view'), async (request, response, next) => {
   try {
     const client = createUserSupabase(request.auth?.accessToken ?? '')
@@ -680,6 +741,73 @@ app.get('/api/v1/events/:eventId/financial-summary', requireAuth, loadUserContex
       throwFinancialDatabaseError(error, 'EVENT_FINANCIAL_SUMMARY_FAILED')
     }
     response.json({ data })
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.post('/api/v1/events/:eventId/reports/:reportType', requireAuth, loadUserContext, requireTenantContext, async (request, response, next) => {
+  try {
+    const tenantId = tenantIdFromRequest(request)
+    const eventId = uuidParamSchema.parse(request.params['eventId'])
+    const reportType = reportTypeSchema.parse(request.params['reportType'])
+    const input = reportRequestSchema.parse(request.body ?? {})
+    const client = createUserSupabase(request.auth?.accessToken ?? '')
+    const rpcArgs = { p_tenant_id: tenantId, p_event_id: eventId }
+    const calls = {
+      summary: () => client.rpc('rpc_get_event_collection_summary', rpcArgs),
+      pledges: () => client.rpc('rpc_get_event_pledge_report', {
+        ...rpcArgs,
+        p_status: input.status,
+        p_category: input.category || null,
+        p_due_from: input.dueFrom || null,
+        p_due_to: input.dueTo || null,
+        p_search: input.search,
+        p_sort: input.sort || 'MEMBER',
+        p_direction: input.direction,
+        p_page: input.page,
+        p_page_size: input.pageSize,
+      }),
+      payments: () => client.rpc('rpc_get_event_payment_report', {
+        ...rpcArgs,
+        p_date_from: input.dateFrom || null,
+        p_date_to: input.dateTo || null,
+        p_payment_method: input.paymentMethod,
+        p_collector: input.collectorId || null,
+        p_status: input.status,
+        p_search: input.search,
+        p_sort: input.sort,
+        p_direction: input.direction,
+        p_page: input.page,
+        p_page_size: input.pageSize,
+      }),
+      outstanding: () => client.rpc('rpc_get_event_outstanding_report', {
+        ...rpcArgs,
+        p_filter: input.filter,
+        p_category: input.category || null,
+        p_sort: input.sort || 'OUTSTANDING',
+        p_direction: input.direction,
+        p_page: input.page,
+        p_page_size: input.pageSize,
+      }),
+      'payment-methods': () => client.rpc('rpc_get_event_payment_method_summary', rpcArgs),
+      collectors: () => client.rpc('rpc_get_event_collector_report', {
+        ...rpcArgs,
+        p_date_from: input.dateFrom || null,
+        p_date_to: input.dateTo || null,
+        p_collector: input.collectorId || null,
+      }),
+      'member-statement': () => client.rpc('rpc_get_member_statement', {
+        ...rpcArgs,
+        p_event_member_id: input.eventMemberId || null,
+        p_search: input.search,
+      }),
+    }
+    const { data, error } = await calls[reportType]()
+    if (error) {
+      throwFinancialDatabaseError(error, 'REPORT_GET_FAILED')
+    }
+    response.json({ data: jsonRecord(data) })
   } catch (error) {
     next(error)
   }

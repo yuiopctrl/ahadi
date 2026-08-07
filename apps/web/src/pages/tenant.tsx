@@ -47,6 +47,16 @@ const whatsappStatuses = [
   ['UNPAID', 'Unpaid'],
   ['OVERDUE', 'Overdue'],
 ]
+const eventTypes = ['WEDDING', 'SENDOFF', 'FUNERAL', 'FUNDRAISER', 'BIRTHDAY', 'GRADUATION', 'RELIGIOUS', 'OTHER']
+const reportCards = [
+  { type: 'summary', title: 'Collection Summary', description: 'Targets, pledged totals, collections, coverage and member status counts.' },
+  { type: 'pledges', title: 'Pledge Report', description: 'Member pledge balances, due dates, payment progress and pledge status.' },
+  { type: 'payments', title: 'Payments', description: 'Confirmed, reversed and cancelled payment rows with receipt and collector details.' },
+  { type: 'outstanding', title: 'Outstanding', description: 'Members with unpaid pledge balances, due status, reminders and last payment.' },
+  { type: 'payment-methods', title: 'Payment Methods', description: 'Collection totals grouped by cash, mobile money, bank and other methods.' },
+  { type: 'collectors', title: 'Collectors', description: 'Operational collection totals grouped by user who received the payment.' },
+  { type: 'member-statement', title: 'Member Statement', description: 'Single member pledge, transaction history, outstanding and credit summary.' },
+]
 
 function asString(value: unknown, fallback = '') {
   return typeof value === 'string' && value ? value : fallback
@@ -126,6 +136,19 @@ function isFinancialWhatsappFormat(format: string) {
   return format !== 'PRIVACY'
 }
 
+function subscriptionEventUsage(subscription: Row) {
+  const eventUsage = jsonRecord(subscription.eventUsage)
+  const limits = jsonRecord(subscription.limits)
+  return {
+    used: asNumber(eventUsage.used ?? limits.used ?? limits.usedEventSlots),
+    limit: asNumber(eventUsage.limit ?? limits.limit ?? limits.maxEventSlots),
+    available: asNumber(eventUsage.available ?? limits.available ?? limits.availableEventSlots),
+    planCurrentMaxActiveEvents: asNumber(eventUsage.planCurrentMaxActiveEvents ?? limits.planCurrentMaxActiveEvents),
+    subscriptionSnapshotMaxActiveEvents: asNumber(eventUsage.subscriptionSnapshotMaxActiveEvents ?? limits.subscriptionSnapshotMaxActiveEvents),
+    effectiveMaxActiveEvents: asNumber(eventUsage.effectiveMaxActiveEvents ?? limits.effectiveMaxActiveEvents ?? eventUsage.limit ?? limits.maxEventSlots),
+  }
+}
+
 async function copyPlainText(text: string) {
   if (navigator.clipboard?.writeText) {
     await navigator.clipboard.writeText(text)
@@ -198,8 +221,74 @@ export function TenantDashboardPage() {
 
 export function TenantListPage({ title, kind }: { title: string; kind: 'events' | 'members' | 'payments' | 'messages' | 'reports' | 'settings' }) {
   const session = useSessionStore()
+  const navigate = useNavigate()
+  const queryClient = useQueryClient()
+  const tenantId = session.selectedTenantId
+  const tenantContext = session.selectedTenantContext
   const event = session.selectedTenantContext?.events[0] ?? null
   const eventLink = event ? `/app/events/${event.id}` : '/app'
+  const [showEventForm, setShowEventForm] = useState(false)
+
+  if (kind === 'events') {
+    if (!tenantId || !tenantContext) {
+      return (
+        <PageContainer>
+          <PageHeader title={title} description="Select a tenant to view and create events." />
+          <EmptyState title="No tenant selected" message="Choose a tenant workspace first." />
+        </PageContainer>
+      )
+    }
+    const subscription = jsonRecord(tenantContext.subscription)
+    const usage = subscriptionEventUsage(subscription)
+    const canCreate = tenantContext.permissions.includes('events.create') && tenantContext.accessState !== 'READ_ONLY' && tenantContext.accessState !== 'BLOCKED' && usage.available > 0
+    const blockedMessage = tenantContext.accessState === 'READ_ONLY'
+      ? 'Your subscription is currently read-only. Resolve the subscription state before creating another event.'
+      : usage.available <= 0
+        ? `Your package allows ${usage.limit} active ${usage.limit === 1 ? 'event' : 'events'}. You are currently using ${usage.used}.`
+        : !tenantContext.permissions.includes('events.create')
+          ? 'Your tenant role does not include permission to create events.'
+          : ''
+    return (
+      <PageContainer>
+        <PageHeader
+          title={title}
+          description="Create and open tenant events."
+          action={<button className="desktop-primary-button" type="button" disabled={!canCreate} onClick={() => setShowEventForm(true)}><Plus size={18} aria-hidden /> Create Event</button>}
+        />
+        <section className="stats-grid">
+          <StatCard label="Used Slots" value={String(usage.used)} icon={CalendarDays} />
+          <StatCard label="Package Limit" value={String(usage.limit)} meta={usage.limit === 1 ? '1 active event' : `Up to ${usage.limit} active events`} icon={FileText} />
+          <StatCard label="Available" value={String(usage.available)} tone={usage.available > 0 ? 'success' : 'warning'} icon={CheckCircle2} />
+        </section>
+        {blockedMessage && !showEventForm ? <p className="field-error">{blockedMessage}</p> : null}
+        {showEventForm ? <CreateEventForm
+          tenantId={tenantId}
+          onCancel={() => setShowEventForm(false)}
+          onCreated={async (created) => {
+            setShowEventForm(false)
+            await session.selectTenant(tenantId)
+            await session.refreshContext()
+            void queryClient.invalidateQueries({ queryKey: ['tenant-settings-summary', tenantId] })
+            navigate(`/app/events/${asString(created.eventId ?? created.event_id ?? created.id)}`)
+          }}
+        /> : null}
+        <section className="cards-list">
+          {tenantContext.events.map((tenantEvent) => (
+            <Link to={`/app/events/${tenantEvent.id}`} className="summary-card" key={tenantEvent.id}>
+              <CalendarDays size={20} aria-hidden />
+              <div>
+                <strong>{tenantEvent.name}</strong>
+                <span>{tenantEvent.eventDate ? `Event date ${asDate(tenantEvent.eventDate)}` : tenantEvent.eventType}</span>
+              </div>
+              <StatusBadge tone={statusTone(tenantEvent.status)}>{tenantEvent.status}</StatusBadge>
+            </Link>
+          ))}
+          {!tenantContext.events.length ? <EmptyState title="No events yet" message={canCreate ? 'Create your first event to begin collecting pledges.' : blockedMessage || 'No accessible events are available.'} /> : null}
+        </section>
+        {canCreate ? <button className="mobile-sticky-button" type="button" onClick={() => setShowEventForm(true)}>Create Event</button> : null}
+      </PageContainer>
+    )
+  }
 
   if (!event) {
     return (
@@ -227,6 +316,67 @@ export function TenantListPage({ title, kind }: { title: string; kind: 'events' 
         </Link>
       </section>
     </PageContainer>
+  )
+}
+
+function CreateEventForm({ tenantId, onCancel, onCreated }: { tenantId: string; onCancel: () => void; onCreated: (created: Row) => Promise<void> }) {
+  const [form, setForm] = useState({
+    name: '',
+    eventType: 'WEDDING',
+    customEventType: '',
+    eventDate: '',
+    venue: '',
+    targetAmount: '',
+    pledgeDeadline: '',
+  })
+  const [success, setSuccess] = useState('')
+  const mutation = useMutation({
+    mutationFn: () => api.createEvent(tenantId, {
+      name: form.name,
+      eventType: form.eventType,
+      customEventType: form.eventType === 'OTHER' ? form.customEventType : null,
+      eventDate: form.eventDate || null,
+      venue: form.venue || null,
+      targetAmount: form.targetAmount ? Number(form.targetAmount) : null,
+      pledgeDeadline: form.pledgeDeadline || null,
+    }),
+    onSuccess: async (result) => {
+      setSuccess('Event created')
+      await onCreated(result.data)
+    },
+  })
+
+  function setField(field: keyof typeof form, value: string) {
+    setForm((current) => ({ ...current, [field]: value }))
+  }
+
+  function submit(event: FormEvent) {
+    event.preventDefault()
+    mutation.mutate()
+  }
+
+  return (
+    <form className="mobile-sheet form-grid" onSubmit={submit}>
+      <div className="panel-header">
+        <div>
+          <h2>Create Event</h2>
+          <p>Set the basic event details. Payment instructions can be added later.</p>
+        </div>
+      </div>
+      <label>Event name<input value={form.name} onChange={(event) => setField('name', event.target.value)} required minLength={2} /></label>
+      <label>Event type<select value={form.eventType} onChange={(event) => setField('eventType', event.target.value)}>{eventTypes.map((item) => <option key={item} value={item}>{item.replaceAll('_', ' ')}</option>)}</select></label>
+      {form.eventType === 'OTHER' ? <label>Custom event type<input value={form.customEventType} onChange={(event) => setField('customEventType', event.target.value)} required /></label> : null}
+      <label>Event date<input type="date" value={form.eventDate} onChange={(event) => setField('eventDate', event.target.value)} /></label>
+      <label>Venue<input value={form.venue} onChange={(event) => setField('venue', event.target.value)} /></label>
+      <label>Target amount<input type="number" min="1" step="1" value={form.targetAmount} onChange={(event) => setField('targetAmount', event.target.value)} /></label>
+      <label>Pledge deadline<input type="date" value={form.pledgeDeadline} onChange={(event) => setField('pledgeDeadline', event.target.value)} /></label>
+      {success ? <p className="privacy-note">{success}</p> : null}
+      {mutation.error ? <p className="field-error">{errorMessage(mutation.error, 'Event could not be created.')}</p> : null}
+      <div className="sheet-actions">
+        <button type="button" onClick={onCancel}>Cancel</button>
+        <button className="primary-button" type="submit" disabled={mutation.isPending}>{mutation.isPending ? 'Creating...' : 'Create Event'}</button>
+      </div>
+    </form>
   )
 }
 
@@ -282,6 +432,8 @@ export function EventDetailPage({ section = 'overview' }: { section?: EventSecti
             {item}
           </Link>
         ))}
+        <Link to={`/app/events/${eventId}/outstanding`}>outstanding</Link>
+        <Link to={`/app/events/${eventId}/reports`}>reports</Link>
       </nav>
       {section === 'overview' ? (
         <OverviewCards eventId={eventId} summary={summary} payments={paymentsQuery.data ?? []} pledges={pledgesQuery.data ?? []} />
@@ -933,9 +1085,10 @@ export function ShareListPage() {
             <StatusBadge tone={data.isLong ? 'warning' : 'success'}>{data.isLong ? 'Long' : 'Ready'}</StatusBadge>
           </div>
           {preview.isLoading ? <LoadingState title="Generating preview" /> : null}
-          {preview.isError ? <ErrorState title="Unable to generate preview" message={errorMessage(preview.error, 'Preview could not be generated.')} /> : null}
+          {preview.isError ? <ErrorState title="Unable to load the share list." message={errorMessage(preview.error, 'Share list could not be generated.')} /> : null}
+          {!preview.isLoading && !preview.isError && asNumber(data.memberCount) === 0 ? <EmptyState title="No pledge records are available for this list." message="Change the filters or add active pledges to this event." /> : null}
           {data.isLong ? <p className="field-error">This list is long and may be difficult to send as one WhatsApp message.</p> : null}
-          <pre className="whatsapp-preview">{text || 'No contributors match these filters.'}</pre>
+          {asNumber(data.memberCount) > 0 ? <pre className="whatsapp-preview">{text}</pre> : null}
           {parts.length > 1 ? (
             <section className="split-parts">
               <div className="card-title-row">
@@ -1323,39 +1476,136 @@ function SettingsPanel({ title, rows }: { title: string; rows: Array<[string, un
 
 export function ReportsPage() {
   const session = useSessionStore()
-  const event = session.selectedTenantContext?.events[0] ?? null
+  const params = useParams()
+  const routeReportType = asString(params.reportType)
+  const events = session.selectedTenantContext?.events ?? []
+  const event = params.eventId ? events.find((candidate) => candidate.id === params.eventId) ?? null : events[0] ?? null
   const tenantId = session.selectedTenantId
-  const summary = useQuery({ queryKey: ['reports-financial-summary', tenantId, event?.id], queryFn: async () => (await api.eventFinancialSummary(tenantId ?? '', event?.id ?? '')).data, enabled: Boolean(tenantId && event?.id) })
+  const [selectedEventId, setSelectedEventId] = useState(event?.id ?? '')
+  const activeEventId = params.eventId ?? selectedEventId
+  const activeEvent = events.find((candidate) => candidate.id === activeEventId) ?? event
 
-  if (!tenantId || !event) return <ErrorState title="Unable to load reports" message="Open a tenant with an accessible event first." />
-  if (summary.isLoading) return <LoadingState title="Loading reports" message="Fetching event financial summary." />
-  if (summary.isError) return <ErrorState title="Unable to load reports" message={errorMessage(summary.error, 'Reports could not be loaded.')} />
+  if (!tenantId || !activeEvent) return <ErrorState title="Unable to load reports" message="Open a tenant with an accessible event first." />
+  if (routeReportType) {
+    return <ReportDetailPage tenantId={tenantId} eventId={activeEvent.id} eventName={activeEvent.name} reportType={routeReportType} />
+  }
 
-  const data = summary.data ?? {}
   return (
     <PageContainer>
-      <PageHeader title="Reports" description={`${event.name} financial summary and forthcoming report modules.`} />
-      <section className="stats-grid">
-        <StatCard label="Total pledged" value={moneyText(data.totalPledged)} icon={FileText} />
-        <StatCard label="Collected" value={moneyText(data.totalAllocated ?? data.totalAllocatedToPledges)} icon={CheckCircle2} tone="success" />
-        <StatCard label="Outstanding" value={moneyText(data.totalOutstanding)} icon={Clock3} tone="warning" />
-      </section>
-      <section className="finance-grid">
-        <article className="content-panel">
-          <div className="panel-header"><div><h2>Collection Summary</h2><p>{asNumber(data.memberCount)} members, {asNumber(data.membersWithPledges)} with pledges.</p></div></div>
-          <ReviewLine label="Fully paid" value={String(asNumber(data.fullyPaidCount))} />
-          <ReviewLine label="Partially paid" value={String(asNumber(data.partiallyPaidCount))} />
-          <ReviewLine label="Unpaid" value={String(asNumber(data.unpaidCount))} />
-          <ReviewLine label="Overdue" value={String(asNumber(data.overdueCount))} />
-        </article>
-        {['Member Statement', 'Outstanding Pledges', 'Payment Export', 'SMS Delivery'].map((title) => (
-          <article className="content-panel" key={title}>
-            <div className="panel-header"><div><h2>{title}</h2><p>Forthcoming report module.</p></div><StatusBadge>Forthcoming</StatusBadge></div>
-          </article>
+      <PageHeader title="Reports" description={`Server-calculated reports for ${activeEvent.name}.`} />
+      {events.length > 1 ? (
+        <section className="filter-bar">
+          <label>Event<select value={activeEvent.id} onChange={(event) => setSelectedEventId(event.target.value)}>{events.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+        </section>
+      ) : null}
+      <section className="cards-list">
+        {reportCards.map((report) => (
+          <Link className="summary-card" key={report.type} to={`/app/events/${activeEvent.id}/reports/${report.type}`}>
+            <FileText size={20} aria-hidden />
+            <div>
+              <strong>{report.title}</strong>
+              <span>{report.description}</span>
+            </div>
+            <StatusBadge>Open</StatusBadge>
+          </Link>
         ))}
       </section>
     </PageContainer>
   )
+}
+
+function reportTitle(type: string) {
+  return reportCards.find((report) => report.type === type)?.title ?? 'Report'
+}
+
+function emptyReportMessage(type: string) {
+  if (type === 'pledges') return 'No pledges match the selected filters.'
+  if (type === 'payments') return 'No payments were found for this period.'
+  if (type === 'outstanding') return 'All recorded pledges are fully paid.'
+  if (type === 'member-statement') return 'No member transactions are available.'
+  return 'No report rows are available.'
+}
+
+function ReportDetailPage({ tenantId, eventId, eventName, reportType }: { tenantId: string; eventId: string; eventName: string; reportType: string }) {
+  const [draft, setDraft] = useState({ search: '', status: 'ALL', filter: 'ALL', paymentMethod: 'ALL', dateFrom: '', dateTo: '', dueFrom: '', dueTo: '', category: '', sort: reportType === 'pledges' ? 'MEMBER' : reportType === 'outstanding' ? 'OUTSTANDING' : 'DATE', direction: reportType === 'pledges' ? 'ASC' : 'DESC', pageSize: '25', eventMemberId: '' })
+  const [filters, setFilters] = useState(draft)
+  const [page, setPage] = useState(1)
+  const payload = {
+    ...filters,
+    page,
+    pageSize: Number(filters.pageSize),
+    category: filters.category || null,
+    dateFrom: filters.dateFrom || null,
+    dateTo: filters.dateTo || null,
+    dueFrom: filters.dueFrom || null,
+    dueTo: filters.dueTo || null,
+    eventMemberId: filters.eventMemberId || null,
+  }
+  const report = useQuery({ queryKey: ['event-report', tenantId, eventId, reportType, payload], queryFn: async () => (await api.eventReport(tenantId, eventId, reportType, payload)).data, enabled: Boolean(tenantId && eventId && reportType) })
+  const rows = Array.isArray(report.data?.data) ? report.data.data.map(jsonRecord) : []
+  const summary = jsonRecord(report.data?.summary)
+  const pagination = jsonRecord(report.data?.pagination)
+  const members = Array.isArray(report.data?.members) ? report.data.members.map(jsonRecord) : []
+  const filterCount = Object.entries(filters).filter(([key, value]) => !['pageSize', 'sort', 'direction'].includes(key) && value && value !== 'ALL').length
+
+  function applyFilters(event: FormEvent) {
+    event.preventDefault()
+    setPage(1)
+    setFilters(draft)
+  }
+
+  return (
+    <PageContainer>
+      <PageHeader title={reportTitle(reportType)} description={`${eventName} report`} action={<Link to={`/app/events/${eventId}/reports`}><ArrowLeft size={18} aria-hidden /> Reports</Link>} />
+      <form className="filter-bar" onSubmit={applyFilters}>
+        {reportType === 'member-statement' ? <label>Member<select value={draft.eventMemberId} onChange={(event) => setDraft((current) => ({ ...current, eventMemberId: event.target.value }))}><option value="">First matching member</option>{members.map((member) => <option key={asString(member.eventMemberId)} value={asString(member.eventMemberId)}>{asString(member.name)} · {asString(member.memberCode)}</option>)}</select></label> : null}
+        <label>Search<input type="search" value={draft.search} onChange={(event) => setDraft((current) => ({ ...current, search: event.target.value }))} placeholder="Member, receipt or payment" /></label>
+        {['pledges', 'payments'].includes(reportType) ? <label>Status<select value={draft.status} onChange={(event) => setDraft((current) => ({ ...current, status: event.target.value }))}>{['ALL', 'PENDING', 'PARTIALLY_PAID', 'PAID', 'OVERDUE', 'CONFIRMED', 'REVERSED', 'CANCELLED'].map((item) => <option key={item} value={item}>{item.replaceAll('_', ' ')}</option>)}</select></label> : null}
+        {reportType === 'outstanding' ? <label>Filter<select value={draft.filter} onChange={(event) => setDraft((current) => ({ ...current, filter: event.target.value }))}>{['ALL', 'OVERDUE', 'DUE_SOON', 'PARTIAL', 'UNPAID'].map((item) => <option key={item} value={item}>{item.replaceAll('_', ' ')}</option>)}</select></label> : null}
+        {['pledges', 'outstanding'].includes(reportType) ? <label>Category<input value={draft.category} onChange={(event) => setDraft((current) => ({ ...current, category: event.target.value }))} /></label> : null}
+        {reportType === 'payments' ? <label>Method<select value={draft.paymentMethod} onChange={(event) => setDraft((current) => ({ ...current, paymentMethod: event.target.value }))}>{['ALL', ...paymentMethods].map((item) => <option key={item} value={item}>{item.replaceAll('_', ' ')}</option>)}</select></label> : null}
+        {['payments', 'collectors'].includes(reportType) ? <><label>From<input type="date" value={draft.dateFrom} onChange={(event) => setDraft((current) => ({ ...current, dateFrom: event.target.value }))} /></label><label>To<input type="date" value={draft.dateTo} onChange={(event) => setDraft((current) => ({ ...current, dateTo: event.target.value }))} /></label></> : null}
+        {reportType === 'pledges' ? <><label>Due From<input type="date" value={draft.dueFrom} onChange={(event) => setDraft((current) => ({ ...current, dueFrom: event.target.value }))} /></label><label>Due To<input type="date" value={draft.dueTo} onChange={(event) => setDraft((current) => ({ ...current, dueTo: event.target.value }))} /></label></> : null}
+        {['pledges', 'payments', 'outstanding'].includes(reportType) ? <label>Sort<select value={draft.sort} onChange={(event) => setDraft((current) => ({ ...current, sort: event.target.value }))}>{reportSortOptions(reportType).map((item) => <option key={item} value={item}>{item.replaceAll('_', ' ')}</option>)}</select></label> : null}
+        <label>Rows<select value={draft.pageSize} onChange={(event) => setDraft((current) => ({ ...current, pageSize: event.target.value }))}>{['25', '50', '100'].map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
+        <button type="button" onClick={() => { const reset = { ...draft, search: '', status: 'ALL', filter: 'ALL', paymentMethod: 'ALL', dateFrom: '', dateTo: '', dueFrom: '', dueTo: '', category: '', eventMemberId: '' }; setDraft(reset); setFilters(reset); setPage(1) }}>Clear Filters</button>
+        <button className="primary-button" type="submit">Apply {filterCount ? `(${filterCount})` : ''}</button>
+      </form>
+      {report.isLoading ? <LoadingState title="Loading report" message="Calculating server-side report data." /> : null}
+      {report.isError ? <ErrorState title="Unable to load report" message={errorMessage(report.error, 'Report could not be loaded.')} /> : null}
+      {!report.isLoading && !report.isError ? <ReportSummaryCards reportType={reportType} summary={summary} /> : null}
+      {!report.isLoading && !report.isError && rows.length ? <section className="finance-card-list">{rows.map((row, index) => <ReportRowCard key={`${reportType}-${index}-${asString(row.id ?? row.paymentId ?? row.pledgeId ?? row.date)}`} reportType={reportType} row={row} summary={summary} />)}</section> : null}
+      {!report.isLoading && !report.isError && !rows.length ? <EmptyState title={emptyReportMessage(reportType)} message="Adjust the report filters or add financial records to this event." /> : null}
+      {!report.isLoading && !report.isError && asNumber(pagination.totalPages) > 1 ? <div className="sheet-actions"><button type="button" disabled={page <= 1} onClick={() => setPage((value) => Math.max(1, value - 1))}>Previous</button><span>Page {page} of {asNumber(pagination.totalPages)}</span><button type="button" disabled={page >= asNumber(pagination.totalPages)} onClick={() => setPage((value) => value + 1)}>Next</button></div> : null}
+    </PageContainer>
+  )
+}
+
+function reportSortOptions(reportType: string) {
+  if (reportType === 'pledges') return ['MEMBER', 'PLEDGED', 'PAID', 'OUTSTANDING', 'DUE_DATE']
+  if (reportType === 'payments') return ['DATE', 'AMOUNT', 'MEMBER']
+  if (reportType === 'outstanding') return ['OUTSTANDING', 'DAYS_OVERDUE', 'DUE_DATE', 'MEMBER']
+  return ['DATE']
+}
+
+function ReportSummaryCards({ reportType, summary }: { reportType: string; summary: Row }) {
+  const entries: Array<[string, unknown]> = reportType === 'summary'
+    ? [['Event Target', summary.eventTarget], ['Total Pledged', summary.totalPledged], ['Collected', summary.totalReceived], ['Allocated', summary.totalAllocatedToPledges], ['Unallocated', summary.totalUnallocated], ['Outstanding', summary.totalOutstanding], ['Collection Rate', `${asNumber(summary.collectionRate)}%`], ['Coverage', `${asNumber(summary.pledgeCoverageAgainstTarget)}%`], ['Members', summary.memberCount], ['With Pledges', summary.membersWithPledges], ['Without Pledges', summary.membersWithoutPledges], ['Fully Paid', summary.fullyPaidCount], ['Partial', summary.partiallyPaidCount], ['Unpaid', summary.unpaidCount], ['Overdue', summary.overdueCount]]
+    : Object.entries(summary).slice(0, 6)
+  return <section className="stats-grid">{entries.map(([label, value]) => <StatCard key={label} label={label} value={typeof value === 'number' || String(label).toLowerCase().includes('amount') || String(label).toLowerCase().includes('total') || ['Pledged', 'Collected', 'Allocated', 'Unallocated', 'Outstanding', 'Net Confirmed'].some((word) => String(label).includes(word)) ? moneyText(value) : displayValue(value)} icon={FileText} />)}</section>
+}
+
+function ReportRowCard({ reportType, row, summary }: { reportType: string; row: Row; summary: Row }) {
+  if (reportType === 'summary') {
+    return <article className="finance-card">{Object.entries(row).map(([key, value]) => <ReviewLine key={key} label={key} value={displayValue(value)} />)}</article>
+  }
+  if (reportType === 'member-statement') {
+    const member = jsonRecord(summary.member)
+    const pledge = jsonRecord(summary.pledge)
+    return <article className="finance-card"><div className="card-title-row"><div><strong>{asString(member.name, 'Member Statement')}</strong><span>{asString(member.memberCode)} · {asString(member.phone, 'No phone')}</span></div><StatusBadge>{asString(row.status, asString(pledge.status))}</StatusBadge></div><ReviewLine label="Date" value={asDateTime(row.date)} /><ReviewLine label="Type" value={displayValue(row.type)} /><ReviewLine label="Receipt" value={displayValue(row.receipt)} /><ReviewLine label="Method" value={displayValue(row.method)} /><ReviewLine label="Amount" value={moneyText(row.amount)} /></article>
+  }
+  const title = asString(row.member ?? row.collectorName ?? row.paymentMethod ?? row.eventName, reportTitle(reportType))
+  return <article className="finance-card"><div className="card-title-row"><div><strong>{title}</strong><span>{asString(row.memberCode ?? row.paymentNumber ?? row.receiptNumber ?? row.category, '')}</span></div><StatusBadge tone={statusTone(row.status)}>{asString(row.status ?? row.paymentMethod, 'Report')}</StatusBadge></div><div className="amount-triplet">{Object.entries(row).filter(([key]) => ['pledged', 'paid', 'outstanding', 'amount', 'allocatedAmount', 'unallocatedAmount', 'netConfirmedAmount', 'grossAmount', 'reversedAmount', 'netCollected', 'grossRecorded'].includes(key)).slice(0, 3).map(([key, value]) => <span key={key}><small>{key.replace(/([A-Z])/g, ' $1')}</small>{moneyText(value)}</span>)}</div>{Object.entries(row).filter(([key]) => !['pledgeId', 'paymentId', 'eventMemberId', 'memberId', 'collectorId'].includes(key)).slice(0, 8).map(([key, value]) => <ReviewLine key={key} label={key.replace(/([A-Z])/g, ' $1')} value={key.toLowerCase().includes('date') || key.toLowerCase().includes('payment') && String(value).includes('T') ? asDateTime(value) : displayValue(value)} />)}</article>
 }
 
 function Input({ label, value, onChange, inputMode, type = 'text' }: { label: string; value: string; onChange: (value: string) => void; inputMode?: 'decimal' | 'tel'; type?: string }) {

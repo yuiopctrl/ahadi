@@ -73,7 +73,11 @@ export const api = {
   platformPlans: () => apiFetch<{ data: unknown[] }>('/platform/plans'),
   tenantUsers: (tenantId: string) => apiFetch<{ data: Record<string, unknown>[] }>('/users', { tenantId }),
   settingsSummary: (tenantId: string) => apiFetch<{ data: Record<string, unknown> }>('/settings-summary', { tenantId }),
+  createEvent: (tenantId: string, payload: Record<string, unknown>) =>
+    apiFetch<{ data: Record<string, unknown> }>('/events', { tenantId, method: 'POST', body: JSON.stringify(payload) }),
   eventFinancialSummary: (tenantId: string, eventId: string) => apiFetch<{ data: Record<string, unknown> }>(`/events/${eventId}/financial-summary`, { tenantId }),
+  eventReport: (tenantId: string, eventId: string, reportType: string, payload: Record<string, unknown>) =>
+    apiFetch<{ data: Record<string, unknown> }>(`/events/${eventId}/reports/${reportType}`, { tenantId, method: 'POST', body: JSON.stringify(payload) }),
   eventMembers: (tenantId: string, eventId: string) => apiFetch<{ data: Record<string, unknown>[] }>(`/events/${eventId}/members`, { tenantId }),
   eventMemberDetail: (tenantId: string, eventId: string, eventMemberId: string) =>
     apiFetch<{ data: { member: Record<string, unknown>; payments: Record<string, unknown>[] } }>(`/events/${eventId}/members/${eventMemberId}`, { tenantId }),

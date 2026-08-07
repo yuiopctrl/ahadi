@@ -60,6 +60,8 @@ export const router = createBrowserRouter([
                   { path: 'events/:eventId/pledges', element: <EventDetailPage section="pledges" /> },
                   { path: 'events/:eventId/outstanding', element: <OutstandingPage /> },
                   { path: 'events/:eventId/share', element: <ShareListPage /> },
+                  { path: 'events/:eventId/reports', element: <ReportsPage /> },
+                  { path: 'events/:eventId/reports/:reportType', element: <ReportsPage /> },
                   { path: 'events/:eventId/payments', element: <EventDetailPage section="payments" /> },
                   { path: 'events/:eventId/payments/new', element: <PaymentEntryPage /> },
                   { path: 'events/:eventId/messages', element: <EventDetailPage section="messages" /> },

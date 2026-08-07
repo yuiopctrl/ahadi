@@ -65,6 +65,7 @@ export type ApiErrorCode =
   | 'SHARE_WHATSAPP_ACCESS_DENIED'
   | 'SHARE_WHATSAPP_FINANCIAL_REQUIRED'
   | 'SHARE_SETTINGS_ACCESS_DENIED'
+  | 'REPORT_ACCESS_DENIED'
   | 'INTERNAL_ERROR'
 
 export interface SubscriptionPlan {
@@ -194,6 +195,14 @@ export interface SubscriptionSummary {
   trialEndsAt: string | null
   currentPeriodEnd: string | null
   limits: Record<string, unknown>
+  eventUsage?: {
+    used: number
+    limit: number
+    available: number
+    planCurrentMaxActiveEvents?: number
+    subscriptionSnapshotMaxActiveEvents?: number
+    effectiveMaxActiveEvents?: number
+  }
 }
 
 export interface EventSummary {
