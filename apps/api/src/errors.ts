@@ -85,6 +85,30 @@ export class AppError extends Error {
   }
 }
 
+function getStringProperty(error: unknown, key: string): string | null {
+  if (typeof error === 'object' && error !== null && key in error) {
+    const value = (error as Record<string, unknown>)[key]
+    return typeof value === 'string' ? value : null
+  }
+  return null
+}
+
+function getRawErrorText(error: unknown): string {
+  const message = error instanceof Error ? error.message : getStringProperty(error, 'message')
+  const details = getStringProperty(error, 'details')
+  const hint = getStringProperty(error, 'hint')
+  const code = getStringProperty(error, 'code')
+  return [message, details, hint, code].filter(Boolean).join(' ')
+}
+
+function sanitizeErrorText(value: string): string {
+  return value
+    .replace(/Bearer\s+[A-Za-z0-9._~+/=-]+/gi, 'Bearer <redacted-token>')
+    .replace(/\b((?:access|refresh)_token)\b\s*[:=]\s*['"]?[^'",\s}]+/gi, '$1=<redacted-token>')
+    .replace(/[+0-9][0-9\s().-]{6,}/g, '<redacted-phone-or-number>')
+    .slice(0, 360)
+}
+
 export function mapUnknownError(error: unknown): AppError {
   if (error instanceof AppError) {
     return error
@@ -92,20 +116,39 @@ export function mapUnknownError(error: unknown): AppError {
   if (error instanceof ZodError) {
     return new AppError('INVALID_INPUT', 'Request validation failed', 400)
   }
-  if (error instanceof Error) {
-    const message = error.message.toUpperCase()
-    const matchedCode = Object.keys(errorStatus).find((code) => message.includes(code)) as ApiErrorCode | undefined
-    if (matchedCode) {
-      return new AppError(matchedCode)
-    }
+  const message = getRawErrorText(error).toUpperCase()
+  const matchedCode = Object.keys(errorStatus).find((code) => message.includes(code)) as ApiErrorCode | undefined
+  if (matchedCode) {
+    return new AppError(matchedCode)
   }
   return new AppError('INTERNAL_ERROR', 'Unexpected application error')
+}
+
+function logUnhandledError(error: unknown, appError: AppError, request: Request, isKnownApplicationError: boolean) {
+  if (appError.status < 500 && isKnownApplicationError) {
+    return
+  }
+  const errorName = getStringProperty(error, 'name') ?? (error instanceof Error ? error.name : null)
+  const providerCode = getStringProperty(error, 'code')
+  const rawText = getRawErrorText(error)
+  console.error('API request failed', {
+    requestId: request.requestId,
+    method: request.method,
+    path: request.originalUrl,
+    code: appError.code,
+    status: appError.status,
+    ...(appError.category ? { category: appError.category } : {}),
+    ...(errorName ? { errorName: sanitizeErrorText(errorName) } : {}),
+    ...(providerCode ? { providerCode: sanitizeErrorText(providerCode) } : {}),
+    ...(rawText ? { safeMessage: sanitizeErrorText(rawText) } : {}),
+  })
 }
 
 export function errorHandler(error: unknown, request: Request, response: Response, _next: NextFunction) {
   void _next
   const appError = mapUnknownError(error)
   const isKnownApplicationError = error instanceof AppError
+  logUnhandledError(error, appError, request, isKnownApplicationError)
   response.status(appError.status).json({
     error: {
       code: appError.code,

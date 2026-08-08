@@ -4,9 +4,21 @@ import { maskSmsPhone, sendWebBulkSms, SmsProviderError, type SmsProviderResult 
 import { fileURLToPath } from 'node:url'
 import { z } from 'zod'
 
-dotenv.config()
+const workerEnvFiles = [
+  '../../../.env',
+  '../../api/.env',
+  '../.env',
+] as const
 
-const envSchema = z.object({
+export function loadWorkerEnvFiles(): void {
+  for (const relativePath of workerEnvFiles) {
+    dotenv.config({ path: fileURLToPath(new URL(relativePath, import.meta.url)), quiet: true })
+  }
+}
+
+loadWorkerEnvFiles()
+
+export const workerEnvSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   WORKER_POLL_INTERVAL_MS: z.coerce.number().int().positive().default(30_000),
   WORKER_BATCH_SIZE: z.coerce.number().int().positive().max(50).default(10),
@@ -18,6 +30,20 @@ const envSchema = z.object({
   SMS_PASSWORD: z.string().min(1),
   SMS_SENDER_ID: z.string().trim().min(1).max(20),
 })
+
+export type WorkerEnv = z.infer<typeof workerEnvSchema>
+
+export function parseWorkerEnv(input: NodeJS.ProcessEnv): WorkerEnv {
+  const parsed = workerEnvSchema.safeParse(input)
+  if (!parsed.success) {
+    const fields = [...new Set(parsed.error.issues.map((issue) => issue.path.join('.') || 'environment'))]
+    throw new Error(
+      `Invalid worker environment. Missing or invalid: ${fields.join(', ')}. ` +
+      'Configure SMS_PROVIDER_URL, SMS_USERNAME, SMS_PASSWORD, and SMS_SENDER_ID in apps/api/.env or apps/worker/.env.',
+    )
+  }
+  return parsed.data
+}
 
 export interface SmsOutboxJob {
   id: string
@@ -159,7 +185,7 @@ export async function processSmsOutboxBatch(store: SmsOutboxStore, provider: Sms
   return jobs.length
 }
 
-function createSupabaseWorkerClient(input: z.infer<typeof envSchema>) {
+function createSupabaseWorkerClient(input: WorkerEnv) {
   return createClient(input.SUPABASE_URL, input.SUPABASE_PUBLISHABLE_KEY, {
     ...(input.SUPABASE_WORKER_ACCESS_TOKEN
       ? {
@@ -178,7 +204,7 @@ function createSupabaseWorkerClient(input: z.infer<typeof envSchema>) {
 }
 
 async function main() {
-  const env = envSchema.parse(process.env)
+  const env = parseWorkerEnv(process.env)
   const store = new SupabaseSmsOutboxStore(createSupabaseWorkerClient(env))
   const provider = new WebBulkSmsOutboxProvider({
     providerUrl: env.SMS_PROVIDER_URL,

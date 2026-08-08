@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { SmsProviderError } from '@ahadi/sms'
-import { classifySmsFailure, processSmsOutboxBatch, type SmsOutboxJob, type SmsOutboxProvider, type SmsOutboxStore } from './index.js'
+import { classifySmsFailure, parseWorkerEnv, processSmsOutboxBatch, type SmsOutboxJob, type SmsOutboxProvider, type SmsOutboxStore } from './index.js'
 
 function job(overrides: Partial<SmsOutboxJob> = {}): SmsOutboxJob {
   return {
@@ -60,4 +60,26 @@ test('permanent failures are not retried', () => {
     retryable: false,
   })
   assert.equal(classifySmsFailure(new SmsProviderError('Unauthorized', 401)).retryable, false)
+})
+
+test('worker environment accepts publishable Supabase key and SMS provider configuration', () => {
+  const env = parseWorkerEnv({
+    SUPABASE_URL: 'https://example.supabase.co',
+    SUPABASE_PUBLISHABLE_KEY: 'publishable-key',
+    SMS_PROVIDER_URL: 'https://sms.example.test/send',
+    SMS_USERNAME: 'sms-user',
+    SMS_PASSWORD: 'sms-password',
+    SMS_SENDER_ID: 'AHADI',
+  })
+
+  assert.equal(env.SUPABASE_PUBLISHABLE_KEY, 'publishable-key')
+  assert.equal(env.WORKER_POLL_INTERVAL_MS, 30_000)
+  assert.equal(env.WORKER_BATCH_SIZE, 10)
+})
+
+test('worker environment error points to SMS env file locations', () => {
+  assert.throws(() => parseWorkerEnv({
+    SUPABASE_URL: 'https://example.supabase.co',
+    SUPABASE_PUBLISHABLE_KEY: 'publishable-key',
+  }), /SMS_PROVIDER_URL.*apps\/api\/\.env or apps\/worker\/\.env/)
 })

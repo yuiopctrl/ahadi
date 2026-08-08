@@ -487,6 +487,7 @@ const knownDatabaseCodes: ApiErrorCode[] = [
   'EVENT_ACCESS_DENIED',
   'EVENT_LIMIT_REACHED',
   'RECEIPT_NOT_FOUND',
+  'SUBSCRIPTION_INACTIVE',
   'SUBSCRIPTION_READ_ONLY',
   'SUBSCRIPTION_BLOCKED',
 ]
@@ -515,9 +516,28 @@ function databaseMessage(error: unknown): string {
     return error.message
   }
   if (typeof error === 'object' && error !== null && 'message' in error && typeof error.message === 'string') {
-    return error.message
+    const details = 'details' in error && typeof error.details === 'string' ? error.details : ''
+    const hint = 'hint' in error && typeof error.hint === 'string' ? error.hint : ''
+    const code = 'code' in error && typeof error.code === 'string' ? error.code : ''
+    return [error.message, details, hint, code].filter(Boolean).join(' ')
   }
   return ''
+}
+
+function safeDatabaseMessage(error: unknown): string {
+  return databaseMessage(error)
+    .replace(/[+0-9][0-9\s().-]{6,}/g, '<redacted-phone>')
+    .slice(0, 220)
+}
+
+function logDatabaseError(requestId: string, operation: string, error: unknown) {
+  const code = typeof error === 'object' && error !== null && 'code' in error && typeof error.code === 'string' ? error.code : undefined
+  console.error('Database operation failed', {
+    requestId,
+    operation,
+    ...(code ? { providerCode: code } : {}),
+    safeMessage: safeDatabaseMessage(error),
+  })
 }
 
 function throwFinancialDatabaseError(error: unknown, fallbackCategory: string): never {
@@ -558,6 +578,21 @@ function numberField(row: Record<string, unknown>, key: string): number {
     return Number.isFinite(parsed) ? parsed : 0
   }
   return 0
+}
+
+function availableEventSlots(value: unknown): number | null {
+  const usage = jsonRecord(value)
+  for (const key of ['available', 'availableEventSlots', 'available_event_slots']) {
+    if (usage[key] !== undefined && usage[key] !== null) {
+      return numberField(usage, key)
+    }
+  }
+  return null
+}
+
+function shouldRetryLegacyCreateEvent(error: unknown): boolean {
+  const message = databaseMessage(error).toLowerCase()
+  return message.includes('rpc_create_event') && (message.includes('p_custom_event_type') || message.includes('schema cache') || message.includes('pgrst202'))
 }
 
 function dateField(row: Record<string, unknown>, key: string): string {
@@ -1422,7 +1457,16 @@ app.post('/api/v1/events', requireAuth, loadUserContext, requireTenantContext, a
     }
     const input = createEventSchema.parse(request.body)
     const client = createUserSupabase(request.auth?.accessToken ?? '')
-    const { data, error } = await client.rpc('rpc_create_event', {
+    const slotCheck = await client.rpc('event_slot_usage', { p_tenant_id: tenantId })
+    if (slotCheck.error) {
+      logDatabaseError(request.requestId, 'event-slot-usage-precheck', slotCheck.error)
+    } else {
+      const available = availableEventSlots(slotCheck.data)
+      if (available !== null && available <= 0) {
+        throw new AppError('EVENT_LIMIT_REACHED', 'Your current package has no available active event slots')
+      }
+    }
+    let { data, error } = await client.rpc('rpc_create_event', {
       p_tenant_id: tenantId,
       p_name: input.name,
       p_event_type: input.eventType,
@@ -1432,7 +1476,21 @@ app.post('/api/v1/events', requireAuth, loadUserContext, requireTenantContext, a
       p_target_amount: input.targetAmount || null,
       p_pledge_deadline: input.pledgeDeadline || null,
     })
+    if (error && shouldRetryLegacyCreateEvent(error)) {
+      const legacy = await client.rpc('rpc_create_event', {
+        p_tenant_id: tenantId,
+        p_name: input.name,
+        p_event_type: input.eventType,
+        p_event_date: input.eventDate || null,
+        p_venue: input.venue || null,
+        p_target_amount: input.targetAmount || null,
+        p_pledge_deadline: input.pledgeDeadline || null,
+      })
+      data = legacy.data
+      error = legacy.error
+    }
     if (error) {
+      logDatabaseError(request.requestId, 'event-create', error)
       throwFinancialDatabaseError(error, 'EVENT_CREATE_FAILED')
     }
     response.status(201).json({ data: jsonRecord(data) })

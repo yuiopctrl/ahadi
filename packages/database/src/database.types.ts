@@ -1872,6 +1872,7 @@ export type Database = {
       }
       rpc_create_event: {
         Args: {
+          p_custom_event_type?: string
           p_event_date?: string
           p_event_type: string
           p_name: string
@@ -2117,4 +2118,3 @@ export const Constants = {
     Enums: {},
   },
 } as const
-
