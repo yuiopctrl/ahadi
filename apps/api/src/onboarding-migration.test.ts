@@ -4,6 +4,7 @@ import test from 'node:test'
 
 const migration = readFileSync(new URL('../../../supabase/migrations/010_fix_onboarding_rpc.sql', import.meta.url), 'utf8')
 const reonboardingMigration = readFileSync(new URL('../../../supabase/migrations/032_allow_reonboarding_after_tenant_reset.sql', import.meta.url), 'utf8')
+const rbacRepairMigration = readFileSync(new URL('../../../supabase/migrations/033_repair_core_rbac_seed_data.sql', import.meta.url), 'utf8')
 const apiApp = readFileSync(new URL('./app.ts', import.meta.url), 'utf8')
 
 test('onboarding migration resolves pgcrypto from the installed schema', () => {
@@ -38,4 +39,14 @@ test('onboarding can run again after tenant data is reset but profile remains', 
   assert.match(reonboardingMigration, /join public\.tenants t on t\.id = tu\.tenant_id/)
   assert.match(reonboardingMigration, /tu\.user_id = caller/)
   assert.match(reonboardingMigration, /ONBOARDING_ALREADY_COMPLETED/)
+})
+
+test('core RBAC seed data is migration-backed for onboarding', () => {
+  assert.match(rbacRepairMigration, /'TENANT_OWNER', 'Tenant Owner'/)
+  assert.match(rbacRepairMigration, /where r\.code = 'TENANT_OWNER'/)
+  assert.match(rbacRepairMigration, /p\.code not like 'platform\.%'/)
+  assert.match(rbacRepairMigration, /'events\.create'/)
+  assert.match(rbacRepairMigration, /'members\.create'/)
+  assert.match(rbacRepairMigration, /'payments\.create'/)
+  assert.match(rbacRepairMigration, /on conflict \(code\) do update/)
 })
