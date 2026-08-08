@@ -123,6 +123,7 @@ export const eventSetupSchema = z
 export const onboardingPayloadSchema = z
   .object({
     planCode: planCodeSchema,
+    betaInvitationCode: nullableTextSchema(64),
     idempotencyKey: z.string().uuid(),
   })
   .and(organizationSchema)

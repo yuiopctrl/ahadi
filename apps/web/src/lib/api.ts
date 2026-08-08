@@ -94,6 +94,8 @@ export const api = {
   hasPin: () => apiFetch<{ hasPin: boolean }>('/auth/has-pin'),
   logout: () => apiFetch<{ ok: boolean }>('/auth/logout', { method: 'POST' }),
   plans: () => apiFetch<{ data: unknown[] }>('/plans', { auth: false }),
+  rolloutSettings: () => apiFetch<{ data: Record<string, unknown> }>('/rollout-settings', { auth: false }),
+  version: () => apiFetch<{ data: Record<string, unknown> }>('/version', { auth: false }),
   completeOnboarding: (payload: OnboardingPayload) =>
     apiFetch('/onboarding/complete', {
       method: 'POST',
@@ -101,9 +103,39 @@ export const api = {
     }),
   me: () => apiFetch<{ data: UserContext }>('/me'),
   tenantContext: (tenantId: string) => apiFetch<{ data: TenantContext }>('/tenant-context', { tenantId }),
+  features: (tenantId: string) => apiFetch<{ data: Record<string, unknown>[] }>('/features', { tenantId }),
+  supportRequests: (tenantId: string) => apiFetch<{ data: Record<string, unknown>[] }>('/support', { tenantId }),
+  createSupportRequest: (tenantId: string, payload: Record<string, unknown>) =>
+    apiFetch<{ data: Record<string, unknown> }>('/support', { tenantId, method: 'POST', body: JSON.stringify(payload) }),
+  createFeedback: (tenantId: string, payload: Record<string, unknown>) =>
+    apiFetch<{ data: Record<string, unknown> }>('/feedback', { tenantId, method: 'POST', body: JSON.stringify(payload) }),
+  reportFrontendError: (payload: Record<string, unknown>) =>
+    apiFetch<{ data: Record<string, unknown> }>('/errors/report', { method: 'POST', body: JSON.stringify(payload) }),
   platformDashboard: () => apiFetch<{ data: Record<string, number> }>('/platform/dashboard'),
   platformTenants: () => apiFetch<{ data: unknown[] }>('/platform/tenants'),
+  platformTenantDetail: (tenantId: string) => apiFetch<{ data: Record<string, unknown> }>(`/platform/tenants/${tenantId}`),
+  extendPlatformTenantTrial: (tenantId: string, payload: Record<string, unknown>) =>
+    apiFetch<{ data: Record<string, unknown> }>(`/platform/tenants/${tenantId}/trial/extend`, { method: 'POST', body: JSON.stringify(payload) }),
+  startSupportSession: (tenantId: string, payload: Record<string, unknown>) =>
+    apiFetch<{ data: Record<string, unknown> }>(`/platform/tenants/${tenantId}/support-session`, { method: 'POST', body: JSON.stringify(payload) }),
   platformPlans: () => apiFetch<{ data: unknown[] }>('/platform/plans'),
+  platformBeta: () => apiFetch<{ data: Record<string, unknown> }>('/platform/beta'),
+  updateRolloutSettings: (payload: Record<string, unknown>) =>
+    apiFetch<{ data: Record<string, unknown> }>('/platform/beta/settings', { method: 'PUT', body: JSON.stringify(payload) }),
+  createBetaInvitation: (payload: Record<string, unknown>) =>
+    apiFetch<{ data: Record<string, unknown> }>('/platform/beta/invitations', { method: 'POST', body: JSON.stringify(payload) }),
+  revokeBetaInvitation: (invitationId: string) =>
+    apiFetch<{ data: Record<string, unknown> }>(`/platform/beta/invitations/${invitationId}/revoke`, { method: 'POST' }),
+  platformSupport: () => apiFetch<{ data: Record<string, unknown>[] }>('/platform/support'),
+  updatePlatformSupportRequest: (supportRequestId: string, payload: Record<string, unknown>) =>
+    apiFetch<{ data: Record<string, unknown> }>(`/platform/support/${supportRequestId}`, { method: 'POST', body: JSON.stringify(payload) }),
+  platformFeedback: () => apiFetch<{ data: Record<string, unknown>[] }>('/platform/feedback'),
+  platformFeatures: () => apiFetch<{ data: Record<string, unknown>[] }>('/platform/features'),
+  updateFeatureFlag: (featureKey: string, payload: Record<string, unknown>) =>
+    apiFetch<{ data: Record<string, unknown>[] }>(`/platform/features/${featureKey}`, { method: 'PUT', body: JSON.stringify(payload) }),
+  updateTenantFeatureFlag: (featureKey: string, payload: Record<string, unknown>) =>
+    apiFetch<{ data: Record<string, unknown>[] }>(`/platform/features/${featureKey}/tenants`, { method: 'PUT', body: JSON.stringify(payload) }),
+  platformErrors: () => apiFetch<{ data: Record<string, unknown>[] }>('/platform/system/errors'),
   tenantUsers: (tenantId: string) => apiFetch<{ data: Record<string, unknown>[] }>('/users', { tenantId }),
   settingsSummary: (tenantId: string) => apiFetch<{ data: Record<string, unknown> }>('/settings-summary', { tenantId }),
   createEvent: (tenantId: string, payload: Record<string, unknown>) =>

@@ -5,6 +5,7 @@ import {
   FileText,
   Gauge,
   Home,
+  LifeBuoy,
   Menu,
   MessageSquareText,
   PieChart,
@@ -36,6 +37,7 @@ function overflowNav(event: EventSummary | null, showPlatformLink = false) {
     { to: '/app/messages', label: 'Messages', icon: MessageSquareText },
     { to: event ? `${eventBase}/reports` : '/app/reports', label: 'Reports', icon: FileText },
     { to: '/app/users', label: 'Users', icon: Users },
+    { to: '/app/help', label: 'Help', icon: LifeBuoy },
     { to: '/app/settings', label: 'Settings', icon: Settings },
   ]
 }
@@ -53,6 +55,7 @@ function desktopNav(event: EventSummary | null) {
     { to: '/app/messages', label: 'Messages', icon: MessageSquareText },
     { to: '/app/reports', label: 'Reports', icon: PieChart },
     { to: '/app/users', label: 'Users', icon: Users },
+    { to: '/app/help', label: 'Help', icon: LifeBuoy },
     { to: '/app/settings', label: 'Settings', icon: Settings },
   ]
 }

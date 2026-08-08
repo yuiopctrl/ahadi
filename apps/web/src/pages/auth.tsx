@@ -37,6 +37,7 @@ interface OnboardingDraft {
   venue: string
   targetAmount: string
   pledgeDeadline: string
+  betaInvitationCode: string
   confirmed: boolean
 }
 
@@ -68,6 +69,7 @@ const defaultDraft: OnboardingDraft = {
   venue: '',
   targetAmount: '',
   pledgeDeadline: '',
+  betaInvitationCode: '',
   confirmed: false,
 }
 
@@ -108,6 +110,7 @@ function activeEventLimitLabel(count: number) {
 const onboardingFieldLabels: Record<string, string> = {
   adminEmail: 'administrator email',
   adminFullName: 'administrator full name',
+  betaInvitationCode: 'beta invitation code',
   customEventType: 'custom event type',
   eventDate: 'event date',
   firstEventName: 'event name',
@@ -404,7 +407,14 @@ function OnboardingPage() {
     queryKey: ['plans'],
     queryFn: async () => ((await api.plans()).data as PlanApiRow[]).map(normalizePlan),
   })
+  const rolloutQuery = useQuery({
+    queryKey: ['rollout-settings'],
+    queryFn: async () => (await api.rolloutSettings()).data,
+  })
   const selectedPlan = plansQuery.data?.find((plan) => plan.code === draft.planCode)
+  const registrationMode = String(rolloutQuery.data?.['registrationMode'] ?? 'OPEN')
+  const isInviteOnly = registrationMode === 'INVITE_ONLY'
+  const isRegistrationPaused = registrationMode === 'PAUSED'
 
   useEffect(() => {
     localStorage.setItem(onboardingDraftKey, JSON.stringify(draft))
@@ -427,6 +437,7 @@ function OnboardingPage() {
         venue: draft.venue || null,
         targetAmount: draft.targetAmount ? Number(draft.targetAmount) : null,
         pledgeDeadline: draft.pledgeDeadline || null,
+        betaInvitationCode: draft.betaInvitationCode || null,
         idempotencyKey: crypto.randomUUID(),
       }
       const parsedPayload = onboardingPayloadSchema.safeParse(payload)
@@ -468,6 +479,16 @@ function OnboardingPage() {
         </header>
         {step === 0 ? (
           <div className="package-stack">
+            {rolloutQuery.data?.['maintenanceNotice'] ? <p className="notice-banner">{String(rolloutQuery.data['maintenanceNotice'])}</p> : null}
+            {isRegistrationPaused ? (
+              <p className="field-error">New workspace registration is temporarily paused. Existing tenants can still sign in.</p>
+            ) : null}
+            {isInviteOnly ? (
+              <label className="invite-code-field">
+                Beta invitation code
+                <input value={draft.betaInvitationCode} placeholder="AHADI-BETA-XXXXXX" onChange={(event) => setField('betaInvitationCode', event.target.value.toUpperCase())} />
+              </label>
+            ) : null}
             {(plansQuery.data ?? []).map((plan) => (
               <button className={draft.planCode === plan.code ? 'package-card selected' : 'package-card'} key={plan.code} type="button" onClick={() => setField('planCode', plan.code)}>
                 <strong>{plan.name}</strong>
@@ -540,9 +561,9 @@ function OnboardingPage() {
           Back
         </button>
         {step < 4 ? (
-          <button type="button" onClick={() => setStep((value) => Math.min(4, value + 1))}>Continue</button>
+          <button type="button" disabled={isRegistrationPaused || (step === 0 && isInviteOnly && !draft.betaInvitationCode.trim())} onClick={() => setStep((value) => Math.min(4, value + 1))}>Continue</button>
         ) : (
-          <button type="button" disabled={!draft.confirmed || mutation.isPending} onClick={() => mutation.mutate()}>
+          <button type="button" disabled={!draft.confirmed || mutation.isPending || isRegistrationPaused || (isInviteOnly && !draft.betaInvitationCode.trim())} onClick={() => mutation.mutate()}>
             {mutation.isPending ? 'Creating...' : 'Create Account'}
           </button>
         )}

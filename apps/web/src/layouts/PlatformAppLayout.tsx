@@ -1,21 +1,30 @@
 import {
   Building2,
+  Flag,
   ClipboardList,
   Gauge,
+  HeartHandshake,
   MessageSquareText,
   Package,
   Receipt,
+  ShieldAlert,
   Settings,
+  SlidersHorizontal,
 } from 'lucide-react'
 import { NavLink, Outlet } from 'react-router-dom'
 import { useSessionStore } from '../stores/session-store'
 
 const platformNav = [
   { to: '/platform', label: 'Overview', icon: Gauge, end: true },
+  { to: '/platform/beta', label: 'Beta Rollout', icon: Flag },
   { to: '/platform/tenants', label: 'Tenants', icon: Building2 },
+  { to: '/platform/support', label: 'Support', icon: HeartHandshake },
+  { to: '/platform/feedback', label: 'Feedback', icon: MessageSquareText },
+  { to: '/platform/features', label: 'Features', icon: SlidersHorizontal },
   { to: '/platform/plans', label: 'Packages', icon: Package },
   { to: '/platform/subscriptions', label: 'Subscriptions', icon: Receipt },
   { to: '/platform/sms', label: 'SMS', icon: MessageSquareText },
+  { to: '/platform/system/errors', label: 'Errors', icon: ShieldAlert },
   { to: '/platform/audit', label: 'Audit Logs', icon: ClipboardList },
   { to: '/platform/settings', label: 'System Settings', icon: Settings },
 ]

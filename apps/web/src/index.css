@@ -1210,6 +1210,104 @@ th {
   color: var(--color-primary);
 }
 
+.notice-banner,
+.success-note {
+  margin: 0;
+  border: 1px solid rgba(22, 132, 85, 0.2);
+  border-radius: 8px;
+  background: rgba(22, 132, 85, 0.08);
+  color: var(--color-success);
+  padding: 12px 14px;
+  font-weight: 700;
+}
+
+.invite-code-field,
+.inline-form,
+.support-form {
+  display: grid;
+  gap: 10px;
+}
+
+.inline-form {
+  grid-template-columns: minmax(0, 1fr);
+  align-items: end;
+  margin-bottom: 14px;
+}
+
+.inline-form input,
+.support-form input,
+.support-form select,
+.support-form textarea,
+.support-ticket textarea,
+.invite-code-field input {
+  min-height: 44px;
+  width: 100%;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: white;
+  color: var(--color-text);
+  padding: 10px 12px;
+  font: inherit;
+}
+
+.support-form textarea,
+.support-ticket textarea {
+  min-height: 110px;
+  resize: vertical;
+}
+
+.help-layout,
+.support-ticket-list,
+.feature-flag-list,
+.checklist-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.help-layout {
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+}
+
+.checklist-grid {
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.checklist-grid span,
+.feature-flag-row,
+.support-ticket {
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: white;
+  padding: 12px;
+}
+
+.checklist-grid span.checked {
+  border-color: rgba(22, 132, 85, 0.26);
+  background: rgba(22, 132, 85, 0.08);
+  color: var(--color-success);
+}
+
+.feature-flag-row,
+.support-ticket {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+}
+
+.feature-flag-row span,
+.support-ticket span {
+  display: block;
+  color: var(--color-muted);
+  font-size: 13px;
+  margin-top: 3px;
+}
+
+.support-ticket textarea {
+  grid-column: 1 / -1;
+}
+
 .finance-grid,
 .finance-section,
 .finance-card-list,
@@ -2023,6 +2121,19 @@ th {
 
   .settings-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .help-layout {
+    grid-template-columns: minmax(0, 1fr) minmax(320px, 0.7fr);
+  }
+
+  .inline-form {
+    grid-template-columns: minmax(0, 1fr) auto auto;
+  }
+
+  .feature-flag-row,
+  .support-ticket {
+    grid-template-columns: minmax(0, 1fr) auto auto;
   }
 
   .platform-layout {

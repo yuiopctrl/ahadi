@@ -3,8 +3,8 @@ import { AuthLayout } from '../layouts/AuthLayout'
 import { PlatformAppLayout } from '../layouts/PlatformAppLayout'
 import { TenantAppLayout } from '../layouts/TenantAppLayout'
 import { AuthPage } from '../pages/auth'
-import { PlatformPage } from '../pages/platform'
-import { EventDetailPage, MemberDetailPage, OutstandingPage, PaymentEntryPage, ReceiptPage, ReportsPage, ShareListPage, SmsHistoryPage, TenantDashboardPage, TenantListPage, TenantSettingsPage, TenantUsersPage } from '../pages/tenant'
+import { PlatformBetaPage, PlatformErrorsPage, PlatformFeaturesPage, PlatformFeedbackPage, PlatformPage, PlatformSupportPage, PlatformTenantDetailPage } from '../pages/platform'
+import { EventDetailPage, MemberDetailPage, OutstandingPage, PaymentEntryPage, ReceiptPage, ReportsPage, ShareListPage, SmsHistoryPage, TenantDashboardPage, TenantHelpPage, TenantListPage, TenantSettingsPage, TenantUsersPage } from '../pages/tenant'
 import { AuthenticatedRoute, OnboardingRoute, PinUnlockedRoute, PlatformOwnerRoute, PublicRoute, TenantRoute } from './guards'
 
 export const router = createBrowserRouter([
@@ -71,6 +71,7 @@ export const router = createBrowserRouter([
                   { path: 'messages', element: <SmsHistoryPage /> },
                   { path: 'reports', element: <ReportsPage /> },
                   { path: 'users', element: <TenantUsersPage /> },
+                  { path: 'help', element: <TenantHelpPage /> },
                   { path: 'settings', element: <TenantSettingsPage /> },
                 ],
               },
@@ -84,10 +85,16 @@ export const router = createBrowserRouter([
                 element: <PlatformAppLayout />,
                 children: [
                   { index: true, element: <PlatformPage title="Overview" /> },
+                  { path: 'beta', element: <PlatformBetaPage /> },
                   { path: 'tenants', element: <PlatformPage title="Tenants" /> },
+                  { path: 'tenants/:tenantId', element: <PlatformTenantDetailPage /> },
+                  { path: 'support', element: <PlatformSupportPage /> },
+                  { path: 'feedback', element: <PlatformFeedbackPage /> },
+                  { path: 'features', element: <PlatformFeaturesPage /> },
                   { path: 'plans', element: <PlatformPage title="Packages & Subscriptions" /> },
                   { path: 'subscriptions', element: <PlatformPage title="Subscriptions" /> },
                   { path: 'sms', element: <PlatformPage title="SMS" /> },
+                  { path: 'system/errors', element: <PlatformErrorsPage /> },
                   { path: 'audit', element: <PlatformPage title="Audit Logs" /> },
                   { path: 'settings', element: <PlatformPage title="System Settings" /> },
                 ],

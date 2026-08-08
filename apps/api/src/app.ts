@@ -3,6 +3,7 @@ import express from 'express'
 import rateLimit from 'express-rate-limit'
 import helmet from 'helmet'
 import morgan from 'morgan'
+import { randomBytes } from 'node:crypto'
 import { z, ZodError } from 'zod'
 import type { ApiErrorCode } from '@ahadi/types'
 import {
@@ -280,6 +281,82 @@ const resendBalanceReminderSchema = z.object({
 
 const processQueuedSmsSchema = z.object({
   batchSize: z.coerce.number().int().positive().max(50).optional(),
+})
+
+const rolloutSettingsSchema = z.object({
+  registrationMode: z.enum(['OPEN', 'INVITE_ONLY', 'PAUSED']),
+  betaModeEnabled: z.boolean().optional(),
+  defaultTrialDays: z.coerce.number().int().nonnegative().optional(),
+  supportEmail: optionalShortTextSchema,
+  supportPhone: optionalShortTextSchema,
+  maintenanceNotice: optionalTextSchema,
+  maintenanceMode: z.enum(['OFF', 'READ_ONLY']).optional(),
+  minimumSupportedWebVersion: optionalShortTextSchema,
+})
+
+const betaInvitationCreateSchema = z.object({
+  intendedName: optionalShortTextSchema,
+  intendedPhone: z.string().trim().optional().nullable(),
+  intendedEmail: optionalShortTextSchema,
+  planId: z.string().uuid().optional().nullable(),
+  trialDaysOverride: z.coerce.number().int().nonnegative().optional().nullable(),
+  maxUses: z.coerce.number().int().positive().max(100).optional(),
+  expiresAt: z.string().datetime({ offset: true }).optional().nullable(),
+})
+
+const supportRequestSchema = z.object({
+  category: z.enum(['LOGIN', 'MEMBERS', 'PLEDGES', 'PAYMENTS', 'SMS', 'REPORTS', 'SUBSCRIPTION', 'OTHER']),
+  subject: z.string().trim().min(3).max(160),
+  description: z.string().trim().min(10).max(4000),
+  eventId: z.string().uuid().optional().nullable(),
+  contactPreference: optionalShortTextSchema,
+  appContext: z.record(z.string(), z.unknown()).optional(),
+})
+
+const supportRequestUpdateSchema = z.object({
+  status: z.enum(['OPEN', 'IN_PROGRESS', 'WAITING_CUSTOMER', 'RESOLVED', 'CLOSED']).optional().nullable(),
+  priority: z.enum(['LOW', 'NORMAL', 'HIGH', 'URGENT']).optional().nullable(),
+  assignedTo: z.string().uuid().optional().nullable(),
+  note: optionalTextSchema,
+})
+
+const supportAccessSessionSchema = z.object({
+  reason: z.string().trim().min(5).max(500),
+  durationMinutes: z.coerce.number().int().positive().max(240).optional(),
+})
+
+const feedbackSchema = z.object({
+  category: z.enum(['SUGGESTION', 'PROBLEM', 'USABILITY', 'OTHER']),
+  message: z.string().trim().min(3).max(4000),
+  eventId: z.string().uuid().optional().nullable(),
+  page: optionalShortTextSchema,
+  appContext: z.record(z.string(), z.unknown()).optional(),
+})
+
+const frontendErrorReportSchema = z.object({
+  tenantId: z.string().uuid().optional().nullable(),
+  errorCode: optionalShortTextSchema,
+  requestId: optionalShortTextSchema,
+  route: optionalShortTextSchema,
+  component: optionalShortTextSchema,
+  appVersion: optionalShortTextSchema,
+  browserSummary: optionalShortTextSchema,
+  metadata: z.record(z.string(), z.unknown()).optional(),
+})
+
+const tenantTrialExtensionSchema = z.object({
+  days: z.coerce.number().int().positive().max(90),
+  reason: z.string().trim().min(3).max(500),
+})
+
+const featureFlagSchema = z.object({
+  enabledGlobally: z.boolean(),
+  betaOnly: z.boolean().optional(),
+})
+
+const tenantFeatureOverrideSchema = z.object({
+  tenantId: z.string().uuid(),
+  override: z.enum(['INHERIT', 'ENABLED', 'DISABLED']),
 })
 
 const whatsappShareFormatSchema = z.enum(['DETAILED', 'PRIVACY', 'PAYMENT_PROGRESS', 'OUTSTANDING_FOLLOW_UP'])
@@ -836,6 +913,24 @@ function queuedBatchId(data: Record<string, unknown>): string | null {
   return typeof data['batchId'] === 'string' ? data['batchId'] : null
 }
 
+function generateBetaInvitationCode() {
+  return `AHADI-BETA-${randomBytes(4).toString('base64url').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6)}`
+}
+
+function appContext(body: Record<string, unknown> | undefined) {
+  return body ?? {}
+}
+
+async function ensureTenantFeatureEnabled(client: ReturnType<typeof createUserSupabase>, tenantId: string, featureKey: string) {
+  const { data, error } = await client.rpc('has_feature', { p_tenant_id: tenantId, p_feature_key: featureKey })
+  if (error) {
+    throwFinancialDatabaseError(error, 'FEATURE_LOOKUP_FAILED')
+  }
+  if (data !== true) {
+    throw new AppError('FEATURE_DISABLED', `${featureKey} is not enabled for this tenant`)
+  }
+}
+
 function requireReportExportPermission(request: express.Request) {
   const permissions = new Set(request.tenantContext?.permissions ?? [])
   if (!permissions.has('reports.export') && !request.tenantContext?.membership?.isOwner) {
@@ -881,6 +976,7 @@ async function writeReportExportAudit(client: ReturnType<typeof createUserSupaba
     },
     p_reason: null,
   })
+  await client.rpc('rpc_track_product_event', { p_event_name: 'REPORT_EXPORTED', p_tenant_id: tenantId, p_metadata: { eventId, reportType, format, rowCount, memberId: memberId ?? null } })
 }
 
 async function handleReportExport(request: express.Request, response: express.Response, reportType: ReportType, memberId?: string | null) {
@@ -892,6 +988,8 @@ async function handleReportExport(request: express.Request, response: express.Re
   if (!supported.includes(exportRequest.format)) {
     throw new AppError('REPORT_FORMAT_NOT_SUPPORTED', `${exportRequest.format} is not supported for ${reportExportTitle(reportType)}`)
   }
+  const client = createUserSupabase(request.auth?.accessToken ?? '')
+  await ensureTenantFeatureEnabled(client, tenantId, reportType === 'member-statement' ? 'member_statement_pdf' : 'report_exports')
   const limit = exportLimits[exportRequest.format]
   const reportInput = {
     ...exportRequestToReportInput(exportRequest),
@@ -899,7 +997,6 @@ async function handleReportExport(request: express.Request, response: express.Re
     page: 1,
     pageSize: limit,
   }
-  const client = createUserSupabase(request.auth?.accessToken ?? '')
   const report = await getEventReportResult(client, tenantId, eventId, reportType, reportInput, request.requestId)
   const rowCount = exportRows(report).length
   const totalRows = Number(jsonRecord(report['pagination'])['totalRows'] ?? rowCount)
@@ -1102,6 +1199,39 @@ app.get('/api/v1/plans', async (_request, response, next) => {
   }
 })
 
+app.get('/api/v1/rollout-settings', async (_request, response, next) => {
+  try {
+    const { data, error } = await supabasePublic.rpc('rpc_get_rollout_settings_public')
+    if (error) {
+      throw error
+    }
+    response.json({ data: jsonRecord(data) })
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.get('/api/v1/version', async (_request, response, next) => {
+  try {
+    const { data, error } = await supabasePublic.rpc('rpc_get_rollout_settings_public')
+    if (error) {
+      throw error
+    }
+    const settings = jsonRecord(data)
+    response.json({
+      data: {
+        appVersion: env.APP_VERSION,
+        webVersion: settings['webVersion'] ?? env.APP_VERSION,
+        apiVersion: settings['apiVersion'] ?? env.APP_VERSION,
+        releaseChannel: settings['releaseChannel'] ?? 'BETA',
+        minimumSupportedWebVersion: settings['minimumSupportedWebVersion'] ?? null,
+      },
+    })
+  } catch (error) {
+    next(error)
+  }
+})
+
 app.post('/api/v1/onboarding/complete', requireAuth, async (request, response, next) => {
   try {
     const parsedInput = onboardingPayloadSchema.safeParse(request.body)
@@ -1111,6 +1241,31 @@ app.post('/api/v1/onboarding/complete', requireAuth, async (request, response, n
     }
     const input = parsedInput.data
     const client = createUserSupabase(request.auth?.accessToken ?? '')
+    const rollout = await supabasePublic.rpc('rpc_get_rollout_settings_public')
+    if (rollout.error) {
+      throw rollout.error
+    }
+    const rolloutSettings = jsonRecord(rollout.data)
+    const registrationMode = String(rolloutSettings['registrationMode'] ?? 'OPEN')
+    if (registrationMode === 'PAUSED') {
+      throw new AppError('REGISTRATION_PAUSED', 'New workspace registration is temporarily paused', 503)
+    }
+    if (registrationMode === 'INVITE_ONLY') {
+      if (!input.betaInvitationCode) {
+        throw new AppError('INVITATION_REQUIRED', 'A beta invitation code is required', 403)
+      }
+      const validated = await supabasePublic.rpc('rpc_validate_beta_invitation', {
+        p_code: input.betaInvitationCode,
+        p_phone_e164: request.auth?.user?.phone ?? null,
+      })
+      if (validated.error) {
+        throw validated.error
+      }
+      const validation = jsonRecord(validated.data)
+      if (validation['valid'] !== true) {
+        throw new AppError('INVITATION_INVALID', String(validation['reason'] ?? 'Invitation code is invalid'), 403)
+      }
+    }
     const { data, error } = await client.rpc('rpc_complete_tenant_onboarding', {
       p_plan_code: input.planCode,
       p_tenant_name: input.tenantName,
@@ -1131,6 +1286,22 @@ app.post('/api/v1/onboarding/complete', requireAuth, async (request, response, n
       const classification = classifyOnboardingDatabaseError(error, Boolean(request.auth?.user))
       throw new AppError(classification.code, classification.message, classification.status, classification.category)
     }
+    const resultRecord = jsonRecord(data)
+    const tenantId = typeof resultRecord['tenant_id'] === 'string' ? resultRecord['tenant_id'] : typeof resultRecord['tenantId'] === 'string' ? resultRecord['tenantId'] : null
+    if (input.betaInvitationCode && tenantId) {
+      const consume = await client.rpc('rpc_consume_beta_invitation', { p_code: input.betaInvitationCode, p_tenant_id: tenantId })
+      if (consume.error) {
+        console.error('Beta invitation consume failed', {
+          requestId: request.requestId,
+          tenantId,
+          safeMessage: databaseMessage(consume.error).slice(0, 160),
+        })
+      }
+    }
+    if (tenantId) {
+      await client.rpc('rpc_track_product_event', { p_event_name: 'TENANT_CREATED', p_tenant_id: tenantId, p_metadata: { source: 'onboarding' } })
+      await client.rpc('rpc_track_product_event', { p_event_name: 'ONBOARDING_COMPLETED', p_tenant_id: tenantId, p_metadata: { source: 'onboarding' } })
+    }
     response.json(data)
   } catch (error) {
     next(error)
@@ -1143,6 +1314,104 @@ app.get('/api/v1/me', requireAuth, loadUserContext, (request, response) => {
 
 app.get('/api/v1/tenant-context', requireAuth, loadUserContext, requireTenantContext, (request, response) => {
   response.json({ data: request.tenantContext })
+})
+
+app.get('/api/v1/features', requireAuth, loadUserContext, requireTenantContext, async (request, response, next) => {
+  try {
+    const tenantId = tenantIdFromRequest(request)
+    const client = createUserSupabase(request.auth?.accessToken ?? '')
+    const { data, error } = await client.rpc('rpc_list_feature_flags', { p_tenant_id: tenantId })
+    if (error) {
+      throwFinancialDatabaseError(error, 'FEATURES_LIST_FAILED')
+    }
+    response.json({ data: jsonArray(data) })
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.get('/api/v1/support', requireAuth, loadUserContext, requireTenantContext, async (request, response, next) => {
+  try {
+    const tenantId = tenantIdFromRequest(request)
+    const client = createUserSupabase(request.auth?.accessToken ?? '')
+    await ensureTenantFeatureEnabled(client, tenantId, 'support_requests')
+    const { data, error } = await client.rpc('rpc_list_my_support_requests', { p_tenant_id: tenantId })
+    if (error) {
+      throwFinancialDatabaseError(error, 'SUPPORT_REQUESTS_LIST_FAILED')
+    }
+    response.json({ data: jsonArray(data) })
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.post('/api/v1/support', requireAuth, loadUserContext, requireTenantContext, async (request, response, next) => {
+  try {
+    const tenantId = tenantIdFromRequest(request)
+    const input = supportRequestSchema.parse(request.body)
+    const client = createUserSupabase(request.auth?.accessToken ?? '')
+    await ensureTenantFeatureEnabled(client, tenantId, 'support_requests')
+    const { data, error } = await client.rpc('rpc_create_support_request', {
+      p_app_context: appContext(input.appContext),
+      p_category: input.category,
+      p_contact_preference: input.contactPreference ?? null,
+      p_description: input.description,
+      p_event_id: input.eventId ?? null,
+      p_subject: input.subject,
+      p_tenant_id: tenantId,
+    })
+    if (error) {
+      throwFinancialDatabaseError(error, 'SUPPORT_REQUEST_CREATE_FAILED')
+    }
+    response.status(201).json({ data: jsonRecord(data) })
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.post('/api/v1/feedback', requireAuth, loadUserContext, requireTenantContext, async (request, response, next) => {
+  try {
+    const tenantId = tenantIdFromRequest(request)
+    const input = feedbackSchema.parse(request.body)
+    const client = createUserSupabase(request.auth?.accessToken ?? '')
+    const { data, error } = await client.rpc('rpc_create_feedback', {
+      p_app_context: appContext(input.appContext),
+      p_category: input.category,
+      p_event_id: input.eventId ?? null,
+      p_message: input.message,
+      p_page: input.page ?? null,
+      p_tenant_id: tenantId,
+    })
+    if (error) {
+      throwFinancialDatabaseError(error, 'FEEDBACK_CREATE_FAILED')
+    }
+    response.status(201).json({ data: jsonRecord(data) })
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.post('/api/v1/errors/report', requireAuth, loadUserContext, async (request, response, next) => {
+  try {
+    const input = frontendErrorReportSchema.parse(request.body ?? {})
+    const client = createUserSupabase(request.auth?.accessToken ?? '')
+    const { data, error } = await client.rpc('rpc_report_frontend_error', {
+      p_app_version: input.appVersion ?? null,
+      p_browser_summary: input.browserSummary ?? null,
+      p_component: input.component ?? null,
+      p_error_code: input.errorCode ?? null,
+      p_metadata: appContext(input.metadata),
+      p_request_id: input.requestId ?? null,
+      p_route: input.route ?? null,
+      p_tenant_id: input.tenantId ?? null,
+    })
+    if (error) {
+      throwFinancialDatabaseError(error, 'FRONTEND_ERROR_REPORT_FAILED')
+    }
+    response.status(201).json({ data: jsonRecord(data) })
+  } catch (error) {
+    next(error)
+  }
 })
 
 app.post('/api/v1/events', requireAuth, loadUserContext, requireTenantContext, async (request, response, next) => {
@@ -1202,11 +1471,46 @@ app.get('/api/v1/platform/tenants/:tenantId', requireAuth, loadUserContext, requ
   try {
     const client = createUserSupabase(request.auth?.accessToken ?? '')
     const tenantId = tenantContextHeaderSchema.shape.tenantId.parse(request.params['tenantId'])
-    const { data, error } = await client.from('tenants').select('*').eq('id', tenantId).single()
+    const { data, error } = await client.rpc('rpc_get_platform_tenant_detail', { p_tenant_id: tenantId })
     if (error) {
       throw error
     }
     response.json({ data })
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.post('/api/v1/platform/tenants/:tenantId/trial/extend', requireAuth, loadUserContext, requirePlatformPermission('platform.subscriptions.manage'), async (request, response, next) => {
+  try {
+    const client = createUserSupabase(request.auth?.accessToken ?? '')
+    const tenantId = tenantContextHeaderSchema.shape.tenantId.parse(request.params['tenantId'])
+    const input = tenantTrialExtensionSchema.parse(request.body)
+    const { data, error } = await client.rpc('rpc_extend_tenant_trial', { p_tenant_id: tenantId, p_days: input.days, p_reason: input.reason })
+    if (error) {
+      throwFinancialDatabaseError(error, 'SUBSCRIPTION_INACTIVE')
+    }
+    response.json({ data })
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.post('/api/v1/platform/tenants/:tenantId/support-session', requireAuth, loadUserContext, requirePlatformPermission('platform.support_session.start'), async (request, response, next) => {
+  try {
+    const client = createUserSupabase(request.auth?.accessToken ?? '')
+    const tenantId = tenantContextHeaderSchema.shape.tenantId.parse(request.params['tenantId'])
+    const input = supportAccessSessionSchema.parse(request.body)
+    const { data, error } = await client.rpc('rpc_start_support_access_session', {
+      p_minutes: input.durationMinutes ?? 60,
+      p_reason: input.reason,
+      p_scope: 'TENANT_CONFIGURATION',
+      p_tenant_id: tenantId,
+    })
+    if (error) {
+      throwFinancialDatabaseError(error, 'SUPPORT_ACCESS_SESSION_FAILED')
+    }
+    response.status(201).json({ data: jsonRecord(data) })
   } catch (error) {
     next(error)
   }
@@ -1218,6 +1522,181 @@ app.get('/api/v1/platform/plans', requireAuth, loadUserContext, requirePlatformP
     const { data, error } = await client.rpc('rpc_list_platform_plans')
     if (error) {
       throwFinancialDatabaseError(error, 'PLATFORM_PLANS_FAILED')
+    }
+    response.json({ data: jsonArray(data) })
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.get('/api/v1/platform/beta', requireAuth, loadUserContext, requirePlatformPermission('platform.beta.view'), async (request, response, next) => {
+  try {
+    const client = createUserSupabase(request.auth?.accessToken ?? '')
+    const { data, error } = await client.rpc('rpc_get_platform_beta_dashboard')
+    if (error) {
+      throwFinancialDatabaseError(error, 'PLATFORM_ACCESS_DENIED')
+    }
+    response.json({ data: jsonRecord(data) })
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.put('/api/v1/platform/beta/settings', requireAuth, loadUserContext, requirePlatformPermission('platform.beta.manage'), async (request, response, next) => {
+  try {
+    const input = rolloutSettingsSchema.parse(request.body)
+    const client = createUserSupabase(request.auth?.accessToken ?? '')
+    const { data, error } = await client.rpc('rpc_update_rollout_settings', {
+      p_beta_mode_enabled: input.betaModeEnabled ?? null,
+      p_default_trial_days: input.defaultTrialDays ?? null,
+      p_maintenance_mode: input.maintenanceMode ?? null,
+      p_maintenance_notice: input.maintenanceNotice ?? null,
+      p_minimum_supported_web_version: input.minimumSupportedWebVersion ?? null,
+      p_registration_mode: input.registrationMode,
+      p_support_email: input.supportEmail ?? null,
+      p_support_phone: input.supportPhone ?? null,
+    })
+    if (error) {
+      throwFinancialDatabaseError(error, 'PLATFORM_ACCESS_DENIED')
+    }
+    response.json({ data: jsonRecord(data) })
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.post('/api/v1/platform/beta/invitations', requireAuth, loadUserContext, requirePlatformPermission('platform.beta.manage'), async (request, response, next) => {
+  try {
+    const input = betaInvitationCreateSchema.parse(request.body)
+    const code = generateBetaInvitationCode()
+    const client = createUserSupabase(request.auth?.accessToken ?? '')
+    const { data, error } = await client.rpc('rpc_create_beta_invitation', {
+      p_code: code,
+      p_expires_at: input.expiresAt ?? null,
+      p_intended_email: input.intendedEmail ?? null,
+      p_intended_name: input.intendedName ?? null,
+      p_intended_phone_e164: input.intendedPhone ?? null,
+      p_max_uses: input.maxUses ?? 1,
+      p_plan_id: input.planId ?? null,
+      p_trial_days_override: input.trialDaysOverride ?? null,
+    })
+    if (error) {
+      throwFinancialDatabaseError(error, 'PLATFORM_ACCESS_DENIED')
+    }
+    response.status(201).json({ data: jsonRecord(data) })
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.post('/api/v1/platform/beta/invitations/:invitationId/revoke', requireAuth, loadUserContext, requirePlatformPermission('platform.beta.manage'), async (request, response, next) => {
+  try {
+    const invitationId = uuidParamSchema.parse(request.params['invitationId'])
+    const client = createUserSupabase(request.auth?.accessToken ?? '')
+    const { data, error } = await client.rpc('rpc_revoke_beta_invitation', { p_invitation_id: invitationId })
+    if (error) {
+      throwFinancialDatabaseError(error, 'PLATFORM_ACCESS_DENIED')
+    }
+    response.json({ data: jsonRecord(data) })
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.get('/api/v1/platform/support', requireAuth, loadUserContext, requirePlatformPermission('platform.support.view'), async (request, response, next) => {
+  try {
+    const client = createUserSupabase(request.auth?.accessToken ?? '')
+    const { data, error } = await client.rpc('rpc_list_platform_support_requests')
+    if (error) {
+      throwFinancialDatabaseError(error, 'PLATFORM_ACCESS_DENIED')
+    }
+    response.json({ data: jsonArray(data) })
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.post('/api/v1/platform/support/:supportRequestId', requireAuth, loadUserContext, requirePlatformPermission('platform.support.manage'), async (request, response, next) => {
+  try {
+    const supportRequestId = uuidParamSchema.parse(request.params['supportRequestId'])
+    const input = supportRequestUpdateSchema.parse(request.body ?? {})
+    const client = createUserSupabase(request.auth?.accessToken ?? '')
+    const { data, error } = await client.rpc('rpc_update_support_request', {
+      p_assigned_platform_user_id: input.assignedTo ?? null,
+      p_note: input.note ?? null,
+      p_priority: input.priority ?? null,
+      p_request_id: supportRequestId,
+      p_status: input.status ?? null,
+    })
+    if (error) {
+      throwFinancialDatabaseError(error, 'SUPPORT_REQUEST_UPDATE_FAILED')
+    }
+    response.json({ data: jsonRecord(data) })
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.get('/api/v1/platform/feedback', requireAuth, loadUserContext, requirePlatformPermission('platform.feedback.view'), async (request, response, next) => {
+  try {
+    const client = createUserSupabase(request.auth?.accessToken ?? '')
+    const { data, error } = await client.rpc('rpc_list_platform_feedback')
+    if (error) {
+      throwFinancialDatabaseError(error, 'PLATFORM_ACCESS_DENIED')
+    }
+    response.json({ data: jsonArray(data) })
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.get('/api/v1/platform/features', requireAuth, loadUserContext, requirePlatformPermission('platform.features.view'), async (request, response, next) => {
+  try {
+    const client = createUserSupabase(request.auth?.accessToken ?? '')
+    const { data, error } = await client.rpc('rpc_list_feature_flags')
+    if (error) {
+      throwFinancialDatabaseError(error, 'PLATFORM_ACCESS_DENIED')
+    }
+    response.json({ data: jsonArray(data) })
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.put('/api/v1/platform/features/:featureKey', requireAuth, loadUserContext, requirePlatformPermission('platform.features.manage'), async (request, response, next) => {
+  try {
+    const input = featureFlagSchema.parse(request.body)
+    const client = createUserSupabase(request.auth?.accessToken ?? '')
+    const { data, error } = await client.rpc('rpc_set_feature_flag', { p_beta_only: input.betaOnly ?? null, p_enabled_globally: input.enabledGlobally, p_feature_key: request.params['featureKey'] })
+    if (error) {
+      throwFinancialDatabaseError(error, 'PLATFORM_ACCESS_DENIED')
+    }
+    response.json({ data: jsonArray(data) })
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.put('/api/v1/platform/features/:featureKey/tenants', requireAuth, loadUserContext, requirePlatformPermission('platform.features.manage'), async (request, response, next) => {
+  try {
+    const input = tenantFeatureOverrideSchema.parse(request.body)
+    const client = createUserSupabase(request.auth?.accessToken ?? '')
+    const { data, error } = await client.rpc('rpc_set_tenant_feature_flag', { p_feature_key: request.params['featureKey'], p_override: input.override, p_tenant_id: input.tenantId })
+    if (error) {
+      throwFinancialDatabaseError(error, 'PLATFORM_ACCESS_DENIED')
+    }
+    response.json({ data: jsonArray(data) })
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.get('/api/v1/platform/system/errors', requireAuth, loadUserContext, requirePlatformPermission('platform.system_errors.view'), async (request, response, next) => {
+  try {
+    const client = createUserSupabase(request.auth?.accessToken ?? '')
+    const { data, error } = await client.rpc('rpc_list_platform_errors')
+    if (error) {
+      throwFinancialDatabaseError(error, 'PLATFORM_ACCESS_DENIED')
     }
     response.json({ data: jsonArray(data) })
   } catch (error) {
@@ -1248,6 +1727,7 @@ app.post('/api/v1/events/:eventId/reports/:reportType', requireAuth, loadUserCon
     const input = reportRequestSchema.parse(request.body ?? {})
     const client = createUserSupabase(request.auth?.accessToken ?? '')
     const data = await getEventReportResult(client, tenantId, eventId, reportType, input, request.requestId)
+    await client.rpc('rpc_track_product_event', { p_event_name: 'REPORT_VIEWED', p_tenant_id: tenantId, p_metadata: { eventId, reportType } })
     response.json({ data })
   } catch (error) {
     next(error)
@@ -1479,6 +1959,7 @@ app.get('/api/v1/events/:eventId/share/whatsapp-settings', requireAuth, loadUser
     const tenantId = tenantIdFromRequest(request)
     const eventId = uuidParamSchema.parse(request.params['eventId'])
     const client = createUserSupabase(request.auth?.accessToken ?? '')
+    await ensureTenantFeatureEnabled(client, tenantId, 'whatsapp_lists')
     const { data, error } = await client.rpc('rpc_get_event_whatsapp_share_settings', { p_tenant_id: tenantId, p_event_id: eventId })
     if (error) {
       throwFinancialDatabaseError(error, 'WHATSAPP_SHARE_SETTINGS_GET_FAILED')
@@ -1495,6 +1976,7 @@ app.put('/api/v1/events/:eventId/share/whatsapp-settings', requireAuth, loadUser
     const eventId = uuidParamSchema.parse(request.params['eventId'])
     const input = whatsappShareSettingsSchema.parse(request.body)
     const client = createUserSupabase(request.auth?.accessToken ?? '')
+    await ensureTenantFeatureEnabled(client, tenantId, 'whatsapp_lists')
     const { data, error } = await client.rpc('rpc_update_event_whatsapp_share_settings', {
       p_tenant_id: tenantId,
       p_event_id: eventId,
@@ -1524,6 +2006,7 @@ app.post('/api/v1/events/:eventId/share/whatsapp-preview', requireAuth, loadUser
     const eventId = uuidParamSchema.parse(request.params['eventId'])
     const input = whatsappSharePreviewSchema.parse(request.body)
     const client = createUserSupabase(request.auth?.accessToken ?? '')
+    await ensureTenantFeatureEnabled(client, tenantId, 'whatsapp_lists')
     const { data, error } = await client.rpc('rpc_generate_event_whatsapp_share_preview', {
       p_tenant_id: tenantId,
       p_event_id: eventId,
@@ -1556,6 +2039,7 @@ app.post('/api/v1/events/:eventId/reminders/balance', requireAuth, loadUserConte
     const eventId = uuidParamSchema.parse(request.params['eventId'])
     const input = balanceReminderSchema.parse(request.body)
     const client = createUserSupabase(request.auth?.accessToken ?? '')
+    await ensureTenantFeatureEnabled(client, tenantId, 'balance_reminders')
     const { data, error } = await client.rpc('rpc_enqueue_balance_reminder_sms', {
       p_tenant_id: tenantId,
       p_event_id: eventId,
@@ -1587,6 +2071,7 @@ app.post('/api/v1/events/:eventId/reminders/balance/bulk', requireAuth, loadUser
     const eventId = uuidParamSchema.parse(request.params['eventId'])
     const input = bulkBalanceReminderSchema.parse(request.body)
     const client = createUserSupabase(request.auth?.accessToken ?? '')
+    await ensureTenantFeatureEnabled(client, tenantId, 'balance_reminders')
     const { data, error } = await client.rpc('rpc_enqueue_balance_reminder_bulk', {
       p_tenant_id: tenantId,
       p_event_id: eventId,
@@ -1821,6 +2306,7 @@ app.get('/api/v1/messages/templates/balance-reminder', requireAuth, loadUserCont
   try {
     const tenantId = tenantIdFromRequest(request)
     const client = createUserSupabase(request.auth?.accessToken ?? '')
+    await ensureTenantFeatureEnabled(client, tenantId, 'balance_reminders')
     const { data, error } = await client.rpc('rpc_get_balance_reminder_template', { p_tenant_id: tenantId })
     if (error) {
       throwFinancialDatabaseError(error, 'BALANCE_REMINDER_TEMPLATE_GET_FAILED')
@@ -1836,6 +2322,7 @@ app.put('/api/v1/messages/templates/balance-reminder', requireAuth, loadUserCont
     const tenantId = tenantIdFromRequest(request)
     const input = templateBodySchema.parse(request.body)
     const client = createUserSupabase(request.auth?.accessToken ?? '')
+    await ensureTenantFeatureEnabled(client, tenantId, 'balance_reminders')
     const { data, error } = await client.rpc('rpc_upsert_balance_reminder_template', { p_tenant_id: tenantId, p_body: input.body })
     if (error) {
       throwFinancialDatabaseError(error, 'BALANCE_REMINDER_TEMPLATE_SAVE_FAILED')
@@ -1850,6 +2337,7 @@ app.post('/api/v1/messages/templates/balance-reminder/reset', requireAuth, loadU
   try {
     const tenantId = tenantIdFromRequest(request)
     const client = createUserSupabase(request.auth?.accessToken ?? '')
+    await ensureTenantFeatureEnabled(client, tenantId, 'balance_reminders')
     const { data, error } = await client.rpc('rpc_reset_balance_reminder_template', { p_tenant_id: tenantId })
     if (error) {
       throwFinancialDatabaseError(error, 'BALANCE_REMINDER_TEMPLATE_RESET_FAILED')
@@ -1866,6 +2354,7 @@ app.post('/api/v1/messages/:outboxId/resend-balance-reminder', requireAuth, load
     const outboxId = uuidParamSchema.parse(request.params['outboxId'])
     const input = resendBalanceReminderSchema.parse(request.body)
     const client = createUserSupabase(request.auth?.accessToken ?? '')
+    await ensureTenantFeatureEnabled(client, tenantId, 'balance_reminders')
     const { data, error } = await client.rpc('rpc_resend_failed_balance_reminder', {
       p_tenant_id: tenantId,
       p_outbox_id: outboxId,

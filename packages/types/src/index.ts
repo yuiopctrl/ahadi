@@ -23,6 +23,10 @@ export type ApiErrorCode =
   | 'TENANT_ACCESS_DENIED'
   | 'PLATFORM_ACCESS_DENIED'
   | 'ONBOARDING_ALREADY_COMPLETED'
+  | 'REGISTRATION_PAUSED'
+  | 'INVITATION_REQUIRED'
+  | 'INVITATION_INVALID'
+  | 'FEATURE_DISABLED'
   | 'PLAN_NOT_AVAILABLE'
   | 'SUBSCRIPTION_INACTIVE'
   | 'MEMBER_NOT_FOUND'
@@ -273,6 +277,7 @@ export interface OnboardingPayload {
   venue?: string | null
   targetAmount?: number | null
   pledgeDeadline?: string | null
+  betaInvitationCode?: string | null
   idempotencyKey: string
 }
 

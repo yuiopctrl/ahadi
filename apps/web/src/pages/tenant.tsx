@@ -1515,6 +1515,103 @@ export function TenantUsersPage() {
   )
 }
 
+export function TenantHelpPage() {
+  const session = useSessionStore()
+  const queryClient = useQueryClient()
+  const tenantId = session.selectedTenantId
+  const activeEvent = session.selectedTenantContext?.events[0] ?? null
+  const [supportSubject, setSupportSubject] = useState('')
+  const [supportDescription, setSupportDescription] = useState('')
+  const [supportCategory, setSupportCategory] = useState('OTHER')
+  const [feedbackMessage, setFeedbackMessage] = useState('')
+  const supportQuery = useQuery({ queryKey: ['support-requests', tenantId], queryFn: async () => (await api.supportRequests(tenantId ?? '')).data, enabled: Boolean(tenantId) })
+  const featuresQuery = useQuery({ queryKey: ['tenant-features', tenantId], queryFn: async () => (await api.features(tenantId ?? '')).data, enabled: Boolean(tenantId) })
+  const versionQuery = useQuery({ queryKey: ['version'], queryFn: async () => (await api.version()).data })
+  const supportEnabled = (featuresQuery.data ?? []).some((row) => asString(row.key) === 'support_requests' && row.enabled === true)
+  const createSupport = useMutation({
+    mutationFn: async () => api.createSupportRequest(tenantId ?? '', {
+      category: supportCategory,
+      subject: supportSubject,
+      description: supportDescription,
+      eventId: activeEvent?.id ?? null,
+      appContext: { route: window.location.pathname, appVersion: asString(versionQuery.data?.appVersion), browser: navigator.userAgent.slice(0, 120) },
+    }),
+    onSuccess: () => {
+      setSupportSubject('')
+      setSupportDescription('')
+      void queryClient.invalidateQueries({ queryKey: ['support-requests', tenantId] })
+    },
+  })
+  const createFeedback = useMutation({
+    mutationFn: async () => api.createFeedback(tenantId ?? '', {
+      category: 'SUGGESTION',
+      message: feedbackMessage,
+      eventId: activeEvent?.id ?? null,
+      page: window.location.pathname,
+      appContext: { route: window.location.pathname, appVersion: asString(versionQuery.data?.appVersion) },
+    }),
+    onSuccess: () => setFeedbackMessage(''),
+  })
+  const checklist = [
+    ['Tenant selected', Boolean(tenantId)],
+    ['Active event ready', Boolean(activeEvent)],
+    ['Members page available', Boolean(activeEvent)],
+    ['Payments and reports available', Boolean(activeEvent)],
+  ] as const
+
+  if (!tenantId) return <ErrorState title="No tenant selected" message="Select a tenant before opening support." />
+
+  return (
+    <PageContainer>
+      <PageHeader title="Help & Support" description="Support requests, beta feedback, app version and first-run readiness for this workspace." />
+      <section className="stats-grid">
+        <StatCard label="Web Version" value={asString(versionQuery.data?.webVersion, '0.9.0-beta')} meta={asString(versionQuery.data?.releaseChannel, 'BETA')} icon={CheckCircle2} />
+        <StatCard label="API Version" value={asString(versionQuery.data?.apiVersion, '0.9.0-beta')} meta={`Minimum ${asString(versionQuery.data?.minimumSupportedWebVersion, 'not set')}`} icon={FileText} />
+        <StatCard label="Support" value={supportEnabled ? 'Enabled' : 'Unavailable'} meta={`${supportQuery.data?.length ?? 0} requests`} icon={MessageCircle} tone={supportEnabled ? 'success' : 'warning'} />
+      </section>
+      <section className="help-layout">
+        <article className="platform-panel">
+          <div className="panel-header"><div><h2>First-Run Checklist</h2><p>Signals that make reports, reminders and records useful.</p></div></div>
+          <div className="checklist-grid">
+            {checklist.map(([label, done]) => <span className={done ? 'checked' : ''} key={label}>{done ? 'Done' : 'Open'} {label}</span>)}
+          </div>
+        </article>
+        <article className="platform-panel">
+          <div className="panel-header"><div><h2>Contact Support</h2><p>Create a ticket with safe app context attached.</p></div></div>
+          <form className="support-form" onSubmit={(event: FormEvent) => { event.preventDefault(); createSupport.mutate() }}>
+            <label>Category<select value={supportCategory} onChange={(event) => setSupportCategory(event.target.value)}>{['LOGIN', 'MEMBERS', 'PLEDGES', 'PAYMENTS', 'SMS', 'REPORTS', 'SUBSCRIPTION', 'OTHER'].map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
+            <label>Subject<input value={supportSubject} onChange={(event) => setSupportSubject(event.target.value)} /></label>
+            <label>Description<textarea value={supportDescription} onChange={(event) => setSupportDescription(event.target.value)} /></label>
+            {createSupport.error ? <p className="field-error">{createSupport.error instanceof Error ? createSupport.error.message : 'Unable to create support request.'}</p> : null}
+            <button type="submit" disabled={!supportEnabled || createSupport.isPending || supportSubject.trim().length < 3 || supportDescription.trim().length < 10}>{createSupport.isPending ? 'Sending...' : 'Send Request'}</button>
+          </form>
+        </article>
+        <article className="platform-panel">
+          <div className="panel-header"><div><h2>Beta Feedback</h2><p>Send product feedback directly to the platform team.</p></div></div>
+          <form className="support-form" onSubmit={(event: FormEvent) => { event.preventDefault(); createFeedback.mutate() }}>
+            <label>Feedback<textarea value={feedbackMessage} onChange={(event) => setFeedbackMessage(event.target.value)} /></label>
+            {createFeedback.isSuccess ? <p className="success-note">Feedback submitted.</p> : null}
+            <button type="submit" disabled={createFeedback.isPending || feedbackMessage.trim().length < 3}>{createFeedback.isPending ? 'Sending...' : 'Send Feedback'}</button>
+          </form>
+        </article>
+        <article className="platform-panel">
+          <div className="panel-header"><div><h2>Recent Requests</h2><p>Your latest support tickets.</p></div></div>
+          <div className="messages-list">
+            {(supportQuery.data ?? []).map((request) => (
+              <section className="message-history-card" key={asString(request.id)}>
+                <strong>{asString(request.ticket_number)} · {asString(request.subject)}</strong>
+                <span>{asString(request.category)} · {asString(request.status)} · {asString(request.created_at).slice(0, 10)}</span>
+              </section>
+            ))}
+            {supportQuery.isLoading ? <LoadingState title="Loading requests" /> : null}
+            {!supportQuery.isLoading && !(supportQuery.data ?? []).length ? <EmptyState title="No support requests yet" message="New tickets will appear here after you submit them." /> : null}
+          </div>
+        </article>
+      </section>
+    </PageContainer>
+  )
+}
+
 export function TenantSettingsPage() {
   const session = useSessionStore()
   const tenantId = session.selectedTenantId

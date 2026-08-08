@@ -8,6 +8,7 @@ export const apiEnvSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   PORT: z.coerce.number().int().positive().default(4000),
   WEB_URL: z.string().url().default('http://localhost:5173'),
+  APP_VERSION: z.string().trim().min(1).default('0.9.0-beta'),
   TRUST_PROXY_HOPS: z.coerce.number().int().nonnegative().default(0),
   SUPABASE_URL: z.string().url(),
   SUPABASE_PUBLISHABLE_KEY: z.string().min(1),
