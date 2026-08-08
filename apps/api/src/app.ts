@@ -19,6 +19,14 @@ import { AppError, errorHandler } from './errors.js'
 import { sendSmsHookHandler } from './modules/auth/hooks/send-sms-hook.controller.js'
 import { classifyOnboardingDatabaseError, getSafeOnboardingDatabaseErrorDetails } from './onboarding-errors.js'
 import { classifyPinSetupDatabaseError, classifyPinSetupValidationError, getSafePinDatabaseErrorDetails } from './pin-errors.js'
+import {
+  createExportDocument,
+  exportRows,
+  reportExportTitle,
+  safeFileSlug,
+  supportedExportFormats,
+  type ReportExportFormat,
+} from './report-exports.js'
 import { createUserSupabase, supabasePublic } from './supabase.js'
 import { loadUserContext, requestIdMiddleware, requireAuth, requirePlatformPermission, requireTenantContext } from './middleware.js'
 
@@ -320,6 +328,23 @@ const reportRequestSchema = z.object({
   direction: z.enum(['ASC', 'DESC']).optional().default('DESC'),
   eventMemberId: z.string().uuid().optional().nullable(),
 })
+type ReportRequest = z.infer<typeof reportRequestSchema>
+type ReportType = z.infer<typeof reportTypeSchema>
+const reportExportFormatSchema = z.enum(['CSV', 'XLSX', 'PDF', 'PRINT'])
+const reportExportRequestSchema = z.object({
+  format: reportExportFormatSchema,
+  filters: reportRequestSchema.partial().optional().default({}),
+  sort: z.object({
+    field: z.string().trim().optional(),
+    direction: z.enum(['ASC', 'DESC']).optional(),
+  }).optional().default({}),
+})
+const exportLimits: Record<ReportExportFormat, number> = {
+  CSV: 10_000,
+  XLSX: 10_000,
+  PDF: 2_000,
+  PRINT: 2_000,
+}
 
 const updateMemberSchema = z.object({
   fullName: z.string().trim().min(2).max(160).optional(),
@@ -352,6 +377,13 @@ const knownDatabaseCodes: ApiErrorCode[] = [
   'SHARE_WHATSAPP_FINANCIAL_REQUIRED',
   'SHARE_SETTINGS_ACCESS_DENIED',
   'REPORT_ACCESS_DENIED',
+  'REPORT_EXPORT_NOT_ALLOWED',
+  'REPORT_FORMAT_NOT_SUPPORTED',
+  'REPORT_EXPORT_TOO_LARGE',
+  'REPORT_EXPORT_FAILED',
+  'MEMBER_STATEMENT_NOT_FOUND',
+  'INVALID_EXPORT_FILTER',
+  'EXPORT_PERMISSION_DENIED',
   'MEMBER_NOT_FOUND',
   'MEMBER_PHONE_ALREADY_EXISTS',
   'MEMBER_ALREADY_IN_EVENT',
@@ -429,6 +461,361 @@ function jsonArray(data: unknown): Record<string, unknown>[] {
 
 function jsonRecord(data: unknown): Record<string, unknown> {
   return typeof data === 'object' && data !== null && !Array.isArray(data) ? data as Record<string, unknown> : {}
+}
+
+function stringField(row: Record<string, unknown>, key: string, fallback = ''): string {
+  const value = row[key]
+  return typeof value === 'string' ? value : fallback
+}
+
+function numberField(row: Record<string, unknown>, key: string): number {
+  const value = row[key]
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  if (typeof value === 'string' && value.trim() !== '') {
+    const parsed = Number(value)
+    return Number.isFinite(parsed) ? parsed : 0
+  }
+  return 0
+}
+
+function dateField(row: Record<string, unknown>, key: string): string {
+  const value = row[key]
+  return typeof value === 'string' ? value.slice(0, 10) : ''
+}
+
+function matchesReportSearch(row: Record<string, unknown>, input: ReportRequest, keys: string[]): boolean {
+  const needle = input.search.trim().toLowerCase()
+  if (!needle) return true
+  return keys.some((key) => String(row[key] ?? '').toLowerCase().includes(needle))
+}
+
+function compareReportValues(left: unknown, right: unknown, direction: 'ASC' | 'DESC') {
+  const modifier = direction === 'ASC' ? 1 : -1
+  if (typeof left === 'number' || typeof right === 'number') {
+    return (Number(left ?? 0) - Number(right ?? 0)) * modifier
+  }
+  return String(left ?? '').localeCompare(String(right ?? '')) * modifier
+}
+
+function paginateReportRows(rows: Record<string, unknown>[], page: number, pageSize: number) {
+  const safePage = Math.max(page, 1)
+  const safePageSize = Math.min(Math.max(pageSize, 1), 100)
+  const totalRows = rows.length
+  return {
+    data: rows.slice((safePage - 1) * safePageSize, safePage * safePageSize),
+    pagination: {
+      page: safePage,
+      pageSize: safePageSize,
+      totalRows,
+      totalPages: totalRows === 0 ? 0 : Math.ceil(totalRows / safePageSize),
+    },
+  }
+}
+
+function reportPagination(page: number, pageSize: number, totalRows: number) {
+  const safePage = Math.max(page, 1)
+  const safePageSize = Math.min(Math.max(pageSize, 1), 100)
+  return {
+    page: safePage,
+    pageSize: safePageSize,
+    totalRows,
+    totalPages: totalRows === 0 ? 0 : Math.ceil(totalRows / safePageSize),
+  }
+}
+
+function normalizePledgeReportRows(pledges: Record<string, unknown>[]) {
+  return pledges.map((pledge) => ({
+    pledgeId: stringField(pledge, 'pledge_id'),
+    eventMemberId: stringField(pledge, 'event_member_id'),
+    member: stringField(pledge, 'member_name'),
+    phone: stringField(pledge, 'phone_e164'),
+    category: stringField(pledge, 'category'),
+    pledged: numberField(pledge, 'pledged_amount'),
+    paid: numberField(pledge, 'total_allocated'),
+    outstanding: numberField(pledge, 'outstanding_amount'),
+    dueDate: pledge['due_date'] ?? null,
+    effectiveDueDate: pledge['effective_due_date'] ?? pledge['due_date'] ?? null,
+    status: stringField(pledge, 'status', stringField(pledge, 'pledge_status')),
+    lastPayment: pledge['last_payment_date'] ?? null,
+  }))
+}
+
+function normalizePaymentReportRows(payments: Record<string, unknown>[]) {
+  return payments.map((payment) => ({
+    paymentId: stringField(payment, 'payment_id'),
+    date: payment['payment_date'] ?? null,
+    paymentNumber: stringField(payment, 'payment_number'),
+    receiptNumber: stringField(payment, 'receipt_number'),
+    eventMemberId: stringField(payment, 'event_member_id'),
+    member: stringField(payment, 'member_name'),
+    amount: numberField(payment, 'amount'),
+    allocatedAmount: numberField(payment, 'allocated_amount'),
+    unallocatedAmount: numberField(payment, 'unallocated_amount'),
+    paymentMethod: stringField(payment, 'payment_method'),
+    transactionReference: stringField(payment, 'transaction_reference'),
+    receivedBy: stringField(payment, 'received_by_name', 'Unknown'),
+    status: stringField(payment, 'status'),
+  }))
+}
+
+function daysOverdue(effectiveDueDate: unknown) {
+  if (typeof effectiveDueDate !== 'string' || !effectiveDueDate) return 0
+  const due = new Date(`${effectiveDueDate.slice(0, 10)}T00:00:00.000Z`)
+  if (Number.isNaN(due.getTime())) return 0
+  const today = new Date()
+  const todayUtc = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate())
+  return Math.max(0, Math.floor((todayUtc - due.getTime()) / 86_400_000))
+}
+
+function shouldFallbackToCompatibilityReport(error: unknown) {
+  const message = databaseMessage(error).toLowerCase()
+  if (message.includes('session_required') || message.includes('access_denied') || message.includes('invalid_input')) {
+    return false
+  }
+  return message.includes('schema cache') || message.includes('could not find') || message.includes('function') || message.includes('does not exist') || message.includes('report_get_failed') || message.length > 0
+}
+
+async function rpcJsonArray(client: ReturnType<typeof createUserSupabase>, name: string, args: Record<string, unknown>, fallbackCategory: string) {
+  const { data, error } = await client.rpc(name, args)
+  if (error) {
+    throwFinancialDatabaseError(error, fallbackCategory)
+  }
+  return jsonArray(data)
+}
+
+async function rpcJsonRecord(client: ReturnType<typeof createUserSupabase>, name: string, args: Record<string, unknown>, fallbackCategory: string) {
+  const { data, error } = await client.rpc(name, args)
+  if (error) {
+    throwFinancialDatabaseError(error, fallbackCategory)
+  }
+  return jsonRecord(data)
+}
+
+async function buildCompatibilityReport(client: ReturnType<typeof createUserSupabase>, tenantId: string, eventId: string, reportType: ReportType, input: ReportRequest) {
+  const rpcArgs = { p_tenant_id: tenantId, p_event_id: eventId }
+  const summary = await rpcJsonRecord(client, 'rpc_get_event_financial_summary', rpcArgs, 'REPORT_COMPAT_SUMMARY_FAILED')
+  const members = await rpcJsonArray(client, 'rpc_list_event_members', rpcArgs, 'REPORT_COMPAT_MEMBERS_FAILED')
+  const pledges = await rpcJsonArray(client, 'rpc_list_event_pledges', rpcArgs, 'REPORT_COMPAT_PLEDGES_FAILED')
+  const payments = await rpcJsonArray(client, 'rpc_list_event_payments', rpcArgs, 'REPORT_COMPAT_PAYMENTS_FAILED')
+  const normalizedPledges = normalizePledgeReportRows(pledges)
+  const normalizedPayments = normalizePaymentReportRows(payments)
+
+  if (reportType === 'summary') {
+    const totalPledged = numberField(summary, 'totalPledged')
+    const totalAllocated = numberField(summary, 'totalAllocatedToPledges')
+    const enrichedSummary = {
+      ...summary,
+      totalReceived: summary['totalReceived'] ?? summary['totalConfirmedPayments'] ?? 0,
+      collectionRate: totalPledged > 0 ? Math.round((totalAllocated / totalPledged) * 10_000) / 100 : 0,
+      pledgeCoverageAgainstTarget: numberField(summary, 'eventTarget') > 0 ? Math.round((totalPledged / numberField(summary, 'eventTarget')) * 10_000) / 100 : 0,
+    }
+    return { data: [enrichedSummary], summary: enrichedSummary, pagination: reportPagination(1, 25, 1) }
+  }
+
+  if (reportType === 'pledges') {
+    const sortKeys: Record<string, string> = { MEMBER: 'member', PLEDGED: 'pledged', PAID: 'paid', OUTSTANDING: 'outstanding', DUE_DATE: 'effectiveDueDate' }
+    const filtered = normalizedPledges
+      .filter((row) => input.status === 'ALL' || row.status === input.status)
+      .filter((row) => !input.category || row.category === input.category)
+      .filter((row) => !input.dueFrom || String(row.effectiveDueDate ?? '') >= input.dueFrom!)
+      .filter((row) => !input.dueTo || String(row.effectiveDueDate ?? '') <= input.dueTo!)
+      .filter((row) => matchesReportSearch(row, input, ['member', 'memberCode', 'phone']))
+      .sort((a, b) => compareReportValues(a[sortKeys[input.sort] as keyof typeof a], b[sortKeys[input.sort] as keyof typeof b], input.direction))
+    const paged = paginateReportRows(filtered, input.page, input.pageSize)
+    return {
+      data: paged.data,
+      summary: {
+        pledgeCount: filtered.length,
+        totalPledged: filtered.reduce((sum, row) => sum + numberField(row, 'pledged'), 0),
+        totalPaid: filtered.reduce((sum, row) => sum + numberField(row, 'paid'), 0),
+        totalOutstanding: filtered.reduce((sum, row) => sum + numberField(row, 'outstanding'), 0),
+      },
+      pagination: paged.pagination,
+    }
+  }
+
+  if (reportType === 'payments') {
+    const sortKeys: Record<string, string> = { DATE: 'date', AMOUNT: 'amount', MEMBER: 'member' }
+    const filtered = normalizedPayments
+      .filter((row) => input.status === 'ALL' || row.status === input.status)
+      .filter((row) => input.paymentMethod === 'ALL' || row.paymentMethod === input.paymentMethod)
+      .filter((row) => !input.dateFrom || dateField(row, 'date') >= input.dateFrom!)
+      .filter((row) => !input.dateTo || dateField(row, 'date') <= input.dateTo!)
+      .filter((row) => matchesReportSearch(row, input, ['member', 'paymentNumber', 'receiptNumber', 'transactionReference']))
+      .sort((a, b) => compareReportValues(a[sortKeys[input.sort] as keyof typeof a], b[sortKeys[input.sort] as keyof typeof b], input.direction))
+    const paged = paginateReportRows(filtered, input.page, input.pageSize)
+    return {
+      data: paged.data,
+      summary: {
+        grossRecorded: filtered.reduce((sum, row) => sum + numberField(row, 'amount'), 0),
+        reversed: filtered.filter((row) => row.status === 'REVERSED').reduce((sum, row) => sum + numberField(row, 'amount'), 0),
+        netConfirmed: filtered.filter((row) => row.status === 'CONFIRMED').reduce((sum, row) => sum + numberField(row, 'amount'), 0),
+      },
+      pagination: paged.pagination,
+    }
+  }
+
+  if (reportType === 'outstanding') {
+    const sortKeys: Record<string, string> = { OUTSTANDING: 'outstanding', DAYS_OVERDUE: 'daysOverdue', DUE_DATE: 'effectiveDueDate', MEMBER: 'member' }
+    const filtered = normalizedPledges
+      .map((row) => ({ ...row, daysOverdue: daysOverdue(row.effectiveDueDate) }))
+      .filter((row) => row.outstanding > 0)
+      .filter((row) => !input.category || row.category === input.category)
+      .filter((row) => input.filter === 'ALL' || (input.filter === 'OVERDUE' && row.daysOverdue > 0) || (input.filter === 'DUE_SOON' && row.daysOverdue === 0 && !!row.effectiveDueDate) || (input.filter === 'PARTIAL' && row.paid > 0) || (input.filter === 'UNPAID' && row.paid === 0))
+      .sort((a, b) => compareReportValues(a[sortKeys[input.sort] as keyof typeof a], b[sortKeys[input.sort] as keyof typeof b], input.direction))
+    const paged = paginateReportRows(filtered, input.page, input.pageSize)
+    return {
+      data: paged.data,
+      summary: {
+        totalOutstanding: filtered.reduce((sum, row) => sum + row.outstanding, 0),
+        outstandingMembers: filtered.length,
+        overdueMembers: filtered.filter((row) => row.daysOverdue > 0).length,
+      },
+      pagination: paged.pagination,
+    }
+  }
+
+  if (reportType === 'payment-methods') {
+    const methods = ['CASH', 'M_PESA', 'AIRTEL_MONEY', 'MIX_BY_YAS', 'HALOPESA', 'BANK_TRANSFER', 'CHEQUE', 'OTHER']
+    const netConfirmedTotal = normalizedPayments.filter((row) => row.status === 'CONFIRMED').reduce((sum, row) => sum + row.amount, 0)
+    const rows = methods.map((method) => {
+      const methodPayments = normalizedPayments.filter((payment) => payment.paymentMethod === method)
+      const netConfirmedAmount = methodPayments.filter((payment) => payment.status === 'CONFIRMED').reduce((sum, payment) => sum + payment.amount, 0)
+      return {
+        paymentMethod: method,
+        paymentCount: methodPayments.length,
+        grossAmount: methodPayments.reduce((sum, payment) => sum + payment.amount, 0),
+        reversedAmount: methodPayments.filter((payment) => payment.status === 'REVERSED').reduce((sum, payment) => sum + payment.amount, 0),
+        netConfirmedAmount,
+        percentage: netConfirmedTotal > 0 ? Math.round((netConfirmedAmount / netConfirmedTotal) * 10_000) / 100 : 0,
+      }
+    })
+    return { data: rows, summary: { netConfirmed: netConfirmedTotal }, pagination: reportPagination(1, 100, rows.length) }
+  }
+
+  if (reportType === 'collectors') {
+    const filteredPayments = normalizedPayments
+      .filter((row) => !input.dateFrom || dateField(row, 'date') >= input.dateFrom!)
+      .filter((row) => !input.dateTo || dateField(row, 'date') <= input.dateTo!)
+    const grouped = new Map<string, Record<string, unknown>>()
+    for (const payment of filteredPayments) {
+      const key = payment.receivedBy || 'Unknown'
+      const current = grouped.get(key) ?? { collectorName: key, paymentCount: 0, grossRecorded: 0, reversed: 0, netCollected: 0, cash: 0, mobileMoney: 0, bank: 0, lastPaymentTime: null }
+      current['paymentCount'] = numberField(current, 'paymentCount') + 1
+      current['grossRecorded'] = numberField(current, 'grossRecorded') + payment.amount
+      if (payment.status === 'REVERSED') current['reversed'] = numberField(current, 'reversed') + payment.amount
+      if (payment.status === 'CONFIRMED') {
+        current['netCollected'] = numberField(current, 'netCollected') + payment.amount
+        if (payment.paymentMethod === 'CASH') current['cash'] = numberField(current, 'cash') + payment.amount
+        if (['M_PESA', 'AIRTEL_MONEY', 'MIX_BY_YAS', 'HALOPESA'].includes(payment.paymentMethod)) current['mobileMoney'] = numberField(current, 'mobileMoney') + payment.amount
+        if (payment.paymentMethod === 'BANK_TRANSFER') current['bank'] = numberField(current, 'bank') + payment.amount
+      }
+      if (!current['lastPaymentTime'] || String(payment.date ?? '') > String(current['lastPaymentTime'])) current['lastPaymentTime'] = payment.date
+      grouped.set(key, current)
+    }
+    const rows = [...grouped.values()].sort((a, b) => compareReportValues(a['netCollected'], b['netCollected'], 'DESC'))
+    return {
+      data: rows,
+      summary: {
+        collectorCount: rows.length,
+        netCollected: rows.reduce((sum, row) => sum + numberField(row, 'netCollected'), 0),
+        grossRecorded: rows.reduce((sum, row) => sum + numberField(row, 'grossRecorded'), 0),
+      },
+      pagination: reportPagination(1, 100, rows.length),
+    }
+  }
+
+  const memberCandidates = members
+    .filter((member) => matchesReportSearch(member, input, ['full_name', 'member_code', 'phone_e164']))
+    .map((member) => ({ eventMemberId: stringField(member, 'event_member_id'), name: stringField(member, 'full_name'), memberCode: stringField(member, 'member_code'), phone: stringField(member, 'phone_e164') }))
+  const selectedMemberId = input.eventMemberId || memberCandidates[0]?.eventMemberId || ''
+  const member = memberCandidates.find((candidate) => candidate.eventMemberId === selectedMemberId) ?? memberCandidates[0] ?? {}
+  const pledge = normalizedPledges.find((row) => row.eventMemberId === selectedMemberId)
+  const transactions = normalizedPayments
+    .filter((payment) => payment.eventMemberId === selectedMemberId)
+    .map((payment) => ({ date: payment.date, type: 'PAYMENT', receipt: payment.receiptNumber, method: payment.paymentMethod, amount: payment.amount, status: payment.status }))
+    .sort((a, b) => compareReportValues(a.date, b.date, 'ASC'))
+  return {
+    data: transactions,
+    members: memberCandidates,
+    summary: {
+      member,
+      pledge: pledge ?? null,
+      totalPledged: pledge?.pledged ?? 0,
+      totalConfirmedPaid: normalizedPayments.filter((payment) => payment.eventMemberId === selectedMemberId && payment.status === 'CONFIRMED').reduce((sum, payment) => sum + payment.amount, 0),
+      outstanding: pledge?.outstanding ?? 0,
+      unallocatedCredit: normalizedPayments.filter((payment) => payment.eventMemberId === selectedMemberId && payment.status === 'CONFIRMED').reduce((sum, payment) => sum + payment.unallocatedAmount, 0),
+    },
+    pagination: reportPagination(1, 100, transactions.length),
+  }
+}
+
+async function getEventReportResult(client: ReturnType<typeof createUserSupabase>, tenantId: string, eventId: string, reportType: ReportType, input: ReportRequest, requestId?: string) {
+  const rpcArgs = { p_tenant_id: tenantId, p_event_id: eventId }
+  const calls = {
+    summary: () => client.rpc('rpc_get_event_collection_summary', rpcArgs),
+    pledges: () => client.rpc('rpc_get_event_pledge_report', {
+      ...rpcArgs,
+      p_status: input.status,
+      p_category: input.category || null,
+      p_due_from: input.dueFrom || null,
+      p_due_to: input.dueTo || null,
+      p_search: input.search,
+      p_sort: input.sort || 'MEMBER',
+      p_direction: input.direction,
+      p_page: input.page,
+      p_page_size: input.pageSize,
+    }),
+    payments: () => client.rpc('rpc_get_event_payment_report', {
+      ...rpcArgs,
+      p_date_from: input.dateFrom || null,
+      p_date_to: input.dateTo || null,
+      p_payment_method: input.paymentMethod,
+      p_collector: input.collectorId || null,
+      p_status: input.status,
+      p_search: input.search,
+      p_sort: input.sort,
+      p_direction: input.direction,
+      p_page: input.page,
+      p_page_size: input.pageSize,
+    }),
+    outstanding: () => client.rpc('rpc_get_event_outstanding_report', {
+      ...rpcArgs,
+      p_filter: input.filter,
+      p_category: input.category || null,
+      p_sort: input.sort || 'OUTSTANDING',
+      p_direction: input.direction,
+      p_page: input.page,
+      p_page_size: input.pageSize,
+    }),
+    'payment-methods': () => client.rpc('rpc_get_event_payment_method_summary', rpcArgs),
+    collectors: () => client.rpc('rpc_get_event_collector_report', {
+      ...rpcArgs,
+      p_date_from: input.dateFrom || null,
+      p_date_to: input.dateTo || null,
+      p_collector: input.collectorId || null,
+    }),
+    'member-statement': () => client.rpc('rpc_get_member_statement', {
+      ...rpcArgs,
+      p_event_member_id: input.eventMemberId || null,
+      p_search: input.search,
+    }),
+  }
+  const { data, error } = await calls[reportType]()
+  if (error) {
+    console.error('Report RPC failed', {
+      requestId,
+      tenantId,
+      eventId,
+      reportType,
+      safeMessage: databaseMessage(error).slice(0, 200),
+    })
+    if (shouldFallbackToCompatibilityReport(error)) {
+      return buildCompatibilityReport(client, tenantId, eventId, reportType, input)
+    }
+    throwFinancialDatabaseError(error, 'REPORT_GET_FAILED')
+  }
+  return jsonRecord(data)
 }
 
 function notificationFromEnqueue(data: unknown): Record<string, unknown> {
@@ -753,61 +1140,8 @@ app.post('/api/v1/events/:eventId/reports/:reportType', requireAuth, loadUserCon
     const reportType = reportTypeSchema.parse(request.params['reportType'])
     const input = reportRequestSchema.parse(request.body ?? {})
     const client = createUserSupabase(request.auth?.accessToken ?? '')
-    const rpcArgs = { p_tenant_id: tenantId, p_event_id: eventId }
-    const calls = {
-      summary: () => client.rpc('rpc_get_event_collection_summary', rpcArgs),
-      pledges: () => client.rpc('rpc_get_event_pledge_report', {
-        ...rpcArgs,
-        p_status: input.status,
-        p_category: input.category || null,
-        p_due_from: input.dueFrom || null,
-        p_due_to: input.dueTo || null,
-        p_search: input.search,
-        p_sort: input.sort || 'MEMBER',
-        p_direction: input.direction,
-        p_page: input.page,
-        p_page_size: input.pageSize,
-      }),
-      payments: () => client.rpc('rpc_get_event_payment_report', {
-        ...rpcArgs,
-        p_date_from: input.dateFrom || null,
-        p_date_to: input.dateTo || null,
-        p_payment_method: input.paymentMethod,
-        p_collector: input.collectorId || null,
-        p_status: input.status,
-        p_search: input.search,
-        p_sort: input.sort,
-        p_direction: input.direction,
-        p_page: input.page,
-        p_page_size: input.pageSize,
-      }),
-      outstanding: () => client.rpc('rpc_get_event_outstanding_report', {
-        ...rpcArgs,
-        p_filter: input.filter,
-        p_category: input.category || null,
-        p_sort: input.sort || 'OUTSTANDING',
-        p_direction: input.direction,
-        p_page: input.page,
-        p_page_size: input.pageSize,
-      }),
-      'payment-methods': () => client.rpc('rpc_get_event_payment_method_summary', rpcArgs),
-      collectors: () => client.rpc('rpc_get_event_collector_report', {
-        ...rpcArgs,
-        p_date_from: input.dateFrom || null,
-        p_date_to: input.dateTo || null,
-        p_collector: input.collectorId || null,
-      }),
-      'member-statement': () => client.rpc('rpc_get_member_statement', {
-        ...rpcArgs,
-        p_event_member_id: input.eventMemberId || null,
-        p_search: input.search,
-      }),
-    }
-    const { data, error } = await calls[reportType]()
-    if (error) {
-      throwFinancialDatabaseError(error, 'REPORT_GET_FAILED')
-    }
-    response.json({ data: jsonRecord(data) })
+    const data = await getEventReportResult(client, tenantId, eventId, reportType, input, request.requestId)
+    response.json({ data })
   } catch (error) {
     next(error)
   }

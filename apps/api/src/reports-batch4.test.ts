@@ -40,3 +40,12 @@ test('report API exposes whitelisted report route with pagination and sort args'
   assert.match(app, /p_sort: input\.sort/)
   assert.match(app, /p_direction: input\.direction/)
 })
+
+test('report API falls back to stable financial RPCs when batch 4 RPCs are unavailable', () => {
+  assert.match(app, /shouldFallbackToCompatibilityReport/)
+  assert.match(app, /buildCompatibilityReport/)
+  assert.match(app, /rpc_get_event_financial_summary/)
+  assert.match(app, /rpc_list_event_members/)
+  assert.match(app, /rpc_list_event_pledges/)
+  assert.match(app, /rpc_list_event_payments/)
+})
