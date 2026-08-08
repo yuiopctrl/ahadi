@@ -1180,20 +1180,27 @@ th {
   display: flex;
   gap: 8px;
   overflow-x: auto;
-  padding-bottom: 2px;
+  padding: 4px 0 8px;
+  scrollbar-width: thin;
 }
 
 .event-tabs a,
 .segmented-row button,
 .quick-amounts button {
-  min-height: 40px;
+  display: inline-flex;
+  min-height: 44px;
+  min-width: max-content;
+  align-items: center;
+  justify-content: center;
   flex: 0 0 auto;
   border: 1px solid var(--color-border);
   border-radius: 8px;
   background: white;
   color: var(--color-muted);
-  padding: 0 12px;
+  padding: 0 14px;
   font-weight: 800;
+  text-align: center;
+  text-transform: capitalize;
 }
 
 .event-tabs a.active,
@@ -1211,6 +1218,25 @@ th {
 .review-stack {
   display: grid;
   gap: 14px;
+}
+
+.messages-stats,
+.settings-overview {
+  margin-bottom: 14px;
+}
+
+.messages-template-block {
+  margin-bottom: 14px;
+}
+
+.messages-list .finance-card {
+  gap: 12px;
+}
+
+.settings-grid {
+  display: grid;
+  gap: 14px;
+  align-items: start;
 }
 
 .finance-grid {
@@ -1239,6 +1265,17 @@ th {
   justify-content: space-between;
 }
 
+.review-line {
+  flex-wrap: wrap;
+  min-width: 0;
+  border-top: 1px solid var(--color-border);
+  padding: 10px 0;
+}
+
+.review-line:first-of-type {
+  border-top: 0;
+}
+
 .card-title-row {
   align-items: flex-start;
   min-width: 0;
@@ -1256,6 +1293,12 @@ th {
 .receipt-document header span {
   color: var(--color-muted);
   font-size: 13px;
+}
+
+.review-line strong {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  text-align: right;
 }
 
 .amount-triplet,
@@ -1394,7 +1437,7 @@ th {
 .radio-card-grid,
 .settings-grid {
   display: grid;
-  gap: 10px;
+  gap: 14px;
 }
 
 .radio-card {
@@ -1488,6 +1531,11 @@ th {
   }
 
   .radio-card-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .settings-grid,
+  .messages-list {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
@@ -1622,6 +1670,14 @@ th {
 
   .dashboard-grid {
     grid-template-columns: minmax(0, 1.4fr) minmax(320px, 0.8fr);
+  }
+
+  .event-tabs {
+    justify-content: flex-start;
+  }
+
+  .settings-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
   .platform-layout {

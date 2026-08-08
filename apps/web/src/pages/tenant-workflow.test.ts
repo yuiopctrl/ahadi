@@ -62,7 +62,9 @@ test('payment confirmation SMS states are visible without waiting for delivery',
 test('tenant SMS history route and cards are present', () => {
   assert.match(routes, /path: 'messages', element: <SmsHistoryPage \/>/)
   assert.match(apiClient, /messages: \(tenantId: string\)/)
-  assert.match(tenantPage, /Payment confirmation SMS history/)
+  assert.match(tenantPage, /SMS delivery history and balance reminder controls/)
+  assert.match(tenantPage, /messages-stats/)
+  assert.match(tenantPage, /messages-list/)
   assert.match(tenantPage, /No SMS messages yet/)
   assert.match(tenantPage, /SMS delivery failed/)
 })
@@ -125,4 +127,13 @@ test('shared mobile UI has responsive overflow menu and safe card layouts', () =
   assert.match(styles, /\.amount-triplet,[\s\S]*grid-template-columns: 1fr/)
   assert.match(styles, /overflow-wrap: anywhere/)
   assert.match(styles, /@media \(min-width: 640px\)[\s\S]*\.amount-triplet/)
+})
+
+test('dashboard tabs, settings, and event nav active states are stabilized', () => {
+  assert.match(navigation, /\{ to: '\/app\/events', label: 'Events', icon: CalendarDays, end: true \}/)
+  assert.match(tenantPage, /settings-overview/)
+  assert.match(tenantPage, /settings-grid/)
+  assert.match(styles, /\.event-tabs a,[\s\S]*justify-content: center/)
+  assert.match(styles, /\.event-tabs a,[\s\S]*text-align: center/)
+  assert.match(styles, /@media \(min-width: 960px\)[\s\S]*\.settings-grid[\s\S]*grid-template-columns: repeat\(3, minmax\(0, 1fr\)\)/)
 })

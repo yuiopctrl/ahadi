@@ -1276,6 +1276,10 @@ export function SmsHistoryPage() {
     const dateMatches = (!dateFrom || createdAt >= new Date(dateFrom).toISOString()) && (!dateTo || createdAt <= new Date(`${dateTo}T23:59:59`).toISOString())
     return statusMatches && typeMatches && eventMatches && queryMatches && dateMatches
   })
+  const sentCount = rows.filter((message) => ['SENT', 'DELIVERED'].includes(asString(message.status))).length
+  const failedCount = rows.filter((message) => asString(message.status) === 'FAILED').length
+  const queuedCount = rows.filter((message) => ['QUEUED', 'PROCESSING'].includes(asString(message.status))).length
+  const deliveryRate = rows.length ? Math.round((sentCount / rows.length) * 100) : 0
 
   if (!tenantId) return <ErrorState title="Unable to load SMS history" message="Select a tenant first." />
   if (messages.isLoading) return <LoadingState title="Loading messages" message="Fetching SMS confirmation history." />
@@ -1283,8 +1287,14 @@ export function SmsHistoryPage() {
 
   return (
     <PageContainer>
-      <PageHeader title="Messages" description="Payment confirmation SMS history for this tenant." />
-      {permissions.has('messages.manage_templates') ? <BalanceReminderTemplateEditor tenantId={tenantId} template={template.data ?? null} loading={template.isLoading} onSaved={() => void queryClient.invalidateQueries({ queryKey: ['balance-reminder-template', tenantId] })} /> : null}
+      <PageHeader title="Messages" description="SMS delivery history and balance reminder controls for this tenant." />
+      <section className="stats-grid messages-stats">
+        <StatCard label="Messages" value={String(rows.length)} meta={`${filtered.length} shown`} icon={MessageCircle} />
+        <StatCard label="Delivered/Sent" value={String(sentCount)} meta={`${deliveryRate}% delivery rate`} icon={CheckCircle2} tone="success" />
+        <StatCard label="Queued" value={String(queuedCount)} meta="Waiting or processing" icon={Clock3} tone="warning" />
+        <StatCard label="Failed" value={String(failedCount)} meta="Needs review" icon={FileText} tone={failedCount ? 'danger' : 'neutral'} />
+      </section>
+      {permissions.has('messages.manage_templates') ? <section className="messages-template-block"><BalanceReminderTemplateEditor tenantId={tenantId} template={template.data ?? null} loading={template.isLoading} onSaved={() => void queryClient.invalidateQueries({ queryKey: ['balance-reminder-template', tenantId] })} /></section> : null}
       <section className="filter-bar">
         <label>Type<select value={type} onChange={(event) => setType(event.target.value)}>{[['ALL', 'All messages'], ['PAYMENT_CONFIRMATION', 'Payment Confirmation'], ['BALANCE_REMINDER', 'Balance Reminder']].map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
         <label>Status<select value={status} onChange={(event) => setStatus(event.target.value)}>{['ALL', 'QUEUED', 'PROCESSING', 'SENT', 'DELIVERED', 'FAILED', 'CANCELLED'].map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
@@ -1293,7 +1303,7 @@ export function SmsHistoryPage() {
         <label>From<input type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} /></label>
         <label>To<input type="date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} /></label>
       </section>
-      <div className="finance-card-list">
+      <div className="finance-card-list messages-list">
         {filtered.map((message) => <article className="finance-card" key={asString(message.id)}>
           <div className="card-title-row">
             <div>
@@ -1460,7 +1470,13 @@ export function TenantSettingsPage() {
   return (
     <PageContainer>
       <PageHeader title="Settings" description="Tenant configuration summary. Provider secrets are intentionally hidden." />
-      <section className="finance-grid">
+      <section className="stats-grid settings-overview">
+        <StatCard label="Tenant" value={asString(organization.name, 'Tenant')} meta={asString(organization.code, 'No code')} icon={Users} />
+        <StatCard label="Package" value={asString(subscription.planName, 'Not set')} meta={asString(subscription.status, 'No status')} icon={FileText} />
+        <StatCard label="Event Slots" value={`${displayValue(limits.usedEventSlots, '0')}/${displayValue(limits.maxEventSlots, '0')}`} meta={`${displayValue(limits.availableEventSlots, '0')} available`} icon={CalendarDays} />
+        <StatCard label="SMS" value={notifications.paymentConfirmations ? 'Enabled' : 'Disabled'} meta={asString(notifications.smsSenderName, 'No sender')} icon={MessageCircle} tone={notifications.paymentConfirmations ? 'success' : 'warning'} />
+      </section>
+      <section className="settings-grid">
         <SettingsPanel title="Organization" rows={[['Name', organization.name], ['Code', organization.code], ['Phone', organization.phoneE164], ['Email', organization.email], ['Timezone', organization.timezone], ['Currency', organization.currency], ['Status', organization.status]]} />
         <SettingsPanel title="Receipts" rows={[['Receipt prefix', receipts.receiptPrefix], ['Logo', receipts.logoUrl ? 'Configured' : 'Not set'], ['Primary color', receipts.primaryColor]]} />
         <SettingsPanel title="Payments" rows={[['Mobile money instructions', payments.mobileMoneyInstructions], ['Bank instructions', payments.bankPaymentInstructions]]} />
