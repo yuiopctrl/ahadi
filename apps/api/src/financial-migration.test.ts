@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import test from 'node:test'
 
-const migrations = ['011_members_and_event_members.sql', '012_pledges_and_history.sql', '013_payments_allocations_and_receipts.sql', '014_member_pledge_payment_rpcs.sql', '015_financial_views.sql', '016_financial_permissions_and_rls.sql', '018_repair_event_financial_access.sql', '019_stabilize_financial_summary_shape.sql', '020_grant_financial_read_views.sql', '021_financial_list_rpcs.sql', '022_payment_confirmation_sms_outbox.sql']
+const migrations = ['011_members_and_event_members.sql', '012_pledges_and_history.sql', '013_payments_allocations_and_receipts.sql', '014_member_pledge_payment_rpcs.sql', '015_financial_views.sql', '016_financial_permissions_and_rls.sql', '018_repair_event_financial_access.sql', '019_stabilize_financial_summary_shape.sql', '020_grant_financial_read_views.sql', '021_financial_list_rpcs.sql', '022_payment_confirmation_sms_outbox.sql', '029_tenant_sms_outbox_processing.sql']
   .map((file) => readFileSync(new URL(`../../../supabase/migrations/${file}`, import.meta.url), 'utf8'))
   .join('\n')
 const app = readFileSync(new URL('./app.ts', import.meta.url), 'utf8')
@@ -87,4 +87,18 @@ test('payment confirmation SMS uses outbox tables and idempotent enqueue RPC', (
   assert.match(migrations, /rpc_claim_sms_outbox[\s\S]+for update of o skip locked/i)
   assert.match(app, /rpc_enqueue_payment_confirmation_sms/)
   assert.doesNotMatch(app, /record_installment_payment[\s\S]+sendAuthenticationSms/)
+})
+
+test('tenant queued SMS can be claimed and sent by the API without service-role access', () => {
+  assert.match(migrations, /rpc_claim_tenant_sms_outbox/)
+  assert.match(migrations, /public\.has_tenant_permission\(p_tenant_id, 'messages\.send'\)/)
+  assert.match(migrations, /o\.tenant_id = p_tenant_id/)
+  assert.match(migrations, /p_outbox_ids is null or o\.id = any\(p_outbox_ids\)/)
+  assert.match(migrations, /p_batch_id is null or o\.batch_id = p_batch_id/)
+  assert.match(migrations, /for update of o skip locked/i)
+  assert.match(migrations, /grant execute on function public\.rpc_claim_tenant_sms_outbox\(uuid, integer, uuid\[\], uuid\) to authenticated/)
+  assert.match(app, /attemptTenantQueuedSms/)
+  assert.match(app, /sendTenantQueuedSms/)
+  assert.match(app, /\/api\/v1\/messages\/process-queued/)
+  assert.match(app, /sendAttempt/)
 })

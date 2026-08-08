@@ -27,6 +27,7 @@ import {
   supportedExportFormats,
   type ReportExportFormat,
 } from './report-exports.js'
+import { attemptTenantQueuedSms, sendTenantQueuedSms } from './sms-outbox.js'
 import { createUserSupabase, supabasePublic } from './supabase.js'
 import { loadUserContext, requestIdMiddleware, requireAuth, requirePlatformPermission, requireTenantContext } from './middleware.js'
 
@@ -275,6 +276,10 @@ const templateBodySchema = z.object({
 
 const resendBalanceReminderSchema = z.object({
   idempotencyKey: z.string().uuid(),
+})
+
+const processQueuedSmsSchema = z.object({
+  batchSize: z.coerce.number().int().positive().max(50).optional(),
 })
 
 const whatsappShareFormatSchema = z.enum(['DETAILED', 'PRIVACY', 'PAYMENT_PROGRESS', 'OUTSTANDING_FOLLOW_UP'])
@@ -821,6 +826,14 @@ async function getEventReportResult(client: ReturnType<typeof createUserSupabase
 function notificationFromEnqueue(data: unknown): Record<string, unknown> {
   const notification = jsonRecord(data)
   return Object.keys(notification).length ? notification : { smsQueued: false, reason: 'ENQUEUE_FAILED' }
+}
+
+function queuedOutboxId(data: Record<string, unknown>): string | null {
+  return typeof data['outboxId'] === 'string' ? data['outboxId'] : null
+}
+
+function queuedBatchId(data: Record<string, unknown>): string | null {
+  return typeof data['batchId'] === 'string' ? data['batchId'] : null
 }
 
 function requireReportExportPermission(request: express.Request) {
@@ -1553,7 +1566,16 @@ app.post('/api/v1/events/:eventId/reminders/balance', requireAuth, loadUserConte
     if (error) {
       throwFinancialDatabaseError(error, 'BALANCE_REMINDER_QUEUE_FAILED')
     }
-    response.status(201).json({ data })
+    const result = notificationFromEnqueue(data)
+    const outboxId = queuedOutboxId(result)
+    if (result['queued'] === true && outboxId) {
+      result['sendAttempt'] = await attemptTenantQueuedSms(client, tenantId, {
+        batchSize: 1,
+        outboxIds: [outboxId],
+        requestId: request.requestId,
+      })
+    }
+    response.status(201).json({ data: result })
   } catch (error) {
     next(error)
   }
@@ -1576,7 +1598,17 @@ app.post('/api/v1/events/:eventId/reminders/balance/bulk', requireAuth, loadUser
     if (error) {
       throwFinancialDatabaseError(error, 'BALANCE_REMINDER_BULK_QUEUE_FAILED')
     }
-    response.status(201).json({ data })
+    const result = notificationFromEnqueue(data)
+    const batchId = queuedBatchId(result)
+    const queued = Number(result['queued'])
+    if (batchId && Number.isFinite(queued) && queued > 0) {
+      result['sendAttempt'] = await attemptTenantQueuedSms(client, tenantId, {
+        batchId,
+        batchSize: Math.min(queued, 50),
+        requestId: request.requestId,
+      })
+    }
+    response.status(201).json({ data: result })
   } catch (error) {
     next(error)
   }
@@ -1707,6 +1739,14 @@ app.post('/api/v1/events/:eventId/payments', requireAuth, loadUserContext, requi
         notification = { smsQueued: false, reason: 'ENQUEUE_FAILED' }
       } else {
         notification = notificationFromEnqueue(enqueue.data)
+        const outboxId = queuedOutboxId(notification)
+        if (notification['smsQueued'] === true && outboxId) {
+          notification['sendAttempt'] = await attemptTenantQueuedSms(client, tenantId, {
+            batchSize: 1,
+            outboxIds: [outboxId],
+            requestId: request.requestId,
+          })
+        }
       }
     }
     response.status(201).json({ data: { ...payment, notification } })
@@ -1835,7 +1875,35 @@ app.post('/api/v1/messages/:outboxId/resend-balance-reminder', requireAuth, load
     if (error) {
       throwFinancialDatabaseError(error, 'BALANCE_REMINDER_RESEND_FAILED')
     }
-    response.status(201).json({ data })
+    const result = notificationFromEnqueue(data)
+    const newOutboxId = queuedOutboxId(result)
+    if (result['queued'] === true && newOutboxId) {
+      result['sendAttempt'] = await attemptTenantQueuedSms(client, tenantId, {
+        batchSize: 1,
+        outboxIds: [newOutboxId],
+        requestId: request.requestId,
+      })
+    }
+    response.status(201).json({ data: result })
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.post('/api/v1/messages/process-queued', requireAuth, loadUserContext, requireTenantContext, async (request, response, next) => {
+  try {
+    const permissions = new Set(request.tenantContext?.permissions ?? [])
+    if (!permissions.has('messages.send') && !request.tenantContext?.membership?.isOwner) {
+      throw new AppError('TENANT_ACCESS_DENIED', 'Message send permission is required')
+    }
+    const tenantId = tenantIdFromRequest(request)
+    const input = processQueuedSmsSchema.parse(request.body ?? {})
+    const client = createUserSupabase(request.auth?.accessToken ?? '')
+    const result = await sendTenantQueuedSms(client, tenantId, {
+      batchSize: input.batchSize ?? 10,
+      requestId: request.requestId,
+    })
+    response.json({ data: result })
   } catch (error) {
     next(error)
   }

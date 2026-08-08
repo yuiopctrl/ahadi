@@ -152,6 +152,8 @@ export const api = {
     apiFetch<{ data: Record<string, unknown> }>(`/events/${eventId}/payments/${paymentId}/reverse`, { tenantId, method: 'POST', body: JSON.stringify(payload) }),
   receipt: (tenantId: string, receiptId: string) => apiFetch<{ data: Record<string, unknown> }>(`/receipts/${receiptId}`, { tenantId }),
   messages: (tenantId: string) => apiFetch<{ data: Record<string, unknown>[] }>('/messages', { tenantId }),
+  processQueuedMessages: (tenantId: string, batchSize = 10) =>
+    apiFetch<{ data: Record<string, unknown> }>('/messages/process-queued', { tenantId, method: 'POST', body: JSON.stringify({ batchSize }) }),
   balanceReminderTemplate: (tenantId: string) => apiFetch<{ data: Record<string, unknown> }>('/messages/templates/balance-reminder', { tenantId }),
   saveBalanceReminderTemplate: (tenantId: string, body: string) => apiFetch<{ data: Record<string, unknown> }>('/messages/templates/balance-reminder', { tenantId, method: 'PUT', body: JSON.stringify({ body }) }),
   resetBalanceReminderTemplate: (tenantId: string) => apiFetch<{ data: Record<string, unknown> }>('/messages/templates/balance-reminder/reset', { tenantId, method: 'POST' }),

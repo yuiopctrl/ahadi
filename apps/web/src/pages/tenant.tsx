@@ -1266,6 +1266,10 @@ export function SmsHistoryPage() {
   const [dateTo, setDateTo] = useState('')
   const messages = useQuery({ queryKey: ['sms-history', tenantId], queryFn: async () => (await api.messages(tenantId ?? '')).data, enabled: Boolean(tenantId) })
   const template = useQuery({ queryKey: ['balance-reminder-template', tenantId], queryFn: async () => (await api.balanceReminderTemplate(tenantId ?? '')).data, enabled: Boolean(tenantId && permissions.has('messages.manage_templates')) })
+  const processQueued = useMutation({
+    mutationFn: () => api.processQueuedMessages(tenantId ?? '', 25),
+    onSuccess: () => void messages.refetch(),
+  })
   const rows = messages.data ?? []
   const filtered = rows.filter((message) => {
     const statusMatches = status === 'ALL' || message.status === status
@@ -1291,7 +1295,7 @@ export function SmsHistoryPage() {
       <PageHeader
         title="Messages"
         description="SMS delivery history and balance reminder controls for this tenant."
-        action={activeEvent ? <Link className="desktop-primary-button" to={`/app/events/${activeEvent.id}/outstanding`}><Send size={18} aria-hidden /> Reminders</Link> : null}
+        action={<div className="inline-actions">{permissions.has('messages.send') ? <button type="button" disabled={processQueued.isPending || queuedCount === 0} onClick={() => processQueued.mutate()}><Send size={18} aria-hidden /> {processQueued.isPending ? 'Sending...' : 'Send queued'}</button> : null}{activeEvent ? <Link className="desktop-primary-button" to={`/app/events/${activeEvent.id}/outstanding`}><Clock3 size={18} aria-hidden /> Reminders</Link> : null}</div>}
       />
       <section className="messages-hero">
         <div>
@@ -1311,6 +1315,8 @@ export function SmsHistoryPage() {
         <StatCard label="Queued" value={String(queuedCount)} meta="Waiting or processing" icon={Clock3} tone="warning" />
         <StatCard label="Failed" value={String(failedCount)} meta="Needs review" icon={FileText} tone={failedCount ? 'danger' : 'neutral'} />
       </section>
+      {processQueued.data ? <p className="message-send-result">Processed {displayValue(processQueued.data.data.claimed, '0')} queued messages · Sent {displayValue(processQueued.data.data.sent, '0')} · Failed {displayValue(processQueued.data.data.failed, '0')}</p> : null}
+      {processQueued.error ? <p className="field-error">Unable to process queued messages: {errorMessage(processQueued.error, 'Send attempt failed.')}</p> : null}
       <div className={permissions.has('messages.manage_templates') ? 'messages-layout messages-layout-with-template' : 'messages-layout'}>
         <section className="messages-history-panel">
           <div className="messages-filter-panel">

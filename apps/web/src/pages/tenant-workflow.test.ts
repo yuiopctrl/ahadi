@@ -62,9 +62,12 @@ test('payment confirmation SMS states are visible without waiting for delivery',
 test('tenant SMS history route and cards are present', () => {
   assert.match(routes, /path: 'messages', element: <SmsHistoryPage \/>/)
   assert.match(apiClient, /messages: \(tenantId: string\)/)
+  assert.match(apiClient, /processQueuedMessages: \(tenantId: string/)
   assert.match(tenantPage, /SMS delivery history and balance reminder controls/)
   assert.match(tenantPage, /messages-stats/)
   assert.match(tenantPage, /messages-list/)
+  assert.match(tenantPage, /Send queued/)
+  assert.match(tenantPage, /Processed \{displayValue\(processQueued\.data\.data\.claimed/)
   assert.match(tenantPage, /No SMS messages yet/)
   assert.match(tenantPage, /SMS delivery failed/)
 })
