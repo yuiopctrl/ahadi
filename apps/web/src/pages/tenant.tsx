@@ -1280,6 +1280,7 @@ export function SmsHistoryPage() {
   const failedCount = rows.filter((message) => asString(message.status) === 'FAILED').length
   const queuedCount = rows.filter((message) => ['QUEUED', 'PROCESSING'].includes(asString(message.status))).length
   const deliveryRate = rows.length ? Math.round((sentCount / rows.length) * 100) : 0
+  const activeEvent = eventOptions[0] ?? null
 
   if (!tenantId) return <ErrorState title="Unable to load SMS history" message="Select a tenant first." />
   if (messages.isLoading) return <LoadingState title="Loading messages" message="Fetching SMS confirmation history." />
@@ -1287,43 +1288,102 @@ export function SmsHistoryPage() {
 
   return (
     <PageContainer>
-      <PageHeader title="Messages" description="SMS delivery history and balance reminder controls for this tenant." />
+      <PageHeader
+        title="Messages"
+        description="SMS delivery history and balance reminder controls for this tenant."
+        action={activeEvent ? <Link className="desktop-primary-button" to={`/app/events/${activeEvent.id}/outstanding`}><Send size={18} aria-hidden /> Reminders</Link> : null}
+      />
+      <section className="messages-hero">
+        <div>
+          <span>SMS health</span>
+          <strong>{deliveryRate}%</strong>
+          <p>{sentCount} sent or delivered from {rows.length} total messages.</p>
+        </div>
+        <div className="messages-hero-strip">
+          <span><CheckCircle2 size={18} aria-hidden /> {sentCount} delivered</span>
+          <span><Clock3 size={18} aria-hidden /> {queuedCount} queued</span>
+          <span><FileText size={18} aria-hidden /> {failedCount} failed</span>
+        </div>
+      </section>
       <section className="stats-grid messages-stats">
         <StatCard label="Messages" value={String(rows.length)} meta={`${filtered.length} shown`} icon={MessageCircle} />
         <StatCard label="Delivered/Sent" value={String(sentCount)} meta={`${deliveryRate}% delivery rate`} icon={CheckCircle2} tone="success" />
         <StatCard label="Queued" value={String(queuedCount)} meta="Waiting or processing" icon={Clock3} tone="warning" />
         <StatCard label="Failed" value={String(failedCount)} meta="Needs review" icon={FileText} tone={failedCount ? 'danger' : 'neutral'} />
       </section>
-      {permissions.has('messages.manage_templates') ? <section className="messages-template-block"><BalanceReminderTemplateEditor tenantId={tenantId} template={template.data ?? null} loading={template.isLoading} onSaved={() => void queryClient.invalidateQueries({ queryKey: ['balance-reminder-template', tenantId] })} /></section> : null}
-      <section className="filter-bar">
-        <label>Type<select value={type} onChange={(event) => setType(event.target.value)}>{[['ALL', 'All messages'], ['PAYMENT_CONFIRMATION', 'Payment Confirmation'], ['BALANCE_REMINDER', 'Balance Reminder']].map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
-        <label>Status<select value={status} onChange={(event) => setStatus(event.target.value)}>{['ALL', 'QUEUED', 'PROCESSING', 'SENT', 'DELIVERED', 'FAILED', 'CANCELLED'].map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
-        <label>Event<select value={eventId} onChange={(event) => setEventId(event.target.value)}><option value="ALL">All events</option>{eventOptions.map((event) => <option key={event.id} value={event.id}>{event.name}</option>)}</select></label>
-        <label>Search<input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Member or phone" /></label>
-        <label>From<input type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} /></label>
-        <label>To<input type="date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} /></label>
-      </section>
-      <div className="finance-card-list messages-list">
-        {filtered.map((message) => <article className="finance-card" key={asString(message.id)}>
-          <div className="card-title-row">
-            <div>
-              <strong>{asString(message.member_name, 'Recipient')}</strong>
-              <span>{maskPhone(message.phone_e164)} · {asString(message.message_type, asString(message.template_code, 'Message'))} · {asString(message.event_name, 'No event')}</span>
+      <div className={permissions.has('messages.manage_templates') ? 'messages-layout messages-layout-with-template' : 'messages-layout'}>
+        <section className="messages-history-panel">
+          <div className="messages-filter-panel">
+            <div className="messages-filter-header">
+              <div>
+                <strong>Message History</strong>
+                <span>{filtered.length} of {rows.length} messages</span>
+              </div>
+              <label className="messages-search-field">
+                <Search size={18} aria-hidden />
+                <input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search member or phone" />
+              </label>
             </div>
-            <StatusBadge tone={statusTone(message.status)}>{asString(message.status, 'QUEUED')}</StatusBadge>
+            <div className="messages-filter-grid">
+              <label>Type<select value={type} onChange={(event) => setType(event.target.value)}>{[['ALL', 'All messages'], ['PAYMENT_CONFIRMATION', 'Payment Confirmation'], ['BALANCE_REMINDER', 'Balance Reminder']].map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+              <label>Status<select value={status} onChange={(event) => setStatus(event.target.value)}>{['ALL', 'QUEUED', 'PROCESSING', 'SENT', 'DELIVERED', 'FAILED', 'CANCELLED'].map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
+              <label>Event<select value={eventId} onChange={(event) => setEventId(event.target.value)}><option value="ALL">All events</option>{eventOptions.map((event) => <option key={event.id} value={event.id}>{event.name}</option>)}</select></label>
+              <label>From<input type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} /></label>
+              <label>To<input type="date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} /></label>
+            </div>
           </div>
-          <div className="amount-triplet">
-            <span><small>Template</small>{asString(message.template_code, 'Message')}</span>
-            <span><small>Created</small>{asDateTime(message.created_at)}</span>
-            <span><small>Sent</small>{asDateTime(message.sent_at)}</span>
+          <div className="messages-list">
+            {filtered.map((message) => <MessageHistoryCard key={asString(message.id)} message={message} tenantId={tenantId} canResend={permissions.has('messages.send')} onResent={() => void messages.refetch()} />)}
+            {!rows.length ? <EmptyState title="No SMS messages yet." message="Payment confirmations will appear here after payments are recorded." /> : null}
+            {rows.length > 0 && !filtered.length ? <EmptyState title="No messages match these filters." message="Change the status, event, or search text." /> : null}
           </div>
-          {message.status === 'FAILED' ? <p className="field-error">{asString(message.last_error_message, 'SMS delivery failed.')}</p> : null}
-          {message.template_code === 'BALANCE_REMINDER' && message.status === 'FAILED' && permissions.has('messages.send') ? <ResendBalanceReminderButton tenantId={tenantId} outboxId={asString(message.id)} onDone={() => void messages.refetch()} /> : null}
-        </article>)}
-        {!rows.length ? <EmptyState title="No SMS messages yet." message="Payment confirmations will appear here after payments are recorded." /> : null}
-        {rows.length > 0 && !filtered.length ? <EmptyState title="No messages match these filters." message="Change the status, event, or search text." /> : null}
+        </section>
+        {permissions.has('messages.manage_templates') ? (
+          <aside className="messages-template-block">
+            <BalanceReminderTemplateEditor tenantId={tenantId} template={template.data ?? null} loading={template.isLoading} onSaved={() => void queryClient.invalidateQueries({ queryKey: ['balance-reminder-template', tenantId] })} />
+          </aside>
+        ) : null}
       </div>
     </PageContainer>
+  )
+}
+
+function messageCardClass(status: unknown) {
+  const normalized = asString(status, 'QUEUED').toLowerCase().replace(/[^a-z0-9]+/g, '-')
+  return `message-card message-card-${normalized}`
+}
+
+function MessageHistoryCard({ message, tenantId, canResend, onResent }: { message: Row; tenantId: string; canResend: boolean; onResent: () => void }) {
+  const status = asString(message.status, 'QUEUED')
+  const type = asString(message.message_type, asString(message.template_code, 'Message'))
+  const preview = asString(message.body ?? message.message_body ?? message.rendered_body ?? message.messagePreview, '')
+  const failed = status === 'FAILED'
+  return (
+    <article className={messageCardClass(status)}>
+      <div className="message-card-icon">
+        <MessageCircle size={20} aria-hidden />
+      </div>
+      <div className="message-card-content">
+        <div className="message-card-top">
+          <div>
+            <strong>{asString(message.member_name, 'Recipient')}</strong>
+            <span>{type} · {asString(message.event_name, 'No event')}</span>
+          </div>
+          <StatusBadge tone={statusTone(status)}>{status}</StatusBadge>
+        </div>
+        <div className="message-meta-grid">
+          <span><small>Phone</small>{maskPhone(message.phone_e164)}</span>
+          <span><small>Template</small>{asString(message.template_code, 'Message')}</span>
+          <span><small>Created</small>{asDateTime(message.created_at)}</span>
+          <span><small>Sent</small>{asDateTime(message.sent_at)}</span>
+          <span><small>Delivered</small>{asDateTime(message.delivered_at)}</span>
+          <span><small>Attempts</small>{String(asNumber(message.attempt_count))}</span>
+        </div>
+        {preview ? <p className="message-preview">{preview}</p> : null}
+        {failed ? <div className="message-error-callout"><strong>{asString(message.last_error_code, 'Delivery failed')}</strong><span>{asString(message.last_error_message, 'SMS delivery failed.')}</span></div> : null}
+        {asString(message.template_code) === 'BALANCE_REMINDER' && failed && canResend ? <ResendBalanceReminderButton tenantId={tenantId} outboxId={asString(message.id)} onDone={onResent} /> : null}
+      </div>
+    </article>
   )
 }
 
@@ -1361,7 +1421,7 @@ function BalanceReminderTemplateEditor({ tenantId, template, loading, onSaved }:
   }
   const currentBody = body || asString(template?.body)
   return (
-    <section className="content-panel">
+    <section className="content-panel reminder-template-panel">
       <div className="panel-header">
         <div>
           <h2>Balance Reminder Template</h2>
@@ -1374,7 +1434,7 @@ function BalanceReminderTemplateEditor({ tenantId, template, loading, onSaved }:
         <textarea value={currentBody} onChange={(event) => setBody(event.target.value)} rows={5} />
       </label>
       <p className="privacy-note">{['{{member_name}}', '{{event_name}}', '{{pledged_amount}}', '{{total_paid}}', '{{outstanding}}', '{{due_date}}', '{{due_text}}'].join(' ')}</p>
-      <article className="content-panel"><p>{renderPreviewTemplate(currentBody)}</p></article>
+      <div className="template-preview-card"><p>{renderPreviewTemplate(currentBody)}</p></div>
       {mutation.error ? <p className="field-error">{errorMessage(mutation.error, 'Template could not be saved.')}</p> : null}
       {reset.error ? <p className="field-error">{errorMessage(reset.error, 'Template could not be reset.')}</p> : null}
       <div className="sheet-actions">
