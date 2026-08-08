@@ -55,6 +55,13 @@ function asRows(value: unknown): Record<string, unknown>[] {
   return Array.isArray(value) ? value as Record<string, unknown>[] : []
 }
 
+function field(row: Record<string, unknown>, ...keys: string[]) {
+  for (const key of keys) {
+    if (row[key] !== undefined && row[key] !== null) return row[key]
+  }
+  return undefined
+}
+
 function formatDate(value: unknown) {
   const text = asString(value)
   return text ? new Date(text).toLocaleDateString() : '-'
@@ -102,7 +109,7 @@ export function PlatformPage({ title }: { title: string }) {
             <StatCard label="Tenants" value={String(stats.totalTenants ?? 0)} meta={`${stats.activeTenants ?? 0} active`} icon={Building2} />
             <StatCard label="Trial Tenants" value={String(stats.trialTenants ?? 0)} meta={`${stats.suspendedTenants ?? 0} suspended`} icon={Package} />
             <StatCard label="Open Support" value={String(stats.openSupportRequests ?? 0)} meta={`${stats.newFeedbackItems ?? 0} new feedback`} icon={HeartHandshake} tone="warning" />
-            <StatCard label="Error Signals" value={String(stats.frontendErrors14d ?? 0)} meta="Last 14 days" icon={AlertTriangle} tone="danger" />
+            <StatCard label="Error Signals" value={String(stats.frontendErrors14d ?? stats.recentSystemErrors ?? 0)} meta="Last 14 days" icon={AlertTriangle} tone="danger" />
           </section>
           <OverviewPanel />
         </>
@@ -122,7 +129,7 @@ export function PlatformBetaPage() {
   const settings = betaQuery.data?.['settings'] as Record<string, unknown> | undefined
   const invitations = asRows(betaQuery.data?.['invitations'])
   const recentRegistrations = asRows(betaQuery.data?.['recentRegistrations'])
-  const funnel = betaQuery.data?.['funnel'] as Record<string, unknown> | undefined
+  const funnel = (betaQuery.data?.['funnel'] ?? betaQuery.data?.['onboardingFunnel']) as Record<string, unknown> | undefined
   const updateSettings = useMutation({
     mutationFn: async (registrationMode: string) => api.updateRolloutSettings({
       registrationMode,
@@ -155,7 +162,7 @@ export function PlatformBetaPage() {
         <StatCard label="Mode" value={asString(settings?.['registrationMode'], 'OPEN')} meta={settings?.['betaModeEnabled'] ? 'Beta enabled' : 'Beta disabled'} icon={Flag} />
         <StatCard label="Invitations" value={String(invitations.length)} meta={`${invitations.filter((item) => asString(item.status) === 'ACTIVE').length} active`} icon={ShieldCheck} />
         <StatCard label="Registrations" value={String(recentRegistrations.length)} meta="Recent workspaces" icon={Building2} />
-        <StatCard label="Activation" value={String(asNumber(funnel?.['paymentRecorded']))} meta="Tenants with payments" icon={CheckCircle2} tone="success" />
+        <StatCard label="Activation" value={String(asNumber(funnel?.['PAYMENT_RECORDED'] ?? funnel?.['paymentRecorded'] ?? funnel?.['ONBOARDING_COMPLETED']))} meta="Tracked beta milestones" icon={CheckCircle2} tone="success" />
       </section>
       <article className="platform-panel">
         <div className="panel-header">
@@ -294,7 +301,7 @@ export function PlatformTenantDetailPage() {
 
   const tenant = detailQuery.data?.['tenant'] as Record<string, unknown> | undefined
   const health = detailQuery.data?.['health'] as Record<string, unknown> | undefined
-  const milestones = detailQuery.data?.['milestones'] as Record<string, unknown> | undefined
+  const milestones = (detailQuery.data?.['milestones'] ?? detailQuery.data?.['activation']) as Record<string, unknown> | undefined
 
   return (
     <PageContainer>
@@ -412,7 +419,10 @@ function SimpleTable({ rows, columns }: { rows: Record<string, unknown>[]; colum
           <thead><tr>{columns.map((column) => <th key={column}>{column.replaceAll('_', ' ')}</th>)}</tr></thead>
           <tbody>
             {rows.map((row, index) => (
-              <tr key={asString(row.id, String(index))}>{columns.map((column) => <td key={column}>{column.endsWith('_at') || column.endsWith('At') ? formatDate(row[column]) : asString(row[column], String(row[column] ?? '-'))}</td>)}</tr>
+              <tr key={asString(row.id, String(index))}>{columns.map((column) => {
+                const value = column === 'displayCodeSuffix' ? field(row, 'displayCodeSuffix', 'suffix') : field(row, column)
+                return <td key={column}>{column.endsWith('_at') || column.endsWith('At') ? formatDate(value) : asString(value, String(value ?? '-'))}</td>
+              })}</tr>
             ))}
           </tbody>
         </table>

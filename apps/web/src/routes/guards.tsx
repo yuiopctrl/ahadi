@@ -1,6 +1,7 @@
 import { Navigate, Outlet, useLocation } from 'react-router-dom'
 import { ErrorState, LoadingState, PageContainer } from '../components/ui'
 import { useSessionStore } from '../stores/session-store'
+import { isAccessibleTenantMembership } from '../stores/session-selection'
 import { buildPlatformAccessDiagnostic, getPlatformRouteRedirect, getPostAuthDestination, getTenantRouteRedirect } from './access'
 
 function FullScreenLoading() {
@@ -98,5 +99,6 @@ export function OnboardingRoute() {
   if (session.lockState.isLocked) {
     return <Navigate to="/setup-pin" replace />
   }
-  return session.userContext?.onboardingCompleted ? <Navigate to="/select-tenant" replace /> : <Outlet />
+  const hasAccessibleTenant = Boolean(session.userContext?.tenantMemberships.some(isAccessibleTenantMembership))
+  return session.userContext?.onboardingCompleted && hasAccessibleTenant ? <Navigate to="/select-tenant" replace /> : <Outlet />
 }

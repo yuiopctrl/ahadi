@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs'
 import test from 'node:test'
 
 const migration = readFileSync(new URL('../../../supabase/migrations/030_beta_rollout_support_operations.sql', import.meta.url), 'utf8')
+const shapeFixMigration = readFileSync(new URL('../../../supabase/migrations/031_beta_rollout_platform_shape_fix.sql', import.meta.url), 'utf8')
 const app = readFileSync(new URL('./app.ts', import.meta.url), 'utf8')
 const types = readFileSync(new URL('../../../packages/types/src/index.ts', import.meta.url), 'utf8')
 const validation = readFileSync(new URL('../../../packages/validation/src/index.ts', import.meta.url), 'utf8')
@@ -88,4 +89,18 @@ test('batch 7 UI contains operational beta, support, feature and help surfaces',
   assert.match(tenantPage, /First-Run Checklist/)
   assert.match(tenantPage, /Contact Support/)
   assert.match(tenantPage, /Beta Feedback/)
+})
+
+test('batch 7 platform hotfix keeps RPC keys aligned with UI readers', () => {
+  assert.match(shapeFixMigration, /'funnel', funnel/)
+  assert.match(shapeFixMigration, /'onboardingFunnel', funnel/)
+  assert.match(shapeFixMigration, /'displayCodeSuffix', display_code_suffix/)
+  assert.match(shapeFixMigration, /'lifecycleTag', t\.lifecycle_tag/)
+  assert.match(shapeFixMigration, /'commercialStatus', t\.commercial_status/)
+  assert.match(shapeFixMigration, /'milestones', milestones/)
+  assert.match(shapeFixMigration, /'newFeedbackItems'/)
+  assert.match(shapeFixMigration, /'frontendErrors14d'/)
+  assert.match(platformPage, /betaQuery\.data\?\.\['funnel'\] \?\? betaQuery\.data\?\.\['onboardingFunnel'\]/)
+  assert.match(platformPage, /detailQuery\.data\?\.\['milestones'\] \?\? detailQuery\.data\?\.\['activation'\]/)
+  assert.match(platformPage, /field\(row, 'displayCodeSuffix', 'suffix'\)/)
 })

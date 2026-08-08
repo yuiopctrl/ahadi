@@ -7,6 +7,8 @@ const navigation = readFileSync(new URL('../navigation.tsx', import.meta.url), '
 const styles = readFileSync(new URL('../index.css', import.meta.url), 'utf8')
 const apiClient = readFileSync(new URL('../lib/api.ts', import.meta.url), 'utf8')
 const routes = readFileSync(new URL('../routes/index.tsx', import.meta.url), 'utf8')
+const authPage = readFileSync(new URL('./auth.tsx', import.meta.url), 'utf8')
+const guards = readFileSync(new URL('../routes/guards.tsx', import.meta.url), 'utf8')
 
 test('tenant workflow does not depend on hardcoded demo event ids', () => {
   assert.doesNotMatch(navigation, /event_001/)
@@ -21,6 +23,15 @@ test('mobile more opens an overflow menu instead of linking directly to settings
   for (const label of ['Pledges', 'Outstanding', 'Share List', 'Messages', 'Reports', 'Users', 'Settings']) {
     assert.match(navigation, new RegExp(label))
   }
+})
+
+test('registration intent survives OTP and allows onboarding after tenant reset', () => {
+  assert.match(authPage, /location\.pathname === '\/register'/)
+  assert.match(authPage, /localStorage\.setItem\(postAuthDestinationKey, '\/onboarding'\)/)
+  assert.match(authPage, /preferredDestination === '\/onboarding' && accessibleMembershipCount\(context\) === 0/)
+  assert.match(authPage, /!hasActivePlatformAccess\(context\) && accessibleMembershipCount\(context\) === 0/)
+  assert.match(guards, /const hasAccessibleTenant = Boolean\(session\.userContext\?\.tenantMemberships\.some\(isAccessibleTenantMembership\)\)/)
+  assert.match(guards, /onboardingCompleted && hasAccessibleTenant/)
 })
 
 test('financial pages render explicit empty and error states instead of blank lists', () => {

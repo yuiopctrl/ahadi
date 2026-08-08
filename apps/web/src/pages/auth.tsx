@@ -2,11 +2,12 @@ import { useMutation, useQuery } from '@tanstack/react-query'
 import { ArrowLeft, CheckCircle2, LockKeyhole } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import type { OnboardingPayload, SubscriptionPlan, TenantMembershipContext } from '@ahadi/types'
+import type { OnboardingPayload, SubscriptionPlan, TenantMembershipContext, UserContext } from '@ahadi/types'
 import { normalizeTanzaniaPhone, onboardingPayloadSchema, setupPinSchema } from '@ahadi/validation'
 import { api, ApiClientError } from '../lib/api'
 import { supabase } from '../lib/supabase'
 import { hasActivePlatformAccess } from '../routes/access'
+import { isAccessibleTenantMembership } from '../stores/session-selection'
 import { getSingleActiveMembership, useSessionStore } from '../stores/session-store'
 import { MoneyDisplay, StatusBadge } from '../components/ui'
 
@@ -153,6 +154,10 @@ function errorMessage(error: unknown) {
   return 'Something went wrong'
 }
 
+function accessibleMembershipCount(context: UserContext | null) {
+  return context?.tenantMemberships.filter(isAccessibleTenantMembership).length ?? 0
+}
+
 export function AuthPage({ title, subtitle, mode }: AuthPageProps) {
   if (mode === 'otp') {
     return <OtpPage title={title} subtitle={subtitle} />
@@ -181,6 +186,8 @@ function LoginPage({ title, subtitle }: Pick<AuthPageProps, 'title' | 'subtitle'
       localStorage.setItem(phoneDraftKey, normalized)
       if (location.pathname.startsWith('/platform')) {
         localStorage.setItem(postAuthDestinationKey, '/platform')
+      } else if (location.pathname === '/register') {
+        localStorage.setItem(postAuthDestinationKey, '/onboarding')
       } else {
         localStorage.removeItem(postAuthDestinationKey)
       }
@@ -248,7 +255,8 @@ function OtpPage({ title, subtitle }: Pick<AuthPageProps, 'title' | 'subtitle'>)
         navigate('/platform', { replace: true })
         return
       }
-      if (!context?.onboardingCompleted) {
+      if (!context?.onboardingCompleted || (preferredDestination === '/onboarding' && accessibleMembershipCount(context) === 0) || (!hasActivePlatformAccess(context) && accessibleMembershipCount(context) === 0)) {
+        localStorage.removeItem(postAuthDestinationKey)
         navigate('/onboarding', { replace: true })
         return
       }
@@ -342,7 +350,8 @@ function PinPage({ title, subtitle }: Pick<AuthPageProps, 'title' | 'subtitle'>)
         navigate('/platform', { replace: true })
         return
       }
-      if (!context?.onboardingCompleted) {
+      if (!context?.onboardingCompleted || (preferredDestination === '/onboarding' && accessibleMembershipCount(context) === 0) || (!hasActivePlatformAccess(context) && accessibleMembershipCount(context) === 0)) {
+        localStorage.removeItem(postAuthDestinationKey)
         navigate('/onboarding', { replace: true })
         return
       }
