@@ -17,7 +17,7 @@ export function TenantAppLayout() {
         <Outlet />
       </div>
       <MobileActionBar />
-      <MobileBottomNav />
+      <MobileBottomNav event={event} showPlatformLink={hasActivePlatformAccess(session.userContext)} />
     </div>
   )
 }

@@ -823,6 +823,100 @@ function notificationFromEnqueue(data: unknown): Record<string, unknown> {
   return Object.keys(notification).length ? notification : { smsQueued: false, reason: 'ENQUEUE_FAILED' }
 }
 
+function requireReportExportPermission(request: express.Request) {
+  const permissions = new Set(request.tenantContext?.permissions ?? [])
+  if (!permissions.has('reports.export') && !request.tenantContext?.membership?.isOwner) {
+    throw new AppError('EXPORT_PERMISSION_DENIED', 'Report export permission is required')
+  }
+}
+
+function exportRequestToReportInput(body: z.infer<typeof reportExportRequestSchema>) {
+  return reportRequestSchema.parse({
+    ...body.filters,
+    ...(body.sort.field ? { sort: body.sort.field } : {}),
+    ...(body.sort.direction ? { direction: body.sort.direction } : {}),
+  })
+}
+
+function exportFilename(eventName: string, reportType: ReportType, extension: string, memberName?: string) {
+  const today = new Date().toISOString().slice(0, 10)
+  const eventSlug = safeFileSlug(eventName)
+  const reportSlug = reportType === 'member-statement' ? `${safeFileSlug(memberName ?? 'member')}_statement` : safeFileSlug(reportType)
+  return `ahadi_${eventSlug}_${reportSlug}_${today}.${extension}`
+}
+
+function exportMetadata(filtersApplied: ReportRequest, rowCount: number) {
+  const redactedFilters = { ...filtersApplied, search: filtersApplied.search ? '<redacted-search>' : '' }
+  return {
+    filtersApplied: redactedFilters,
+    rowCount,
+  }
+}
+
+async function writeReportExportAudit(client: ReturnType<typeof createUserSupabase>, tenantId: string, eventId: string, reportType: ReportType, format: ReportExportFormat, rowCount: number, memberId?: string | null) {
+  await client.rpc('write_audit_log', {
+    p_tenant_id: tenantId,
+    p_action: reportType === 'member-statement' ? 'MEMBER_STATEMENT_EXPORTED' : 'REPORT_EXPORTED',
+    p_entity_type: 'report',
+    p_entity_id: memberId || null,
+    p_event_id: eventId,
+    p_old_values: null,
+    p_new_values: {
+      reportType,
+      format,
+      rowCount,
+    },
+    p_reason: null,
+  })
+}
+
+async function handleReportExport(request: express.Request, response: express.Response, reportType: ReportType, memberId?: string | null) {
+  const tenantId = tenantIdFromRequest(request)
+  const eventId = uuidParamSchema.parse(request.params['eventId'])
+  requireReportExportPermission(request)
+  const exportRequest = reportExportRequestSchema.parse(request.body ?? {})
+  const supported = supportedExportFormats(reportType)
+  if (!supported.includes(exportRequest.format)) {
+    throw new AppError('REPORT_FORMAT_NOT_SUPPORTED', `${exportRequest.format} is not supported for ${reportExportTitle(reportType)}`)
+  }
+  const limit = exportLimits[exportRequest.format]
+  const reportInput = {
+    ...exportRequestToReportInput(exportRequest),
+    ...(memberId ? { eventMemberId: memberId } : {}),
+    page: 1,
+    pageSize: limit,
+  }
+  const client = createUserSupabase(request.auth?.accessToken ?? '')
+  const report = await getEventReportResult(client, tenantId, eventId, reportType, reportInput, request.requestId)
+  const rowCount = exportRows(report).length
+  const totalRows = Number(jsonRecord(report['pagination'])['totalRows'] ?? rowCount)
+  if (totalRows > limit) {
+    throw new AppError('REPORT_EXPORT_TOO_LARGE', `Export has ${totalRows} rows. Narrow filters and try again.`, 413, JSON.stringify({ limit, filteredRows: totalRows }))
+  }
+  const event = request.tenantContext?.events.find((candidate) => candidate.id === eventId)
+  const summary = jsonRecord(report['summary'])
+  const member = jsonRecord(summary['member'])
+  if (reportType === 'member-statement' && memberId && !Object.keys(member).length) {
+    throw new AppError('MEMBER_STATEMENT_NOT_FOUND', 'Member statement was not found')
+  }
+  const document = createExportDocument({
+    eventName: event?.name ?? 'Event',
+    filtersApplied: reportInput,
+    format: exportRequest.format,
+    generatedAt: new Date(),
+    generatedBy: request.auth?.context?.profile?.fullName ?? request.auth?.user.phone ?? 'Ahadi user',
+    report,
+    reportType,
+    tenantName: request.tenantContext?.tenant.name ?? 'Ahadi',
+  })
+  const filename = exportFilename(event?.name ?? 'event', reportType, document.extension, typeof member['name'] === 'string' ? member['name'] : undefined)
+  await writeReportExportAudit(client, tenantId, eventId, reportType, exportRequest.format, rowCount, memberId)
+  response.setHeader('Content-Type', document.contentType)
+  response.setHeader('Content-Disposition', `attachment; filename="${filename}"`)
+  response.setHeader('X-Ahadi-Export-Metadata', JSON.stringify(exportMetadata(reportInput, rowCount)))
+  response.send(document.body)
+}
+
 app.use(helmet())
 app.use(requestIdMiddleware)
 app.post('/auth/hooks/send-sms', sendSmsHookLimiter, express.raw({ type: 'application/json', limit: '64kb' }), sendSmsHookHandler)
@@ -1142,6 +1236,24 @@ app.post('/api/v1/events/:eventId/reports/:reportType', requireAuth, loadUserCon
     const client = createUserSupabase(request.auth?.accessToken ?? '')
     const data = await getEventReportResult(client, tenantId, eventId, reportType, input, request.requestId)
     response.json({ data })
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.post('/api/v1/events/:eventId/reports/member-statement/:eventMemberId/export', requireAuth, loadUserContext, requireTenantContext, async (request, response, next) => {
+  try {
+    const eventMemberId = uuidParamSchema.parse(request.params['eventMemberId'])
+    await handleReportExport(request, response, 'member-statement', eventMemberId)
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.post('/api/v1/events/:eventId/reports/:reportType/export', requireAuth, loadUserContext, requireTenantContext, async (request, response, next) => {
+  try {
+    const reportType = reportTypeSchema.parse(request.params['reportType'])
+    await handleReportExport(request, response, reportType)
   } catch (error) {
     next(error)
   }

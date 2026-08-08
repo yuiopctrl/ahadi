@@ -48,6 +48,39 @@ async function apiFetch<T>(path: string, options: RequestInit & { tenantId?: str
   return payload as T
 }
 
+async function apiDownload(path: string, options: RequestInit & { tenantId?: string; auth?: boolean } = {}) {
+  const headers = new Headers(options.headers)
+  headers.set('Content-Type', 'application/json')
+  if (options.auth !== false) {
+    const token = await getAccessToken()
+    if (token) {
+      headers.set('Authorization', `Bearer ${token}`)
+    }
+  }
+  if (options.tenantId) {
+    headers.set('X-Tenant-ID', options.tenantId)
+  }
+
+  const response = await fetch(`${env.apiUrl}${path}`, {
+    ...options,
+    headers,
+    cache: 'no-store',
+  })
+  if (!response.ok) {
+    const payload = (await response.json().catch(() => null)) as { error?: { code?: ApiErrorCode; message?: string; requestId?: string } } | null
+    throw new ApiClientError(payload?.error?.code ?? 'INTERNAL_ERROR', payload?.error?.message ?? 'Request failed', payload?.error?.requestId ?? response.headers.get('X-Request-ID'))
+  }
+  const disposition = response.headers.get('Content-Disposition') ?? ''
+  const metadata = response.headers.get('X-Ahadi-Export-Metadata')
+  const filename = disposition.match(/filename="([^"]+)"/)?.[1] ?? 'ahadi_report'
+  return {
+    blob: await response.blob(),
+    contentType: response.headers.get('Content-Type') ?? 'application/octet-stream',
+    filename,
+    metadata: metadata ? JSON.parse(metadata) as Record<string, unknown> : null,
+  }
+}
+
 export const api = {
   requestOtp: (phone: string) => apiFetch<{ ok: boolean }>('/auth/request-otp', { method: 'POST', auth: false, body: JSON.stringify({ phone }) }),
   verifyOtp: (phone: string, token: string) =>
@@ -78,6 +111,12 @@ export const api = {
   eventFinancialSummary: (tenantId: string, eventId: string) => apiFetch<{ data: Record<string, unknown> }>(`/events/${eventId}/financial-summary`, { tenantId }),
   eventReport: (tenantId: string, eventId: string, reportType: string, payload: Record<string, unknown>) =>
     apiFetch<{ data: Record<string, unknown> }>(`/events/${eventId}/reports/${reportType}`, { tenantId, method: 'POST', body: JSON.stringify(payload) }),
+  exportEventReport: (tenantId: string, eventId: string, reportType: string, payload: Record<string, unknown>, eventMemberId?: string) =>
+    apiDownload(eventMemberId ? `/events/${eventId}/reports/member-statement/${eventMemberId}/export` : `/events/${eventId}/reports/${reportType}/export`, {
+      tenantId,
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
   eventMembers: (tenantId: string, eventId: string) => apiFetch<{ data: Record<string, unknown>[] }>(`/events/${eventId}/members`, { tenantId }),
   eventMemberDetail: (tenantId: string, eventId: string, eventMemberId: string) =>
     apiFetch<{ data: { member: Record<string, unknown>; payments: Record<string, unknown>[] } }>(`/events/${eventId}/members/${eventMemberId}`, { tenantId }),

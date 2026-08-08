@@ -57,6 +57,15 @@ const reportCards = [
   { type: 'collectors', title: 'Collectors', description: 'Operational collection totals grouped by user who received the payment.' },
   { type: 'member-statement', title: 'Member Statement', description: 'Single member pledge, transaction history, outstanding and credit summary.' },
 ]
+const reportExportFormats: Record<string, Array<'CSV' | 'XLSX' | 'PDF' | 'PRINT'>> = {
+  summary: ['PDF', 'PRINT'],
+  pledges: ['XLSX', 'CSV', 'PDF', 'PRINT'],
+  payments: ['XLSX', 'CSV', 'PDF', 'PRINT'],
+  outstanding: ['XLSX', 'CSV', 'PDF', 'PRINT'],
+  'payment-methods': ['XLSX', 'PDF', 'PRINT'],
+  collectors: ['XLSX', 'PDF', 'PRINT'],
+  'member-statement': ['PDF', 'PRINT'],
+}
 
 function asString(value: unknown, fallback = '') {
   return typeof value === 'string' && value ? value : fallback
@@ -713,7 +722,8 @@ export function MemberDetailPage() {
   const activeEvent = useActiveEventContext(eventId)
   const tenantId = activeEvent.tenantId
   const detail = useQuery({ queryKey: ['member-detail', tenantId, eventId, eventMemberId], queryFn: async () => (await api.eventMemberDetail(tenantId ?? '', eventId, eventMemberId)).data, enabled: Boolean(tenantId && eventId && eventMemberId && !activeEvent.error) })
-  const permissions = new Set(useSessionStore().selectedTenantContext?.permissions ?? [])
+  const reportTenantContext = useSessionStore().selectedTenantContext
+  const permissions = new Set(reportTenantContext?.permissions ?? [])
   const [reminderOpen, setReminderOpen] = useState(false)
   if (activeEvent.error) return <ErrorState title="Unable to open member" message={activeEvent.error} />
   if (detail.isLoading) return <LoadingState title="Loading member" />
@@ -1121,7 +1131,8 @@ export function OutstandingPage() {
   const { eventId = '' } = useParams()
   const activeEvent = useActiveEventContext(eventId)
   const tenantId = activeEvent.tenantId
-  const permissions = new Set(useSessionStore().selectedTenantContext?.permissions ?? [])
+  const reportTenantContext = useSessionStore().selectedTenantContext
+  const permissions = new Set(reportTenantContext?.permissions ?? [])
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState('ALL')
   const [selectionMode, setSelectionMode] = useState(false)
@@ -1526,10 +1537,69 @@ function emptyReportMessage(type: string) {
   return 'No report rows are available.'
 }
 
+function downloadReportBlob(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob)
+  const anchor = document.createElement('a')
+  anchor.href = url
+  anchor.download = filename
+  document.body.appendChild(anchor)
+  anchor.click()
+  anchor.remove()
+  setTimeout(() => URL.revokeObjectURL(url), 1_000)
+}
+
+function openPrintableReport(blob: Blob) {
+  const url = URL.createObjectURL(blob)
+  const printWindow = window.open(url, '_blank', 'noopener,noreferrer')
+  if (printWindow) {
+    setTimeout(() => printWindow.print(), 700)
+  }
+  setTimeout(() => URL.revokeObjectURL(url), 30_000)
+}
+
+async function shareReportFile(exported: { blob: Blob; contentType: string; filename: string }) {
+  const file = new File([exported.blob], exported.filename, { type: exported.contentType })
+  const nav = navigator as Navigator & { canShare?: (data: ShareData) => boolean }
+  if (nav.canShare?.({ files: [file] }) && navigator.share) {
+    await navigator.share({ files: [file], title: exported.filename })
+    return
+  }
+  downloadReportBlob(exported.blob, exported.filename)
+}
+
+function ExportReportSheet({ reportType, rowCount, filterCount, formats, canExport, pendingFormat, isPending, error, lastExport, onExport, onClose }: { reportType: string; rowCount: number; filterCount: number; formats: Array<'CSV' | 'XLSX' | 'PDF' | 'PRINT'>; canExport: boolean; pendingFormat: 'CSV' | 'XLSX' | 'PDF' | 'PRINT' | null; isPending: boolean; error: unknown; lastExport: { blob: Blob; contentType: string; filename: string } | null; onExport: (format: 'CSV' | 'XLSX' | 'PDF' | 'PRINT') => void; onClose: () => void }) {
+  return (
+    <section className="mobile-sheet export-sheet">
+      <div className="panel-header">
+        <div>
+          <h2>Export Report</h2>
+          <p>{reportTitle(reportType)} · {rowCount} rows · {filterCount} filters applied</p>
+        </div>
+        <button type="button" onClick={onClose}>Close</button>
+      </div>
+      {!canExport ? <ErrorState title="Export not allowed" message="Your role can view this report but cannot export it." /> : null}
+      {canExport ? <div className="export-format-grid">{formats.map((format) => <button key={format} type="button" disabled={isPending} onClick={() => onExport(format)}>{format === 'PRINT' ? <Printer size={18} aria-hidden /> : <FileText size={18} aria-hidden />}{isPending && pendingFormat === format ? 'Preparing report...' : formatLabel(format)}</button>)}</div> : null}
+      {error ? <ErrorState title="Export failed" message={errorMessage(error, 'Report export could not be prepared.')} /> : null}
+      {lastExport ? <div className="sheet-actions"><span>Report ready</span><button type="button" onClick={() => downloadReportBlob(lastExport.blob, lastExport.filename)}>Download</button>{lastExport.contentType.includes('pdf') ? <button className="primary-button" type="button" onClick={() => void shareReportFile(lastExport)}>Share</button> : null}</div> : null}
+    </section>
+  )
+}
+
+function formatLabel(format: string) {
+  if (format === 'XLSX') return 'Excel'
+  if (format === 'CSV') return 'CSV'
+  if (format === 'PDF') return 'PDF'
+  return 'Print'
+}
+
 function ReportDetailPage({ tenantId, eventId, eventName, reportType }: { tenantId: string; eventId: string; eventName: string; reportType: string }) {
   const [draft, setDraft] = useState({ search: '', status: 'ALL', filter: 'ALL', paymentMethod: 'ALL', dateFrom: '', dateTo: '', dueFrom: '', dueTo: '', category: '', sort: reportType === 'pledges' ? 'MEMBER' : reportType === 'outstanding' ? 'OUTSTANDING' : 'DATE', direction: reportType === 'pledges' ? 'ASC' : 'DESC', pageSize: '25', eventMemberId: '' })
   const [filters, setFilters] = useState(draft)
   const [page, setPage] = useState(1)
+  const [exportOpen, setExportOpen] = useState(false)
+  const [lastExport, setLastExport] = useState<{ blob: Blob; contentType: string; filename: string } | null>(null)
+  const reportTenantContext = useSessionStore().selectedTenantContext
+  const permissions = new Set(reportTenantContext?.permissions ?? [])
   const payload = {
     ...filters,
     page,
@@ -1547,6 +1617,18 @@ function ReportDetailPage({ tenantId, eventId, eventName, reportType }: { tenant
   const pagination = jsonRecord(report.data?.pagination)
   const members = Array.isArray(report.data?.members) ? report.data.members.map(jsonRecord) : []
   const filterCount = Object.entries(filters).filter(([key, value]) => !['pageSize', 'sort', 'direction'].includes(key) && value && value !== 'ALL').length
+  const totalRows = asNumber(pagination.totalRows) || rows.length
+  const exportMutation = useMutation({
+    mutationFn: async (format: 'CSV' | 'XLSX' | 'PDF' | 'PRINT') => api.exportEventReport(tenantId, eventId, reportType, { format, filters: payload, sort: { field: filters.sort, direction: filters.direction } }, reportType === 'member-statement' && payload.eventMemberId ? asString(payload.eventMemberId) : undefined),
+    onSuccess: async (result) => {
+      setLastExport({ blob: result.blob, contentType: result.contentType, filename: result.filename })
+      if (result.contentType.includes('text/html')) {
+        openPrintableReport(result.blob)
+        return
+      }
+      downloadReportBlob(result.blob, result.filename)
+    },
+  })
 
   function applyFilters(event: FormEvent) {
     event.preventDefault()
@@ -1556,7 +1638,8 @@ function ReportDetailPage({ tenantId, eventId, eventName, reportType }: { tenant
 
   return (
     <PageContainer>
-      <PageHeader title={reportTitle(reportType)} description={`${eventName} report`} action={<Link to={`/app/events/${eventId}/reports`}><ArrowLeft size={18} aria-hidden /> Reports</Link>} />
+      <PageHeader title={reportTitle(reportType)} description={`${eventName} report`} action={<div className="inline-actions"><Link to={`/app/events/${eventId}/reports`}><ArrowLeft size={18} aria-hidden /> Reports</Link><button type="button" onClick={() => setExportOpen((value) => !value)}><Share2 size={18} aria-hidden /> Export</button></div>} />
+      {exportOpen ? <ExportReportSheet reportType={reportType} rowCount={totalRows} filterCount={filterCount} canExport={permissions.has('reports.export') || Boolean(reportTenantContext?.membership?.isOwner)} formats={reportExportFormats[reportType] ?? ['PDF', 'PRINT']} pendingFormat={exportMutation.variables ?? null} isPending={exportMutation.isPending} error={exportMutation.error} lastExport={lastExport} onClose={() => setExportOpen(false)} onExport={(format) => exportMutation.mutate(format)} /> : null}
       <form className="filter-bar" onSubmit={applyFilters}>
         {reportType === 'member-statement' ? <label>Member<select value={draft.eventMemberId} onChange={(event) => setDraft((current) => ({ ...current, eventMemberId: event.target.value }))}><option value="">First matching member</option>{members.map((member) => <option key={asString(member.eventMemberId)} value={asString(member.eventMemberId)}>{asString(member.name)} · {asString(member.memberCode)}</option>)}</select></label> : null}
         <label>Search<input type="search" value={draft.search} onChange={(event) => setDraft((current) => ({ ...current, search: event.target.value }))} placeholder="Member, receipt or payment" /></label>

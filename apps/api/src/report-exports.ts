@@ -362,7 +362,8 @@ function simplePdf(lines: string[], orientation: 'portrait' | 'landscape') {
   const objects: string[] = ['<< /Type /Catalog /Pages 2 0 R >>']
   const pageKids: string[] = []
   objects.push('')
-  pages.forEach((content, index) => {
+  objects.push('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>')
+  pages.forEach((content) => {
     const pageObjectNumber = objects.length + 1
     const contentObjectNumber = pageObjectNumber + 1
     pageKids.push(`${pageObjectNumber} 0 R`)
@@ -370,7 +371,6 @@ function simplePdf(lines: string[], orientation: 'portrait' | 'landscape') {
     objects.push(`<< /Length ${Buffer.byteLength(content)} >>\nstream\n${content}\nendstream`)
   })
   objects[1] = `<< /Type /Pages /Kids [${pageKids.join(' ')}] /Count ${pages.length} >>`
-  objects.splice(2, 0, '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>')
   return buildPdf(objects)
 }
 
@@ -478,5 +478,13 @@ function htmlEscape(value: string) {
 }
 
 function pdfEscape(value: string) {
-  return value.replace(/[^\x09\x0a\x0d\x20-\x7e]/g, '?').replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)')
+  return [...value]
+    .map((character) => {
+      const code = character.charCodeAt(0)
+      return code >= 32 && code <= 126 ? character : '?'
+    })
+    .join('')
+    .replace(/\\/g, '\\\\')
+    .replace(/\(/g, '\\(')
+    .replace(/\)/g, '\\)')
 }

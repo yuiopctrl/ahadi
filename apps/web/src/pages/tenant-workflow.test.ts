@@ -4,12 +4,23 @@ import test from 'node:test'
 
 const tenantPage = readFileSync(new URL('./tenant.tsx', import.meta.url), 'utf8')
 const navigation = readFileSync(new URL('../navigation.tsx', import.meta.url), 'utf8')
+const styles = readFileSync(new URL('../index.css', import.meta.url), 'utf8')
 const apiClient = readFileSync(new URL('../lib/api.ts', import.meta.url), 'utf8')
 const routes = readFileSync(new URL('../routes/index.tsx', import.meta.url), 'utf8')
 
 test('tenant workflow does not depend on hardcoded demo event ids', () => {
   assert.doesNotMatch(navigation, /event_001/)
   assert.ok(navigation.includes("event ? `/app/events/${event.id}`"))
+})
+
+test('mobile more opens an overflow menu instead of linking directly to settings', () => {
+  assert.doesNotMatch(navigation, /to: '\/app\/settings', label: 'More'/)
+  assert.match(navigation, /MobileBottomNav\(\{ event, showPlatformLink/)
+  assert.match(navigation, /mobile-more-menu/)
+  assert.match(navigation, /overflowNav\(event, showPlatformLink\)/)
+  for (const label of ['Pledges', 'Outstanding', 'Share List', 'Messages', 'Reports', 'Users', 'Settings']) {
+    assert.match(navigation, new RegExp(label))
+  }
 })
 
 test('financial pages render explicit empty and error states instead of blank lists', () => {
@@ -92,4 +103,26 @@ test('batch 4 report routes and report states are implemented', () => {
   assert.match(tenantPage, /All recorded pledges are fully paid\./)
   assert.match(tenantPage, /Apply \{filterCount/)
   assert.match(tenantPage, /queryKey: \['event-report', tenantId, eventId, reportType, payload\]/)
+})
+
+test('batch 5 report export sheet and binary download client are implemented', () => {
+  assert.match(apiClient, /apiDownload/)
+  assert.match(apiClient, /exportEventReport: \(tenantId: string, eventId: string, reportType: string/)
+  assert.match(apiClient, /Content-Disposition/)
+  assert.match(tenantPage, /ExportReportSheet/)
+  assert.match(tenantPage, /reportExportFormats/)
+  assert.match(tenantPage, /Preparing report/)
+  assert.match(tenantPage, /Report ready/)
+  assert.match(tenantPage, /navigator\.share/)
+  assert.match(tenantPage, /downloadReportBlob/)
+  assert.match(tenantPage, /openPrintableReport/)
+})
+
+test('shared mobile UI has responsive overflow menu and safe card layouts', () => {
+  assert.match(styles, /\.mobile-more-menu/)
+  assert.match(styles, /\.mobile-more-grid/)
+  assert.match(styles, /max-height: min\(68svh, 460px\)/)
+  assert.match(styles, /\.amount-triplet,[\s\S]*grid-template-columns: 1fr/)
+  assert.match(styles, /overflow-wrap: anywhere/)
+  assert.match(styles, /@media \(min-width: 640px\)[\s\S]*\.amount-triplet/)
 })

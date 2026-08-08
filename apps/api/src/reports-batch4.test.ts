@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs'
 import test from 'node:test'
 
 const migration = readFileSync(new URL('../../../supabase/migrations/027_reports_batch4.sql', import.meta.url), 'utf8')
+const exportMigration = readFileSync(new URL('../../../supabase/migrations/028_report_exports.sql', import.meta.url), 'utf8')
 const app = readFileSync(new URL('./app.ts', import.meta.url), 'utf8')
 
 test('batch 4 creates report permission and report RPCs', () => {
@@ -48,4 +49,19 @@ test('report API falls back to stable financial RPCs when batch 4 RPCs are unava
   assert.match(app, /rpc_list_event_members/)
   assert.match(app, /rpc_list_event_pledges/)
   assert.match(app, /rpc_list_event_payments/)
+})
+
+test('batch 5 creates export permission and API export routes with audit logging', () => {
+  assert.match(exportMigration, /'reports\.export'/)
+  assert.match(exportMigration, /where r\.code in \('TENANT_OWNER', 'EVENT_ADMIN', 'TREASURER'\)/)
+  assert.match(exportMigration, /grant execute on function public\.write_audit_log/)
+  assert.match(app, /app\.post\('\/api\/v1\/events\/:eventId\/reports\/:reportType\/export'/)
+  assert.match(app, /app\.post\('\/api\/v1\/events\/:eventId\/reports\/member-statement\/:eventMemberId\/export'/)
+  assert.match(app, /requireReportExportPermission/)
+  assert.match(app, /supportedExportFormats/)
+  assert.match(app, /exportLimits/)
+  assert.match(app, /REPORT_EXPORT_TOO_LARGE/)
+  assert.match(app, /writeReportExportAudit/)
+  assert.match(app, /REPORT_EXPORTED/)
+  assert.match(app, /MEMBER_STATEMENT_EXPORTED/)
 })
