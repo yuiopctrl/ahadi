@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { SmsProviderError } from '@ahadi/sms'
-import { getNextSmsEndpoint, getNextSmsRuntimeDiagnostics, classifySmsFailure, parseWorkerEnv, processSmsOutboxBatch, type SmsOutboxJob, type SmsOutboxProvider, type SmsOutboxStore } from './index.js'
+import { ConfiguredSmsOutboxProvider, getNextSmsEndpoint, getNextSmsRuntimeDiagnostics, classifySmsFailure, parseWorkerEnv, processSmsOutboxBatch, type SmsOutboxJob, type SmsOutboxProvider, type SmsOutboxStore } from './index.js'
 
 function job(overrides: Partial<SmsOutboxJob> = {}): SmsOutboxJob {
   return {
@@ -136,4 +136,38 @@ test('worker exposes redacted NextSMS runtime diagnostics', () => {
     authorizationConfigured: true,
     defaultSenderId: 'MICHANGO',
   })
+})
+
+test('configured worker provider routes queued NEXTSMS messages with default sender', async () => {
+  const env = parseWorkerEnv({
+    SUPABASE_URL: 'https://example.supabase.co',
+    SUPABASE_PUBLISHABLE_KEY: 'publishable-key',
+    NEXTSMS_AUTHORIZATION: 'Basic test',
+    NEXTSMS_BASE_URL: 'https://messaging-service.co.tz',
+    NEXTSMS_SINGLE_SMS_PATH: '/api/sms/v1/text/single',
+    NEXTSMS_DEFAULT_SENDER_ID: 'MICHANGO',
+    NEXTSMS_ALLOWED_SENDER_IDS: 'SHEREHE,MICHANGO,KIKAO',
+  })
+  let calledUrl = ''
+  let authorization = ''
+  let contentType = ''
+  let from = ''
+  const provider = new ConfiguredSmsOutboxProvider({
+    ...env,
+    fetchImpl: async (url, init) => {
+      calledUrl = String(url)
+      const headers = new Headers(init?.headers)
+      authorization = headers.get('authorization') ?? ''
+      contentType = headers.get('content-type') ?? ''
+      from = String((JSON.parse(String(init?.body ?? '{}')) as Record<string, string>)['from'])
+      return new Response(JSON.stringify({ status: 'success', message_id: 'next_queued_1' }), { status: 200, headers: { 'content-type': 'application/json' } })
+    },
+  })
+
+  const result = await provider.send(job())
+  assert.equal(calledUrl, 'https://messaging-service.co.tz/api/sms/v1/text/single')
+  assert.equal(authorization, 'Basic test')
+  assert.equal(contentType, 'application/json')
+  assert.equal(from, 'MICHANGO')
+  assert.equal(result.providerMessageId, 'next_queued_1')
 })

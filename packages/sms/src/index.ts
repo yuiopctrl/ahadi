@@ -145,15 +145,40 @@ function getBooleanProperty(value: unknown, keys: string[]): boolean | null {
   return null
 }
 
+function getNestedStatusProperty(value: unknown, keys: string[]): string | null {
+  if (typeof value !== 'object' || value === null) {
+    return null
+  }
+  const record = value as Record<string, unknown>
+  const status = record['status']
+  if (typeof status !== 'object' || status === null || Array.isArray(status)) {
+    return null
+  }
+  return getStringProperty(status, keys)
+}
+
 function getProviderReasonFromJson(value: unknown): string | null {
   const candidate = Array.isArray(value) ? value[0] : value
   return getStringProperty(candidate, ['message', 'error', 'error_message', 'errorMessage', 'description'])
 }
 
+function getRawProviderMessageId(responseBody: string): string | null {
+  for (const key of ['message_id', 'messageId', 'msgid', 'msg_id', 'reference', 'batch_id', 'id']) {
+    const match = responseBody.match(new RegExp(`"${key}"\\s*:\\s*"?([^",}\\s]+)"?`, 'i'))
+    if (match?.[1]) {
+      return match[1]
+    }
+  }
+  return null
+}
+
 function parseProviderJson(value: unknown): SmsProviderResult {
-  const candidate = Array.isArray(value) ? value[0] : value
+  const root = Array.isArray(value) ? value[0] : value
+  const nestedMessages = typeof root === 'object' && root !== null && !Array.isArray(root) ? (root as Record<string, unknown>)['messages'] : null
+  const candidate = Array.isArray(nestedMessages) ? nestedMessages[0] : root
   const providerMessageId = getStringProperty(candidate, ['message_id', 'messageId', 'msgid', 'msg_id', 'id', 'reference', 'batch_id'])
   const providerStatusCode = getStringProperty(candidate, ['status_code', 'statusCode', 'code', 'response_code', 'responseCode', 'status'])
+    ?? getNestedStatusProperty(candidate, ['id', 'name', 'groupName', 'description'])
   const providerMessage = getStringProperty(candidate, ['message'])
   const explicitSuccess = getBooleanProperty(candidate, ['success', 'accepted', 'ok'])
   const safeReason = getProviderReasonFromJson(candidate)
@@ -162,10 +187,11 @@ function parseProviderJson(value: unknown): SmsProviderResult {
   }
 
   const status = getStringProperty(candidate, ['status', 'state', 'code', 'response_code', 'responseCode'])
+    ?? getNestedStatusProperty(candidate, ['groupName', 'name', 'description', 'id'])
   if (status) {
     const normalizedStatus = status.toLowerCase()
-    const accepted = ['0', '00', '000', '200', '201', '202', '1701', 'ok', 'success', 'successful', 'accepted', 'queued', 'sent'].includes(normalizedStatus)
-    return { accepted, providerMessageId, providerStatusCode: status, safeReason }
+    const accepted = ['0', '00', '000', '18', '51', '200', '201', '202', '1701', 'ok', 'success', 'successful', 'accepted', 'pending', 'queued', 'sent', 'enroute (sent)', 'message sent to next instance'].includes(normalizedStatus)
+    return { accepted, providerMessageId, providerStatusCode: status, safeReason: accepted ? null : safeReason }
   }
 
   if (providerMessage) {
@@ -200,7 +226,8 @@ export function parseSmsProviderResponse(responseBody: string): SmsProviderResul
   }
 
   try {
-    return parseProviderJson(JSON.parse(trimmed) as unknown)
+    const result = parseProviderJson(JSON.parse(trimmed) as unknown)
+    return { ...result, providerMessageId: getRawProviderMessageId(trimmed) ?? result.providerMessageId }
   } catch {
     const normalizedBody = trimmed.toLowerCase()
     const providerStatusCode = trimmed.match(/^([A-Za-z0-9_-]+)/)?.[1] ?? null
@@ -263,10 +290,10 @@ export async function sendWebBulkSms(input: SmsProviderInput, options: WebBulkSm
     throw new SmsProviderError(isTimeout ? 'SMS provider timeout' : 'SMS provider network error')
   }
 
-  const responseContentType = response.headers.get('content-type') ?? ''
-  const responseBody: unknown = responseContentType.includes('application/json') ? await response.json().catch(() => null) : await response.text().catch(() => null)
-  const result = parseWebBulkSmsResponse({ httpStatus: response.status, responseBody })
-  const providerReason = result.safeReason ?? (typeof responseBody === 'string' ? sanitizeProviderReason(responseBody) : undefined)
+  const responseBody = await response.text().catch(() => '')
+  const result = parseSmsProviderResponse(responseBody)
+  result.providerHttpStatus = response.status
+  const providerReason = result.safeReason ?? sanitizeProviderReason(responseBody)
 
   if (!response.ok) {
     throw new SmsProviderError('SMS provider rejected message', response.status, providerReason, result.providerStatusCode, result.accepted)
@@ -290,10 +317,11 @@ export async function sendNextSms(input: SmsProviderInput, options: NextSmsProvi
     throw new SmsProviderError('NextSMS endpoint is not configured', 400, 'PROVIDER_CONFIG_INVALID', 'PROVIDER_CONFIG_INVALID', false)
   }
 
-  const payload = new FormData()
-  payload.set('from', senderId)
-  payload.set('to', providerPhoneNumber)
-  payload.set('text', normalizedMessage)
+  const payload = {
+    from: senderId,
+    to: providerPhoneNumber,
+    text: normalizedMessage,
+  }
 
   let response: Response
   try {
@@ -301,9 +329,10 @@ export async function sendNextSms(input: SmsProviderInput, options: NextSmsProvi
       method: 'POST',
       headers: {
         Accept: 'application/json',
+        'Content-Type': 'application/json',
         Authorization: options.authorization.trim(),
       },
-      body: payload,
+      body: JSON.stringify(payload),
       signal: AbortSignal.timeout(options.timeoutMs ?? 10_000),
     })
   } catch (error) {
@@ -311,10 +340,10 @@ export async function sendNextSms(input: SmsProviderInput, options: NextSmsProvi
     throw new SmsProviderError(isTimeout ? 'SMS provider timeout' : 'SMS provider network error')
   }
 
-  const responseContentType = response.headers.get('content-type') ?? ''
-  const responseBody: unknown = responseContentType.includes('application/json') ? await response.json().catch(() => null) : await response.text().catch(() => null)
-  const result = parseWebBulkSmsResponse({ httpStatus: response.status, responseBody })
-  const providerReason = result.safeReason ?? (typeof responseBody === 'string' ? sanitizeProviderReason(responseBody) : undefined)
+  const responseBody = await response.text().catch(() => '')
+  const result = parseSmsProviderResponse(responseBody)
+  result.providerHttpStatus = response.status
+  const providerReason = result.safeReason ?? sanitizeProviderReason(responseBody)
 
   if (!response.ok) {
     throw new SmsProviderError('SMS provider rejected message', response.status, providerReason, result.providerStatusCode, result.accepted)

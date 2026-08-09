@@ -98,6 +98,8 @@ test('tenant queued SMS is queued by the API and processed by the worker', () =>
   assert.match(migrations, /for update of o skip locked/i)
   assert.match(migrations, /grant execute on function public\.rpc_claim_tenant_sms_outbox\(uuid, integer, uuid\[\], uuid\) to authenticated/)
   assert.match(app, /\/api\/v1\/messages\/process-queued/)
+  assert.match(app, /\/api\/v1\/messages\/worker-diagnostics/)
+  assert.match(app, /rpc_sms_worker_diagnostics/)
   assert.match(app, /processing: 'WORKER'/)
   assert.doesNotMatch(app, /attemptTenantQueuedSms/)
   assert.doesNotMatch(app, /sendTenantQueuedSms/)

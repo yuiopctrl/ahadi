@@ -363,6 +363,17 @@ const templateBodySchema = z.object({
 })
 
 const smsTemplateCodeSchema = z.enum(['PLEDGE_REQUEST', 'PLEDGE_REGISTRATION', 'PAYMENT_CONFIRMATION', 'BALANCE_REMINDER', 'PLEDGE_COMPLETED'])
+type SmsTemplateCode = z.infer<typeof smsTemplateCodeSchema>
+
+const smsTemplateAllowedVariablesByCode: Record<SmsTemplateCode, string[]> = {
+  PLEDGE_REQUEST: ['member_name', 'event_name', 'event_date', 'pledge_deadline'],
+  PLEDGE_REGISTRATION: ['member_name', 'pledge_amount', 'event_name', 'due_date'],
+  PAYMENT_CONFIRMATION: ['member_name', 'payment_amount', 'payment_method', 'event_name', 'balance', 'receipt_number'],
+  BALANCE_REMINDER: ['member_name', 'event_name', 'balance', 'due_date'],
+  PLEDGE_COMPLETED: ['member_name', 'pledge_amount', 'event_name'],
+}
+
+const sensitiveSmsTemplateVariables = new Set(['otp', 'pin', 'password'])
 
 const smsTemplateSaveSchema = templateBodySchema.extend({
   language: z.enum(['sw', 'en']).default('sw'),
@@ -3459,6 +3470,23 @@ app.post('/api/v1/messages/:outboxId/resend-balance-reminder', requireAuth, load
   }
 })
 
+app.get('/api/v1/messages/worker-diagnostics', requireAuth, loadUserContext, requireTenantContext, async (request, response, next) => {
+  try {
+    const permissions = new Set(request.tenantContext?.permissions ?? [])
+    if (!permissions.has('messages.send') && !request.tenantContext?.membership?.isOwner) {
+      throw new AppError('TENANT_ACCESS_DENIED', 'Message send permission is required')
+    }
+    const client = createUserSupabase(request.auth?.accessToken ?? '')
+    const { data, error } = await client.rpc('rpc_sms_worker_diagnostics', { p_limit: 10 })
+    if (error) {
+      throwFinancialDatabaseError(error, 'SMS_WORKER_DIAGNOSTICS_FAILED')
+    }
+    response.json({ data: jsonRecord(data) })
+  } catch (error) {
+    next(error)
+  }
+})
+
 app.post('/api/v1/messages/process-queued', requireAuth, loadUserContext, requireTenantContext, async (request, response, next) => {
   try {
     const permissions = new Set(request.tenantContext?.permissions ?? [])
@@ -3466,7 +3494,12 @@ app.post('/api/v1/messages/process-queued', requireAuth, loadUserContext, requir
       throw new AppError('TENANT_ACCESS_DENIED', 'Message send permission is required')
     }
     processQueuedSmsSchema.parse(request.body ?? {})
-    response.status(202).json({ data: { accepted: true, processing: 'WORKER', message: 'Queued SMS is processed by the background worker.' } })
+    const client = createUserSupabase(request.auth?.accessToken ?? '')
+    const { data, error } = await client.rpc('rpc_sms_worker_diagnostics', { p_limit: 10 })
+    if (error) {
+      throwFinancialDatabaseError(error, 'SMS_WORKER_DIAGNOSTICS_FAILED')
+    }
+    response.status(202).json({ data: { accepted: true, processing: 'WORKER', diagnostics: jsonRecord(data), message: 'Queued SMS is processed by the background worker.' } })
   } catch (error) {
     next(error)
   }

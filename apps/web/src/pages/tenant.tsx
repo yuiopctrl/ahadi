@@ -1389,6 +1389,8 @@ export function SmsHistoryPage() {
     mutationFn: () => api.processQueuedMessages(tenantId ?? '', 25),
     onSuccess: () => void messages.refetch(),
   })
+  const workerDiagnostics = jsonRecord(processQueued.data?.data.diagnostics)
+  const blockedCounts = jsonRecord(workerDiagnostics.blockedCounts)
   const rows = messages.data ?? []
   const filtered = rows.filter((message) => {
     const messageStatus = asString(message.status)
@@ -1437,7 +1439,11 @@ export function SmsHistoryPage() {
         <StatCard label="Queued" value={String(queuedCount)} meta="Waiting or processing" icon={Clock3} tone="warning" />
         <StatCard label="Failed" value={String(failedCount)} meta="Needs review" icon={FileText} tone={failedCount ? 'danger' : 'neutral'} />
       </section>
-      {processQueued.data ? <p className="message-send-result">Processed {displayValue(processQueued.data.data.claimed, '0')} queued messages · Sent {displayValue(processQueued.data.data.sent, '0')} · Failed {displayValue(processQueued.data.data.failed, '0')}</p> : null}
+      {processQueued.data ? (
+        <p className="message-send-result">
+          Worker queue check accepted · Claimable {displayValue(workerDiagnostics.claimableCount, '0')} · Processing {displayValue(blockedCounts.processingNow, '0')} · Stale {displayValue(blockedCounts.staleProcessing, '0')} · Blocked sender {displayValue(blockedCounts.inactiveSenderId, '0')}
+        </p>
+      ) : null}
       {processQueued.error ? <p className="field-error">Unable to process queued messages: {errorMessage(processQueued.error, 'Send attempt failed.')}</p> : null}
       {pledgeRequestEventId ? (
         <section className="content-panel pledge-request-summary">

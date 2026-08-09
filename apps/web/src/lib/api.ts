@@ -206,6 +206,7 @@ export const api = {
     apiFetch<{ data: Record<string, unknown> }>(`/events/${eventId}/payments/${paymentId}/reverse`, { tenantId, method: 'POST', body: JSON.stringify(payload) }),
   receipt: (tenantId: string, receiptId: string) => apiFetch<{ data: Record<string, unknown> }>(`/receipts/${receiptId}`, { tenantId }),
   messages: (tenantId: string) => apiFetch<{ data: Record<string, unknown>[] }>('/messages', { tenantId }),
+  messageWorkerDiagnostics: (tenantId: string) => apiFetch<{ data: Record<string, unknown> }>('/messages/worker-diagnostics', { tenantId }),
   processQueuedMessages: (tenantId: string, batchSize = 10) =>
     apiFetch<{ data: Record<string, unknown> }>('/messages/process-queued', { tenantId, method: 'POST', body: JSON.stringify({ batchSize }) }),
   smsSettings: (tenantId: string) => apiFetch<{ data: Record<string, unknown> }>('/messages/settings', { tenantId }),

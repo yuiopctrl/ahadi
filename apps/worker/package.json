@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "node --watch --import tsx src/index.ts",
+    "diagnose": "node --import tsx src/index.ts --diagnose",
+    "once": "node --import tsx src/index.ts --once",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",
     "lint": "eslint src",

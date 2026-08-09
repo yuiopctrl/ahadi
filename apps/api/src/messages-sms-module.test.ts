@@ -7,8 +7,10 @@ const migration = [
   readFileSync(new URL('../../../supabase/migrations/039_pledge_request_sms.sql', import.meta.url), 'utf8'),
   readFileSync(new URL('../../../supabase/migrations/040_strict_sms_preview_character_limit.sql', import.meta.url), 'utf8'),
   readFileSync(new URL('../../../supabase/migrations/041_sms_provider_selection.sql', import.meta.url), 'utf8'),
+  readFileSync(new URL('../../../supabase/migrations/042_worker_nextsms_runtime.sql', import.meta.url), 'utf8'),
 ].join('\n')
 const smsProviderSelectionMigration = readFileSync(new URL('../../../supabase/migrations/041_sms_provider_selection.sql', import.meta.url), 'utf8')
+const workerNextSmsRuntimeMigration = readFileSync(new URL('../../../supabase/migrations/042_worker_nextsms_runtime.sql', import.meta.url), 'utf8')
 const app = readFileSync(new URL('./app.ts', import.meta.url), 'utf8')
 const apiClient = readFileSync(new URL('../../web/src/lib/api.ts', import.meta.url), 'utf8')
 const tenantPage = readFileSync(new URL('../../web/src/pages/tenant.tsx', import.meta.url), 'utf8')
@@ -63,9 +65,10 @@ test('NextSMS provider boundary posts the verified provider request body', () =>
   assert.match(smsPackage, /defaultNextSmsBaseUrl = 'https:\/\/messaging-service\.co\.tz'/)
   assert.match(smsPackage, /defaultNextSmsSingleSmsPath = '\/api\/sms\/v1\/text\/single'/)
   assert.match(smsPackage, /nextSmsAllowedSenderIds = \['SHEREHE', 'MICHANGO', 'KIKAO'\]/)
-  assert.match(smsPackage, /payload\.set\('from', senderId\)/)
-  assert.match(smsPackage, /payload\.set\('to', providerPhoneNumber\)/)
-  assert.match(smsPackage, /payload\.set\('text', normalizedMessage\)/)
+  assert.match(smsPackage, /from: senderId/)
+  assert.match(smsPackage, /to: providerPhoneNumber/)
+  assert.match(smsPackage, /text: normalizedMessage/)
+  assert.match(smsPackage, /'Content-Type': 'application\/json'/)
 })
 
 test('strict SMS preview and character-limit validation are server-side', () => {
@@ -100,4 +103,16 @@ test('tenant SMS provider selection is persisted and worker routing does not fal
   assert.match(tenantPage, /SMS Provider/)
   assert.match(smsPackage, /class SmsProviderRegistry/)
   assert.match(smsPackage, /SMS_PROVIDER_NOT_SUPPORTED/)
+})
+
+test('worker runtime can claim queued SMS and diagnose safe outbox state with publishable key', () => {
+  assert.match(workerNextSmsRuntimeMigration, /grant execute on function public\.rpc_claim_sms_outbox\(integer\) to anon, authenticated/)
+  assert.match(workerNextSmsRuntimeMigration, /grant execute on function public\.rpc_mark_sms_sent\(uuid, text\) to anon, authenticated/)
+  assert.match(workerNextSmsRuntimeMigration, /grant execute on function public\.rpc_mark_sms_failed\(uuid, text, text, boolean\) to anon, authenticated/)
+  assert.match(workerNextSmsRuntimeMigration, /rpc_sms_worker_diagnostics/)
+  assert.match(workerNextSmsRuntimeMigration, /claimableCount/)
+  assert.match(workerNextSmsRuntimeMigration, /blockedCounts/)
+  assert.match(workerNextSmsRuntimeMigration, /staleProcessing/)
+  assert.match(workerNextSmsRuntimeMigration, /provider/)
+  assert.match(workerNextSmsRuntimeMigration, /sender_id/)
 })

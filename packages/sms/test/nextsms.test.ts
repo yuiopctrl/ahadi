@@ -56,6 +56,7 @@ test('provider registry preserves WEBBULKSMS routing for tenants that select it'
 test('NextSMS adapter posts the verified single-SMS contract', async () => {
   let calledUrl = ''
   let authorization = ''
+  let contentType = ''
   let fields: Record<string, string> = {}
   const result = await sendNextSms(
     { to: '+255713676401', message: 'hello', senderId: 'MICHANGO' },
@@ -66,21 +67,21 @@ test('NextSMS adapter posts the verified single-SMS contract', async () => {
       singleSmsPath: '/api/sms/v1/text/single',
       fetchImpl: async (url, init) => {
         calledUrl = String(url)
-        authorization = new Headers(init?.headers).get('authorization') ?? ''
-        const body = init?.body as FormData
-        fields = {
-          from: String(body.get('from')),
-          to: String(body.get('to')),
-          text: String(body.get('text')),
-        }
-        return new Response(JSON.stringify({ status: 'success', message_id: 'next_1' }), { status: 200, headers: { 'content-type': 'application/json' } })
+        const headers = new Headers(init?.headers)
+        authorization = headers.get('authorization') ?? ''
+        contentType = headers.get('content-type') ?? ''
+        fields = JSON.parse(String(init?.body ?? '{}')) as Record<string, string>
+        return new Response('{"messages":[{"to":"255713676401","status":{"groupId":18,"groupName":"PENDING","id":51,"name":"ENROUTE (SENT)","description":"Message sent to next instance"},"messageId":344870148882047880,"message":"hello","smsCount":1,"price":16}]}', { status: 200, headers: { 'content-type': 'application/json' } })
       },
     },
   )
   assert.equal(calledUrl, 'https://messaging-service.co.tz/api/sms/v1/text/single')
   assert.equal(authorization, 'Basic test')
+  assert.equal(contentType, 'application/json')
   assert.deepEqual(fields, { from: 'MICHANGO', to: '255713676401', text: 'hello' })
-  assert.equal(result.providerMessageId, 'next_1')
+  assert.equal(result.accepted, true)
+  assert.equal(result.providerMessageId, '344870148882047880')
+  assert.equal(result.providerStatusCode, 'PENDING')
 })
 
 test('SMS character limit counts normalized final rendered text', () => {

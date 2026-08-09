@@ -114,6 +114,7 @@ export interface SmsOutboxJob {
 
 export interface SmsOutboxStore {
   claim(batchSize: number): Promise<SmsOutboxJob[]>
+  diagnostics?(limit: number): Promise<unknown>
   markSent(outboxId: string, providerMessageId: string | null): Promise<void>
   markFailed(outboxId: string, errorCode: string, errorMessage: string, retryable: boolean): Promise<void>
 }
@@ -130,7 +131,16 @@ export interface SmsFailureClassification {
 
 function safeErrorMessage(error: unknown): string {
   if (error instanceof Error) {
-    return error.message.replace(/[+0-9][0-9\s().-]{6,}/g, '<redacted-phone>').slice(0, 160)
+    const causeMessage = typeof error.cause === 'object' && error.cause !== null && 'message' in error.cause && typeof error.cause.message === 'string'
+      ? `: ${error.cause.message}`
+      : ''
+    return `${error.message}${causeMessage}`.replace(/[+0-9][0-9\s().-]{6,}/g, '<redacted-phone>').slice(0, 200)
+  }
+  if (typeof error === 'object' && error !== null && 'message' in error && typeof error.message === 'string') {
+    return error.message.replace(/[+0-9][0-9\s().-]{6,}/g, '<redacted-phone>').slice(0, 200)
+  }
+  if (typeof error === 'object' && error !== null && 'code' in error && typeof error.code === 'string') {
+    return error.code.slice(0, 80)
   }
   return 'SMS provider failed'
 }
@@ -169,6 +179,14 @@ export class SupabaseSmsOutboxStore implements SmsOutboxStore {
       throw error
     }
     return Array.isArray(data) ? data as SmsOutboxJob[] : []
+  }
+
+  async diagnostics(limit: number): Promise<unknown> {
+    const { data, error } = await this.client.rpc('rpc_sms_worker_diagnostics', { p_limit: limit })
+    if (error) {
+      throw error
+    }
+    return data
   }
 
   async markSent(outboxId: string, providerMessageId: string | null): Promise<void> {
@@ -267,7 +285,7 @@ export async function processSmsOutboxBatch(store: SmsOutboxStore, provider: Sms
   return jobs.length
 }
 
-function createSupabaseWorkerClient(input: WorkerEnv) {
+export function createSupabaseWorkerClient(input: WorkerEnv) {
   return createClient(input.SUPABASE_URL, input.SUPABASE_PUBLISHABLE_KEY, {
     ...(input.SUPABASE_WORKER_ACCESS_TOKEN
       ? {
@@ -285,17 +303,82 @@ function createSupabaseWorkerClient(input: WorkerEnv) {
   })
 }
 
+export function createSmsWorkerRuntime(env: WorkerEnv) {
+  return {
+    provider: new ConfiguredSmsOutboxProvider(env),
+    store: new SupabaseSmsOutboxStore(createSupabaseWorkerClient(env)),
+  }
+}
+
+export async function runSmsWorkerBatch(env: WorkerEnv, logger: Pick<Console, 'info' | 'warn' | 'error'> = console): Promise<number> {
+  const runtime = createSmsWorkerRuntime(env)
+  const claimed = await processSmsOutboxBatch(runtime.store, runtime.provider, env.WORKER_BATCH_SIZE, logger)
+  if (claimed === 0) {
+    logger.info('SMS_BATCH_IDLE', { claimed })
+  } else {
+    logger.info('SMS_BATCH_COMPLETE', { claimed })
+  }
+  return claimed
+}
+
+export async function diagnoseSmsWorker(env: WorkerEnv, logger: Pick<Console, 'info' | 'error'> = console): Promise<unknown> {
+  const runtime = createSmsWorkerRuntime(env)
+  if (!runtime.store.diagnostics) {
+    throw new Error('SMS diagnostics are not available')
+  }
+  const diagnostics = await runtime.store.diagnostics(10)
+  logger.info('SMS_WORKER_DIAGNOSTICS', diagnostics)
+  return diagnostics
+}
+
 async function main() {
   const env = parseWorkerEnv(process.env)
-  const store = new SupabaseSmsOutboxStore(createSupabaseWorkerClient(env))
-  const provider = new ConfiguredSmsOutboxProvider(env)
+  if (process.argv.includes('--diagnose')) {
+    console.log('NEXTSMS_CONFIG', getNextSmsRuntimeDiagnostics(env))
+    console.log('SMS_WORKER_RUNTIME', {
+      envFiles: loadedWorkerEnvFiles,
+      effectiveProvider: env.SMS_PROVIDER,
+      endpoint: getNextSmsEndpoint(env),
+      authorizationConfigured: Boolean(env.NEXTSMS_AUTHORIZATION?.trim()),
+    })
+    try {
+      await diagnoseSmsWorker(env)
+    } catch (error: unknown) {
+      console.error('SMS worker diagnostics failed', { safeMessage: safeErrorMessage(error) })
+    }
+    return
+  }
+  const runtime = createSmsWorkerRuntime(env)
+  let running = false
+
+  async function runBatch() {
+    if (running) {
+      console.warn('SMS_BATCH_SKIPPED', { reason: 'PREVIOUS_BATCH_RUNNING' })
+      return
+    }
+    running = true
+    try {
+      const claimed = await processSmsOutboxBatch(runtime.store, runtime.provider, env.WORKER_BATCH_SIZE)
+      if (claimed === 0) {
+        console.info('SMS_BATCH_IDLE', { claimed })
+      } else {
+        console.info('SMS_BATCH_COMPLETE', { claimed })
+      }
+    } catch (error: unknown) {
+      console.error('SMS outbox batch failed', { safeMessage: safeErrorMessage(error) })
+    } finally {
+      running = false
+    }
+  }
 
   console.log('NEXTSMS_CONFIG', getNextSmsRuntimeDiagnostics(env))
   console.log(`Ahadi worker booted in ${env.NODE_ENV} mode with ${env.WORKER_POLL_INTERVAL_MS}ms poll interval`)
+  await runBatch()
+  if (process.argv.includes('--once')) {
+    return
+  }
   setInterval(() => {
-    void processSmsOutboxBatch(store, provider, env.WORKER_BATCH_SIZE).catch((error: unknown) => {
-      console.error('SMS outbox batch failed', { safeMessage: safeErrorMessage(error) })
-    })
+    void runBatch()
   }, env.WORKER_POLL_INTERVAL_MS)
 }
 
