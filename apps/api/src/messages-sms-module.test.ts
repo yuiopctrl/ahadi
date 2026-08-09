@@ -5,6 +5,7 @@ import test from 'node:test'
 const migration = [
   readFileSync(new URL('../../../supabase/migrations/038_complete_messages_sms_module.sql', import.meta.url), 'utf8'),
   readFileSync(new URL('../../../supabase/migrations/039_pledge_request_sms.sql', import.meta.url), 'utf8'),
+  readFileSync(new URL('../../../supabase/migrations/040_strict_sms_preview_character_limit.sql', import.meta.url), 'utf8'),
 ].join('\n')
 const app = readFileSync(new URL('./app.ts', import.meta.url), 'utf8')
 const apiClient = readFileSync(new URL('../../web/src/lib/api.ts', import.meta.url), 'utf8')
@@ -60,4 +61,17 @@ test('NextSMS provider boundary is configured without inventing request body fie
   assert.match(smsPackage, /defaultNextSmsSingleSmsPath = '\/api\/sms\/v1\/text\/single'/)
   assert.match(smsPackage, /nextSmsAllowedSenderIds = \['SHEREHE', 'MICHANGO', 'KIKAO'\]/)
   assert.match(smsPackage, /NEXTSMS_REQUEST_BODY_CONTRACT_REQUIRED/)
+})
+
+test('strict SMS preview and character-limit validation are server-side', () => {
+  assert.match(migration, /sms_max_characters\(\)[\s\S]*select 159/)
+  assert.match(migration, /character_count integer/)
+  assert.match(migration, /max_characters_at_send integer/)
+  assert.match(migration, /rpc_preview_event_member_sms/)
+  assert.match(migration, /rpc_preview_event_member_sms_bulk/)
+  assert.match(migration, /SMS_CHARACTER_LIMIT_EXCEEDED/)
+  assert.match(app, /\/api\/v1\/events\/:eventId\/messages\/preview/)
+  assert.match(app, /previewIsValid/)
+  assert.match(apiClient, /smsBulkPreview/)
+  assert.match(tenantPage, /SmsCharacterCounter/)
 })

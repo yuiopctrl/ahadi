@@ -74,7 +74,25 @@ interface WebBulkSmsRequest {
 export const defaultNextSmsBaseUrl = 'https://messaging-service.co.tz'
 export const defaultNextSmsSingleSmsPath = '/api/sms/v1/text/single'
 export const nextSmsAllowedSenderIds = ['SHEREHE', 'MICHANGO', 'KIKAO'] as const
+export const MAX_SMS_CHARACTERS = 159
 export type NextSmsSenderId = typeof nextSmsAllowedSenderIds[number]
+
+export function normalizeSmsMessageText(value: string): string {
+  return value.replace(/\r\n/g, '\n').replace(/\n+/g, ' ').replace(/[ \t]+/g, ' ').trim()
+}
+
+export function smsCharacterCount(value: string): number {
+  return Array.from(normalizeSmsMessageText(value)).length
+}
+
+export function assertSmsCharacterLimit(message: string): string {
+  const normalized = normalizeSmsMessageText(message)
+  const characters = smsCharacterCount(normalized)
+  if (characters > MAX_SMS_CHARACTERS) {
+    throw new SmsProviderError('SMS exceeds the permitted character limit', 400, 'SMS_CHARACTER_LIMIT_EXCEEDED', 'SMS_CHARACTER_LIMIT_EXCEEDED', false)
+  }
+  return normalized
+}
 
 export function normalizeSmsProviderName(value: string | null | undefined): SmsProviderName {
   const normalized = (value ?? 'WEBBULKSMS').trim().toUpperCase()
@@ -215,11 +233,12 @@ export function maskSmsPhone(phone: string): string {
 
 export async function sendWebBulkSms(input: SmsProviderInput, options: WebBulkSmsProviderOptions): Promise<SmsProviderResult> {
   const providerPhoneNumber = formatWebBulkSmsPhone(input.to)
+  const normalizedMessage = assertSmsCharacterLimit(input.message)
   const payload: WebBulkSmsRequest = {
     username: options.username,
     password: options.password,
     senderId: options.senderId.trim(),
-    message: input.message,
+    message: normalizedMessage,
     phoneNumbers: [providerPhoneNumber],
   }
 
@@ -258,6 +277,7 @@ export async function sendWebBulkSms(input: SmsProviderInput, options: WebBulkSm
 export async function sendNextSms(input: SmsProviderInput, options: NextSmsProviderOptions): Promise<SmsProviderResult> {
   normalizeSmsSenderId(input.senderId ?? options.defaultSenderId, options.allowedSenderIds ?? nextSmsAllowedSenderIds)
   formatNextSmsPhone(input.to)
+  assertSmsCharacterLimit(input.message)
   if (!options.authorization?.trim()) {
     throw new SmsProviderError('NextSMS authorization is not configured', 401, 'PROVIDER_AUTH_FAILED', 'PROVIDER_AUTH_FAILED', false)
   }

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { formatNextSmsPhone, normalizeSmsProviderName, normalizeSmsSenderId, sendNextSms, SmsProviderError } from '../src/index.js'
+import { assertSmsCharacterLimit, formatNextSmsPhone, MAX_SMS_CHARACTERS, normalizeSmsMessageText, normalizeSmsProviderName, normalizeSmsSenderId, sendNextSms, SmsProviderError, smsCharacterCount } from '../src/index.js'
 
 test('NextSMS sender ids are normalized against the confirmed allowlist', () => {
   assert.equal(normalizeSmsSenderId(' michango '), 'MICHANGO')
@@ -31,5 +31,30 @@ test('NextSMS adapter fails safely until the request body contract is supplied',
       },
     ),
     (error: unknown) => error instanceof SmsProviderError && error.providerStatusCode === 'NEXTSMS_REQUEST_BODY_CONTRACT_REQUIRED',
+  )
+})
+
+test('SMS character limit counts normalized final rendered text', () => {
+  assert.equal(MAX_SMS_CHARACTERS, 159)
+  assert.equal(smsCharacterCount('x'.repeat(100)), 100)
+  assert.equal(smsCharacterCount('x'.repeat(158)), 158)
+  assert.equal(smsCharacterCount('x'.repeat(159)), 159)
+  assert.equal(assertSmsCharacterLimit(` ${'x'.repeat(159)} `), 'x'.repeat(159))
+  assert.throws(() => assertSmsCharacterLimit('x'.repeat(160)), /SMS exceeds/)
+  assert.equal(normalizeSmsMessageText('hello\n\n  world'), 'hello world')
+})
+
+test('provider guard rejects over-limit SMS before provider contract handling', async () => {
+  await assert.rejects(
+    () => sendNextSms(
+      { to: '+255713676401', message: 'x'.repeat(160), senderId: 'MICHANGO' },
+      {
+        authorization: 'Basic test',
+        baseUrl: 'https://messaging-service.co.tz',
+        defaultSenderId: 'MICHANGO',
+        singleSmsPath: '/api/sms/v1/text/single',
+      },
+    ),
+    (error: unknown) => error instanceof SmsProviderError && error.providerStatusCode === 'SMS_CHARACTER_LIMIT_EXCEEDED',
   )
 })

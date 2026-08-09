@@ -347,6 +347,18 @@ const bulkPledgeRequestSchema = z.object({
   idempotencyKey: z.string().uuid(),
 })
 
+const smsManualTemplateCodeSchema = z.enum(['PLEDGE_REQUEST', 'BALANCE_REMINDER'])
+
+const smsPreviewSchema = z.object({
+  templateCode: smsManualTemplateCodeSchema,
+  eventMemberId: z.string().uuid(),
+})
+
+const smsBulkPreviewSchema = z.object({
+  templateCode: smsManualTemplateCodeSchema,
+  eventMemberIds: z.array(z.string().uuid()).min(1),
+})
+
 const templateBodySchema = z.object({
   body: z.string().trim().min(1).max(918),
 })
@@ -1292,6 +1304,10 @@ function queuedOutboxId(data: Record<string, unknown>): string | null {
   return typeof data['outboxId'] === 'string' ? data['outboxId'] : null
 }
 
+function smsEnqueueFailureReason(error: unknown) {
+  return databaseMessage(error).includes('SMS_CHARACTER_LIMIT_EXCEEDED') ? 'SMS_CHARACTER_LIMIT_EXCEEDED' : 'ENQUEUE_FAILED'
+}
+
 function parseSmsTemplateCodeParam(value: unknown): z.infer<typeof smsTemplateCodeSchema> {
   return smsTemplateCodeSchema.parse(String(value ?? '').trim().toUpperCase().replaceAll('-', '_'))
 }
@@ -1310,7 +1326,7 @@ async function enqueueAndAttemptPledgeRegistrationSms(client: ReturnType<typeof 
       pledgeId,
       safeMessage: databaseMessage(enqueue.error).slice(0, 160),
     })
-    return { smsQueued: false, reason: 'ENQUEUE_FAILED', template: 'PLEDGE_REGISTRATION' }
+    return { smsQueued: false, reason: smsEnqueueFailureReason(enqueue.error), template: 'PLEDGE_REGISTRATION' }
   }
   const notification = notificationFromEnqueue(enqueue.data)
   const outboxId = queuedOutboxId(notification)
@@ -1326,6 +1342,18 @@ async function enqueueAndAttemptPledgeRegistrationSms(client: ReturnType<typeof 
 
 function queuedBatchId(data: Record<string, unknown>): string | null {
   return typeof data['batchId'] === 'string' ? data['batchId'] : null
+}
+
+function previewIsValid(data: Record<string, unknown>): boolean {
+  return data['valid'] === true
+}
+
+function validPreviewEventMemberIds(data: unknown): string[] {
+  const record = jsonRecord(data)
+  return jsonArray(record['previews'])
+    .filter((preview) => preview['valid'] === true)
+    .map((preview) => jsonRecord(preview['member'])['eventMemberId'])
+    .filter((value): value is string => typeof value === 'string')
 }
 
 function generateBetaInvitationCode() {
@@ -2775,6 +2803,20 @@ app.post('/api/v1/events/:eventId/reminders/balance', requireAuth, loadUserConte
     const input = balanceReminderSchema.parse(request.body)
     const client = createUserSupabase(request.auth?.accessToken ?? '')
     await ensureTenantFeatureEnabled(client, tenantId, 'balance_reminders')
+    const preview = await client.rpc('rpc_preview_event_member_sms', {
+      p_tenant_id: tenantId,
+      p_event_id: eventId,
+      p_event_member_id: input.eventMemberId,
+      p_template_code: 'BALANCE_REMINDER',
+    })
+    if (preview.error) {
+      throwFinancialDatabaseError(preview.error, 'SMS_PREVIEW_FAILED')
+    }
+    const previewRecord = jsonRecord(preview.data)
+    if (!previewIsValid(previewRecord)) {
+      response.status(200).json({ data: { queued: false, template: 'BALANCE_REMINDER', reason: 'SMS_CHARACTER_LIMIT_EXCEEDED', preview: previewRecord } })
+      return
+    }
     const { data, error } = await client.rpc('rpc_enqueue_balance_reminder_sms', {
       p_tenant_id: tenantId,
       p_event_id: eventId,
@@ -2795,6 +2837,49 @@ app.post('/api/v1/events/:eventId/reminders/balance', requireAuth, loadUserConte
       })
     }
     response.status(201).json({ data: result })
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.post('/api/v1/events/:eventId/messages/preview', requireAuth, loadUserContext, requireTenantContext, async (request, response, next) => {
+  try {
+    const tenantId = tenantIdFromRequest(request)
+    const eventId = uuidParamSchema.parse(request.params['eventId'])
+    const input = smsPreviewSchema.parse(request.body)
+    const client = createUserSupabase(request.auth?.accessToken ?? '')
+    const { data, error } = await client.rpc('rpc_preview_event_member_sms', {
+      p_tenant_id: tenantId,
+      p_event_id: eventId,
+      p_event_member_id: input.eventMemberId,
+      p_template_code: input.templateCode,
+    })
+    if (error) {
+      throwFinancialDatabaseError(error, 'SMS_PREVIEW_FAILED')
+    }
+    response.json({ data: jsonRecord(data) })
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.post('/api/v1/events/:eventId/messages/preview/bulk', requireAuth, loadUserContext, requireTenantContext, async (request, response, next) => {
+  try {
+    const tenantId = tenantIdFromRequest(request)
+    const eventId = uuidParamSchema.parse(request.params['eventId'])
+    const input = smsBulkPreviewSchema.parse(request.body)
+    const client = createUserSupabase(request.auth?.accessToken ?? '')
+    const { data, error } = await client.rpc('rpc_preview_event_member_sms_bulk', {
+      p_tenant_id: tenantId,
+      p_event_id: eventId,
+      p_event_member_ids: input.eventMemberIds,
+      p_template_code: input.templateCode,
+      p_cooldown_hours: input.templateCode === 'PLEDGE_REQUEST' ? env.PLEDGE_REQUEST_COOLDOWN_HOURS : env.BALANCE_REMINDER_COOLDOWN_HOURS,
+    })
+    if (error) {
+      throwFinancialDatabaseError(error, 'SMS_BULK_PREVIEW_FAILED')
+    }
+    response.json({ data: jsonRecord(data) })
   } catch (error) {
     next(error)
   }
@@ -2825,6 +2910,20 @@ app.post('/api/v1/events/:eventId/messages/pledge-request', requireAuth, loadUse
     const eventId = uuidParamSchema.parse(request.params['eventId'])
     const input = pledgeRequestSchema.parse(request.body)
     const client = createUserSupabase(request.auth?.accessToken ?? '')
+    const preview = await client.rpc('rpc_preview_event_member_sms', {
+      p_tenant_id: tenantId,
+      p_event_id: eventId,
+      p_event_member_id: input.eventMemberId,
+      p_template_code: 'PLEDGE_REQUEST',
+    })
+    if (preview.error) {
+      throwFinancialDatabaseError(preview.error, 'SMS_PREVIEW_FAILED')
+    }
+    const previewRecord = jsonRecord(preview.data)
+    if (!previewIsValid(previewRecord)) {
+      response.status(200).json({ data: { queued: false, template: 'PLEDGE_REQUEST', reason: 'SMS_CHARACTER_LIMIT_EXCEEDED', preview: previewRecord } })
+      return
+    }
     const { data, error } = await client.rpc('rpc_enqueue_pledge_request_sms', {
       p_tenant_id: tenantId,
       p_event_id: eventId,
@@ -2856,10 +2955,25 @@ app.post('/api/v1/events/:eventId/messages/pledge-request/bulk', requireAuth, lo
     const eventId = uuidParamSchema.parse(request.params['eventId'])
     const input = bulkPledgeRequestSchema.parse(request.body)
     const client = createUserSupabase(request.auth?.accessToken ?? '')
-    const { data, error } = await client.rpc('rpc_enqueue_pledge_request_bulk', {
+    const preview = await client.rpc('rpc_preview_event_member_sms_bulk', {
       p_tenant_id: tenantId,
       p_event_id: eventId,
       p_event_member_ids: input.eventMemberIds,
+      p_template_code: 'PLEDGE_REQUEST',
+      p_cooldown_hours: env.PLEDGE_REQUEST_COOLDOWN_HOURS,
+    })
+    if (preview.error) {
+      throwFinancialDatabaseError(preview.error, 'SMS_BULK_PREVIEW_FAILED')
+    }
+    const validIds = validPreviewEventMemberIds(preview.data)
+    if (!validIds.length) {
+      response.status(200).json({ data: { ...jsonRecord(preview.data), queued: 0, reason: 'NO_VALID_SMS_MESSAGES' } })
+      return
+    }
+    const { data, error } = await client.rpc('rpc_enqueue_pledge_request_bulk', {
+      p_tenant_id: tenantId,
+      p_event_id: eventId,
+      p_event_member_ids: validIds,
       p_idempotency_key: input.idempotencyKey,
       p_cooldown_hours: env.PLEDGE_REQUEST_COOLDOWN_HOURS,
       p_max_batch_size: env.PLEDGE_REQUEST_MAX_BATCH_SIZE,
@@ -2890,10 +3004,25 @@ app.post('/api/v1/events/:eventId/reminders/balance/bulk', requireAuth, loadUser
     const input = bulkBalanceReminderSchema.parse(request.body)
     const client = createUserSupabase(request.auth?.accessToken ?? '')
     await ensureTenantFeatureEnabled(client, tenantId, 'balance_reminders')
-    const { data, error } = await client.rpc('rpc_enqueue_balance_reminder_bulk', {
+    const preview = await client.rpc('rpc_preview_event_member_sms_bulk', {
       p_tenant_id: tenantId,
       p_event_id: eventId,
       p_event_member_ids: input.eventMemberIds,
+      p_template_code: 'BALANCE_REMINDER',
+      p_cooldown_hours: env.BALANCE_REMINDER_COOLDOWN_HOURS,
+    })
+    if (preview.error) {
+      throwFinancialDatabaseError(preview.error, 'SMS_BULK_PREVIEW_FAILED')
+    }
+    const validIds = validPreviewEventMemberIds(preview.data)
+    if (!validIds.length) {
+      response.status(200).json({ data: { ...jsonRecord(preview.data), queued: 0, reason: 'NO_VALID_SMS_MESSAGES' } })
+      return
+    }
+    const { data, error } = await client.rpc('rpc_enqueue_balance_reminder_bulk', {
+      p_tenant_id: tenantId,
+      p_event_id: eventId,
+      p_event_member_ids: validIds,
       p_idempotency_key: input.idempotencyKey,
       p_cooldown_hours: env.BALANCE_REMINDER_COOLDOWN_HOURS,
       p_max_batch_size: env.BALANCE_REMINDER_MAX_BATCH_SIZE,
@@ -3053,7 +3182,7 @@ app.post('/api/v1/events/:eventId/payments', requireAuth, loadUserContext, requi
           paymentId: payment['payment_id'],
           safeMessage: databaseMessage(enqueue.error).slice(0, 160),
         })
-        notification = { smsQueued: false, reason: 'ENQUEUE_FAILED' }
+        notification = { smsQueued: false, reason: smsEnqueueFailureReason(enqueue.error) }
       } else {
         notification = notificationFromEnqueue(enqueue.data)
         const outboxId = queuedOutboxId(notification)

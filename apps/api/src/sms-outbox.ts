@@ -59,7 +59,7 @@ function classifySmsFailure(error: unknown): SmsFailureClassification {
     if (status === 401 || status === 403 || reason.includes('auth') || reason.includes('password') || reason.includes('credential')) {
       return { code: 'PROVIDER_AUTH_FAILED', message: safeErrorMessage(error), retryable: false }
     }
-    if (status === 400 || reason.includes('invalid phone') || reason.includes('unsupported') || reason.includes('sender id') || reason.includes('contract_required')) {
+    if (status === 400 || reason.includes('invalid phone') || reason.includes('unsupported') || reason.includes('sender id') || reason.includes('contract_required') || reason.includes('character_limit')) {
       return { code: 'PROVIDER_PERMANENT_FAILURE', message: safeErrorMessage(error), retryable: false }
     }
     if (status === 429 || (status !== undefined && status >= 500)) {

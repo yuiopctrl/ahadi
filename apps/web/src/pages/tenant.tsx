@@ -91,6 +91,11 @@ function asString(value: unknown, fallback = '') {
   return typeof value === 'string' && value ? value : fallback
 }
 
+function titleCaseMemberName(value: unknown, fallback = 'Member') {
+  const name = asString(value, fallback).trim().replace(/\s+/g, ' ')
+  return name.toLocaleLowerCase('en-TZ').replace(/(^|[\s'-])\p{L}/gu, (match) => match.toLocaleUpperCase('en-TZ'))
+}
+
 function asNumber(value: unknown) {
   const number = Number(value)
   return Number.isFinite(number) ? number : 0
@@ -132,6 +137,23 @@ function errorMessage(error: unknown, fallback: string) {
   return fallback
 }
 
+function smsPreviewTooLongText(preview: Row) {
+  const remaining = asNumber(preview.remainingCharacters)
+  return remaining < 0 ? `Message is ${Math.abs(remaining)} characters too long.` : `${remaining} characters remaining.`
+}
+
+function smsPreviewTone(preview: Row): 'success' | 'warning' | 'danger' | 'neutral' {
+  if (preview.valid === false) return 'danger'
+  const characters = asNumber(preview.characters)
+  const max = Math.max(asNumber(preview.maxCharacters), 1)
+  if (characters >= max || characters / max >= 0.9) return 'warning'
+  return 'success'
+}
+
+function SmsCharacterCounter({ preview }: { preview: Row }) {
+  return <StatusBadge tone={smsPreviewTone(preview)}>{asNumber(preview.characters)} / {asNumber(preview.maxCharacters)} · {smsPreviewTooLongText(preview)}</StatusBadge>
+}
+
 function smsStatusText(notification: unknown) {
   const value = jsonRecord(notification)
   if (value.smsQueued === true) return 'Confirmation queued'
@@ -154,6 +176,10 @@ function canSendBalanceReminder(row: Row) {
 
 function jsonRecord(value: unknown): Row {
   return typeof value === 'object' && value !== null && !Array.isArray(value) ? value as Row : {}
+}
+
+function jsonArray(value: unknown): Row[] {
+  return Array.isArray(value) ? value.filter((item): item is Row => typeof item === 'object' && item !== null && !Array.isArray(item)) : []
 }
 
 function maskPhone(value: unknown) {
@@ -602,7 +628,7 @@ function MemberCard({ member, eventId }: { member: Row; eventId: string }) {
     <article className="finance-card">
       <div className="card-title-row">
         <div>
-          <strong>{asString(member.full_name, 'Member')}</strong>
+          <strong>{titleCaseMemberName(member.full_name)}</strong>
           <span>{asString(member.phone_e164, 'No phone')} · {asString(member.category, 'No category')}</span>
         </div>
         <StatusBadge tone={statusTone(member.pledge_status)}>{asString(member.pledge_status, 'NO PLEDGE')}</StatusBadge>
@@ -661,7 +687,7 @@ function PledgeForm({ tenantId, event, eventId, members, onDone }: { tenantId: s
   return (
     <form className="mobile-sheet form-grid" onSubmit={(event) => { event.preventDefault(); mutation.mutate() }}>
       {!members.length ? <EmptyState title="No members available" message="Add a member before creating a pledge." /> : null}
-      <label>Member<select value={form.eventMemberId} onChange={(event) => setForm((current) => ({ ...current, eventMemberId: event.target.value }))}><option value="">Select member</option>{members.map((member) => <option key={asString(member.event_member_id)} value={asString(member.event_member_id)}>{asString(member.full_name)}</option>)}</select></label>
+      <label>Member<select value={form.eventMemberId} onChange={(event) => setForm((current) => ({ ...current, eventMemberId: event.target.value }))}><option value="">Select member</option>{members.map((member) => <option key={asString(member.event_member_id)} value={asString(member.event_member_id)}>{titleCaseMemberName(member.full_name, '')}</option>)}</select></label>
       <Input label="Amount" inputMode="decimal" value={form.amount} onChange={(amount) => setForm((current) => ({ ...current, amount }))} />
       <Input label="Custom due date optional" type="date" value={form.dueDate} onChange={(dueDate) => setForm((current) => ({ ...current, dueDate }))} />
       <p className="privacy-note">Default due date: {asDate(event?.pledgeDeadline)}. Leave blank to follow the event deadline.</p>
@@ -679,7 +705,7 @@ function PledgeCard({ pledge, eventId }: { pledge: Row; eventId: string }) {
   return (
     <article className="finance-card">
       <div className="card-title-row">
-        <div><strong>{asString(pledge.member_name, 'Member')}</strong><span>{asString(pledge.phone_e164, 'No phone')} · Due {asDate(dueDate)} · {dueType}</span></div>
+        <div><strong>{titleCaseMemberName(pledge.member_name)}</strong><span>{asString(pledge.phone_e164, 'No phone')} · Due {asDate(dueDate)} · {dueType}</span></div>
         <StatusBadge tone={statusTone(pledge.status)}>{asString(pledge.status)}</StatusBadge>
       </div>
       <progress max={Math.max(asNumber(pledge.pledged_amount), 1)} value={asNumber(pledge.total_allocated)} />
@@ -722,7 +748,7 @@ function PaymentCard({ payment, eventId, tenantId, onReverse }: { payment: Row; 
   return (
     <article className="finance-card">
       <div className="card-title-row">
-        <div><strong>{asString(payment.member_name, 'Member')}</strong><span>{asString(payment.receipt_number, 'No receipt')} · {asDate(payment.payment_date)}</span></div>
+        <div><strong>{titleCaseMemberName(payment.member_name)}</strong><span>{asString(payment.receipt_number, 'No receipt')} · {asDate(payment.payment_date)}</span></div>
         <StatusBadge tone={statusTone(payment.status)}>{asString(payment.status)}</StatusBadge>
       </div>
       <div className="amount-triplet">
@@ -754,7 +780,7 @@ export function MemberDetailPage() {
   const dueDate = member.effective_due_date ?? member.due_date
   return (
     <PageContainer>
-      <PageHeader title={asString(member.full_name, 'Member')} description={`${asString(member.phone_e164, 'No phone')} · ${asString(member.category, 'No category')}`} action={<Link className="desktop-primary-button" to={`/app/events/${eventId}/payments/new?eventMemberId=${eventMemberId}&pledgeId=${asString(member.pledge_id)}`}>Record Payment</Link>} />
+      <PageHeader title={titleCaseMemberName(member.full_name)} description={`${asString(member.phone_e164, 'No phone')} · ${asString(member.category, 'No category')}`} action={<Link className="desktop-primary-button" to={`/app/events/${eventId}/payments/new?eventMemberId=${eventMemberId}&pledgeId=${asString(member.pledge_id)}`}>Record Payment</Link>} />
       <section className="stats-grid">
         <StatCard label="Pledged" value={moneyText(member.pledged_amount)} icon={FileText} />
         <StatCard label="Paid" value={moneyText(member.total_allocated)} icon={CheckCircle2} tone="success" />
@@ -848,7 +874,7 @@ export function PaymentEntryPage() {
                   onClick={() => setForm((current) => ({ ...current, eventMemberId: asString(member.event_member_id), pledgeId: asString(member.pledge_id) }))}
                 >
                   <div className="card-title-row">
-                    <div><strong>{asString(member.full_name, 'Member')}</strong><span>{asString(member.phone_e164, 'No phone')} · {asString(member.member_code)}</span></div>
+                    <div><strong>{titleCaseMemberName(member.full_name)}</strong><span>{asString(member.phone_e164, 'No phone')} · {asString(member.member_code)}</span></div>
                     <StatusBadge tone={statusTone(member.pledge_status)}>{moneyText(member.outstanding_amount)} outstanding</StatusBadge>
                   </div>
                 </button>
@@ -861,7 +887,7 @@ export function PaymentEntryPage() {
         {selectedMember ? <div className="review-stack">
           <div className="panel-header">
             <div>
-              <h2>{asString(selectedMember.full_name, 'Selected member')}</h2>
+              <h2>{titleCaseMemberName(selectedMember.full_name, 'Selected Member')}</h2>
               <p>{asString(selectedMember.member_code)} · {asString(selectedMember.phone_e164, 'No phone')}</p>
             </div>
             <button type="button" onClick={() => setForm((current) => ({ ...current, eventMemberId: '', pledgeId: '' }))}>Change</button>
@@ -914,7 +940,7 @@ export function ReceiptPage() {
         <h1>{asString(data.receipt_number, 'Receipt')}</h1>
         <StatusBadge tone={statusTone(data.payment_status)}>{asString(data.payment_status)}</StatusBadge>
         {data.payment_status === 'REVERSED' ? <p className="field-error">This receipt is reversed. Reason: {asString(data.reversal_reason, 'Not specified')}</p> : null}
-        <ReviewLine label="Member" value={`${asString(data.member_name)} · ${asString(data.member_phone)}`} />
+        <ReviewLine label="Member" value={`${titleCaseMemberName(data.member_name, '')} · ${asString(data.member_phone)}`} />
         <ReviewLine label="Amount received" value={moneyText(data.payment_amount)} />
         <ReviewLine label="Payment method" value={asString(data.payment_method)} />
         <ReviewLine label="Reference" value={asString(data.transaction_reference, 'None')} />
@@ -932,30 +958,36 @@ export function ReceiptPage() {
 
 function BalanceReminderSheet({ tenantId, eventId, member, onClose, onSent }: { tenantId: string; eventId: string; member: Row; onClose: () => void; onSent: () => void }) {
   const [idempotencyKey] = useState(() => crypto.randomUUID())
+  const eventMemberId = asString(member.eventMemberId ?? member.event_member_id)
+  const preview = useQuery({ queryKey: ['sms-preview', tenantId, eventId, eventMemberId, 'BALANCE_REMINDER'], queryFn: async () => (await api.smsPreview(tenantId, eventId, { templateCode: 'BALANCE_REMINDER', eventMemberId })).data, enabled: Boolean(tenantId && eventId && eventMemberId) })
   const mutation = useMutation({
-    mutationFn: () => api.sendBalanceReminder(tenantId, eventId, { eventMemberId: asString(member.eventMemberId ?? member.event_member_id), idempotencyKey }),
+    mutationFn: () => api.sendBalanceReminder(tenantId, eventId, { eventMemberId, idempotencyKey }),
     onSuccess: onSent,
   })
+  const previewData = preview.data ?? {}
   return (
     <section className="mobile-sheet form-grid">
       <div className="panel-header">
         <div>
           <h2>Send Reminder</h2>
-          <p>{asString(member.fullName ?? member.full_name, 'Member')} · {maskPhone(member.phone ?? member.phone_e164)}</p>
+          <p>{titleCaseMemberName(member.fullName ?? member.full_name)} · {maskPhone(member.phone ?? member.phone_e164)}</p>
         </div>
       </div>
       <ReviewLine label="Pledged" value={moneyText(member.pledgedAmount ?? member.pledged_amount)} />
       <ReviewLine label="Paid" value={moneyText(member.totalPaid ?? member.total_paid ?? member.total_allocated)} />
       <ReviewLine label="Outstanding" value={moneyText(member.outstandingAmount ?? member.outstanding_amount)} />
       <ReviewLine label="Due date" value={asDate(member.dueDate ?? member.effective_due_date ?? member.due_date)} />
+      {preview.isLoading ? <LoadingState title="Generating SMS preview" /> : null}
+      {preview.isError ? <p className="field-error">{errorMessage(preview.error, 'SMS preview could not be generated.')}</p> : null}
+      {preview.data ? <SmsCharacterCounter preview={previewData} /> : null}
       <article className="content-panel">
-        <p>{asString(member.messagePreview, 'Preview will be rendered again by the server before queueing.')}</p>
+        <p>{asString(previewData.message, 'Preview will be rendered again by the server before queueing.')}</p>
       </article>
       {mutation.data?.data?.queued === false ? <p className="field-error">{asString(mutation.data.data.reason, 'Reminder was not queued.')}</p> : null}
       {mutation.error ? <p className="field-error">{errorMessage(mutation.error, 'Reminder could not be queued.')}</p> : null}
       <div className="sheet-actions">
         <button type="button" onClick={onClose}>Cancel</button>
-        <button className="primary-button" type="button" disabled={mutation.isPending} onClick={() => mutation.mutate()}>{mutation.isPending ? 'Queueing...' : 'Send Reminder'}</button>
+        <button className="primary-button" type="button" disabled={mutation.isPending || previewData.valid !== true} onClick={() => mutation.mutate()}>{mutation.isPending ? 'Queueing...' : 'Send SMS'}</button>
       </div>
     </section>
   )
@@ -965,6 +997,7 @@ function PledgeRequestSheet({ tenantId, eventId, eventMemberId, eventName, onClo
   const [idempotencyKey] = useState(() => crypto.randomUUID())
   const members = useQuery({ queryKey: ['no-pledge-members', tenantId, eventId, eventMemberId], queryFn: async () => (await api.eventNoPledgeMembers(tenantId, eventId)).data, enabled: Boolean(tenantId && eventId && eventMemberId) })
   const settings = useQuery({ queryKey: ['sms-settings', tenantId], queryFn: async () => (await api.smsSettings(tenantId)).data, enabled: Boolean(tenantId) })
+  const preview = useQuery({ queryKey: ['sms-preview', tenantId, eventId, eventMemberId, 'PLEDGE_REQUEST'], queryFn: async () => (await api.smsPreview(tenantId, eventId, { templateCode: 'PLEDGE_REQUEST', eventMemberId })).data, enabled: Boolean(tenantId && eventId && eventMemberId) })
   const member = (members.data ?? []).find((row) => asString(row.eventMemberId) === eventMemberId) ?? null
   const eligibility = member ? pledgeRequestEligibility(member) : { label: 'Has Pledge', tone: 'neutral' as const }
   const mutation = useMutation({
@@ -979,20 +1012,23 @@ function PledgeRequestSheet({ tenantId, eventId, eventMemberId, eventName, onClo
       <div className="panel-header">
         <div>
           <h2>Send Pledge Request</h2>
-          <p>{asString(member.fullName, 'Member')} · {asString(member.maskedPhone, maskPhone(member.phone))}</p>
+          <p>{titleCaseMemberName(member.fullName)} · {asString(member.maskedPhone, maskPhone(member.phone))}</p>
         </div>
         <StatusBadge tone={eligibility.tone}>{eligibility.label}</StatusBadge>
       </div>
       <ReviewLine label="Event" value={eventName} />
       <ReviewLine label="Sender ID" value={asString(settings.data?.senderId, 'MICHANGO')} />
+      {preview.isLoading ? <LoadingState title="Generating SMS preview" /> : null}
+      {preview.isError ? <p className="field-error">{errorMessage(preview.error, 'SMS preview could not be generated.')}</p> : null}
+      {preview.data ? <SmsCharacterCounter preview={preview.data} /> : null}
       <article className="content-panel">
-        <p>{asString(member.messagePreview, 'Preview will be rendered again by the server before queueing.')}</p>
+        <p>{asString(preview.data?.message ?? member.messagePreview, 'Preview will be rendered again by the server before queueing.')}</p>
       </article>
       {mutation.data?.data?.queued === false ? <p className="field-error">{asString(mutation.data.data.reason, 'Pledge request was not queued.')}</p> : null}
       {mutation.error ? <p className="field-error">{errorMessage(mutation.error, 'Pledge request could not be queued.')}</p> : null}
       <div className="sheet-actions">
         <button type="button" onClick={onClose}>Cancel</button>
-        <button className="primary-button" type="button" disabled={Boolean(member.ineligibleReason) || mutation.isPending} onClick={() => mutation.mutate()}>{mutation.isPending ? 'Queueing...' : 'Send'}</button>
+        <button className="primary-button" type="button" disabled={Boolean(member.ineligibleReason) || mutation.isPending || preview.data?.valid !== true} onClick={() => mutation.mutate()}>{mutation.isPending ? 'Queueing...' : 'Send SMS'}</button>
       </div>
     </section>
   )
@@ -1224,8 +1260,15 @@ export function OutstandingPage() {
   })
   const eligibleVisible = filtered.filter(canSendBalanceReminder)
   const selectedRows = rows.filter((row) => selected.includes(asString(row.eventMemberId)))
+  const bulkSmsPreview = useQuery({
+    queryKey: ['sms-bulk-preview', tenantId, eventId, 'BALANCE_REMINDER', selected],
+    queryFn: async () => (await api.smsBulkPreview(tenantId ?? '', eventId, { templateCode: 'BALANCE_REMINDER', eventMemberIds: selected })).data,
+    enabled: bulkPreview && selected.length > 0 && Boolean(tenantId && eventId),
+  })
+  const bulkPreviewRows = jsonArray(bulkSmsPreview.data?.previews)
+  const validBulkPreviewRows = bulkPreviewRows.filter((preview) => preview.valid === true)
   const bulkMutation = useMutation({
-    mutationFn: () => api.sendBulkBalanceReminders(tenantId ?? '', eventId, { eventMemberIds: selected, idempotencyKey: bulkIdempotencyKey }),
+    mutationFn: () => api.sendBulkBalanceReminders(tenantId ?? '', eventId, { eventMemberIds: validBulkPreviewRows.map((preview) => asString(jsonRecord(preview.member).eventMemberId)), idempotencyKey: bulkIdempotencyKey }),
     onSuccess: () => {
       resetBulkIdempotencyKey(crypto.randomUUID())
       setSelected([])
@@ -1274,7 +1317,7 @@ export function OutstandingPage() {
             <article className="finance-card" key={eventMemberId}>
               <div className="card-title-row">
                 <div>
-                  <strong>{asString(row.fullName, 'Member')}</strong>
+                  <strong>{titleCaseMemberName(row.fullName)}</strong>
                   <span>{asString(row.phone, 'No phone')} · {asString(row.memberCode)}</span>
                 </div>
                 <StatusBadge tone={eligible ? 'success' : 'warning'}>{eligible ? 'SMS Available' : asString(row.ineligibleReason, 'Not eligible')}</StatusBadge>
@@ -1301,15 +1344,22 @@ export function OutstandingPage() {
       {bulkPreview ? <section className="mobile-sheet form-grid">
         <h2>Review Reminders</h2>
         <ReviewLine label="Selected" value={String(selectedRows.length)} />
-        <ReviewLine label="Eligible" value={String(eligibleSelected.length)} />
-        <ReviewLine label="No Phone" value={String(skipped.noPhone)} />
-        <ReviewLine label="SMS Disabled" value={String(skipped.smsDisabled)} />
-        <ReviewLine label="Recently Sent" value={String(skipped.recentlySent)} />
-        <ReviewLine label="Estimated SMS" value={String(eligibleSelected.length)} />
-        <div className="finance-card-list">{eligibleSelected.slice(0, 3).map((row) => <article className="content-panel" key={asString(row.eventMemberId)}><p>{asString(row.messagePreview)}</p></article>)}</div>
+        <ReviewLine label="Eligible" value={String(asNumber(bulkSmsPreview.data?.eligible) || eligibleSelected.length)} />
+        <ReviewLine label="Ready" value={String(asNumber(bulkSmsPreview.data?.validMessages))} />
+        <ReviewLine label="Too Long" value={String(asNumber(bulkSmsPreview.data?.overCharacterLimit))} />
+        <ReviewLine label="No Phone" value={String(asNumber(bulkSmsPreview.data?.noPhone) || skipped.noPhone)} />
+        <ReviewLine label="SMS Disabled" value={String(asNumber(bulkSmsPreview.data?.smsDisabled) || skipped.smsDisabled)} />
+        <ReviewLine label="Recently Sent" value={String(asNumber(bulkSmsPreview.data?.recentlySent) || skipped.recentlySent)} />
+        <ReviewLine label="Estimated SMS" value={String(validBulkPreviewRows.length)} />
+        {bulkSmsPreview.isLoading ? <LoadingState title="Generating bulk SMS preview" /> : null}
+        {bulkSmsPreview.error ? <p className="field-error">{errorMessage(bulkSmsPreview.error, 'Bulk SMS preview could not be generated.')}</p> : null}
+        <div className="finance-card-list">{bulkPreviewRows.map((preview) => {
+          const member = jsonRecord(preview.member)
+          return <article className="content-panel" key={asString(member.eventMemberId)}><div className="panel-header"><div><h3>{titleCaseMemberName(member.name)}</h3><p>{asString(member.phoneMasked, 'No phone')}</p></div><SmsCharacterCounter preview={preview} /></div><p>{asString(preview.message)}</p></article>
+        })}</div>
         {bulkMutation.data ? <p className="privacy-note">Queued: {asString(bulkMutation.data.data.queued)} · Batch {asString(bulkMutation.data.data.batchId)}</p> : null}
         {bulkMutation.error ? <p className="field-error">{errorMessage(bulkMutation.error, 'Bulk reminders could not be queued.')}</p> : null}
-        <div className="sheet-actions"><button type="button" onClick={() => setBulkPreview(false)}>Back</button><button className="primary-button" type="button" disabled={!eligibleSelected.length || bulkMutation.isPending} onClick={() => bulkMutation.mutate()}>{bulkMutation.isPending ? 'Queueing...' : `Queue ${eligibleSelected.length} Reminders`}</button></div>
+        <div className="sheet-actions"><button type="button" onClick={() => setBulkPreview(false)}>Back</button><button className="primary-button" type="button" disabled={!validBulkPreviewRows.length || bulkMutation.isPending || bulkSmsPreview.isLoading} onClick={() => bulkMutation.mutate()}>{bulkMutation.isPending ? 'Queueing...' : `Send ${validBulkPreviewRows.length} SMS`}</button></div>
       </section> : null}
     </PageContainer>
   )
@@ -1480,8 +1530,15 @@ function PledgeRequestSelection({ tenantId, eventId, eventName, onQueued }: { te
     recentlySent: selectedRows.filter((row) => asString(row.ineligibleReason) === 'RECENTLY_SENT').length,
     hasPledge: selectedRows.filter((row) => asString(row.ineligibleReason) === 'HAS_PLEDGE').length,
   }
+  const bulkPreview = useQuery({
+    queryKey: ['sms-bulk-preview', tenantId, eventId, 'PLEDGE_REQUEST', selected],
+    queryFn: async () => (await api.smsBulkPreview(tenantId, eventId, { templateCode: 'PLEDGE_REQUEST', eventMemberIds: selected })).data,
+    enabled: previewOpen && selected.length > 0,
+  })
+  const previewRows = jsonArray(bulkPreview.data?.previews)
+  const validPreviewRows = previewRows.filter((preview) => preview.valid === true)
   const mutation = useMutation({
-    mutationFn: () => api.sendBulkPledgeRequests(tenantId, eventId, { eventMemberIds: eligibleSelected.map((row) => asString(row.eventMemberId)), idempotencyKey }),
+    mutationFn: () => api.sendBulkPledgeRequests(tenantId, eventId, { eventMemberIds: validPreviewRows.map((preview) => asString(jsonRecord(preview.member).eventMemberId)), idempotencyKey }),
     onSuccess: () => {
       resetIdempotencyKey(crypto.randomUUID())
       setSelected([])
@@ -1521,7 +1578,7 @@ function PledgeRequestSelection({ tenantId, eventId, eventName, onQueued }: { te
             <article className="finance-card pledge-request-card" key={eventMemberId}>
               <label className="checkbox-line">
                 <input type="checkbox" checked={selected.includes(eventMemberId)} disabled={!eligible} onChange={() => toggle(eventMemberId)} />
-                <span><strong>{asString(row.fullName, 'Member')}</strong><small>{asString(row.maskedPhone, maskPhone(row.phone))} · {asString(row.category, 'No category')}</small></span>
+                <span><strong>{titleCaseMemberName(row.fullName)}</strong><small>{asString(row.maskedPhone, maskPhone(row.phone))} · {asString(row.category, 'No category')}</small></span>
               </label>
               <div className="card-title-row">
                 <span>Last Request: {asDateTime(row.lastPledgeRequestAt)}</span>
@@ -1537,16 +1594,23 @@ function PledgeRequestSelection({ tenantId, eventId, eventName, onQueued }: { te
         <h2>Review Pledge Requests</h2>
         <ReviewLine label="Event" value={eventName} />
         <ReviewLine label="Selected" value={String(selectedRows.length)} />
-        <ReviewLine label="Eligible" value={String(eligibleSelected.length)} />
-        <ReviewLine label="No Phone" value={String(skipped.noPhone)} />
-        <ReviewLine label="SMS Disabled" value={String(skipped.smsDisabled)} />
-        <ReviewLine label="Recently Sent" value={String(skipped.recentlySent)} />
-        <ReviewLine label="Has Pledge" value={String(skipped.hasPledge)} />
-        <ReviewLine label="Estimated SMS" value={String(eligibleSelected.length)} />
-        <div className="finance-card-list">{eligibleSelected.slice(0, 3).map((row) => <article className="content-panel" key={asString(row.eventMemberId)}><p>{asString(row.messagePreview)}</p></article>)}</div>
+        <ReviewLine label="Eligible" value={String(asNumber(bulkPreview.data?.eligible) || eligibleSelected.length)} />
+        <ReviewLine label="Ready" value={String(asNumber(bulkPreview.data?.validMessages))} />
+        <ReviewLine label="Too Long" value={String(asNumber(bulkPreview.data?.overCharacterLimit))} />
+        <ReviewLine label="No Phone" value={String(asNumber(bulkPreview.data?.noPhone) || skipped.noPhone)} />
+        <ReviewLine label="SMS Disabled" value={String(asNumber(bulkPreview.data?.smsDisabled) || skipped.smsDisabled)} />
+        <ReviewLine label="Recently Sent" value={String(asNumber(bulkPreview.data?.recentlySent) || skipped.recentlySent)} />
+        <ReviewLine label="Has Pledge" value={String(asNumber(bulkPreview.data?.hasPledge) || skipped.hasPledge)} />
+        <ReviewLine label="Estimated SMS" value={String(validPreviewRows.length)} />
+        {bulkPreview.isLoading ? <LoadingState title="Generating bulk SMS preview" /> : null}
+        {bulkPreview.error ? <p className="field-error">{errorMessage(bulkPreview.error, 'Bulk SMS preview could not be generated.')}</p> : null}
+        <div className="finance-card-list">{previewRows.map((preview) => {
+          const member = jsonRecord(preview.member)
+          return <article className="content-panel" key={asString(member.eventMemberId)}><div className="panel-header"><div><h3>{titleCaseMemberName(member.name)}</h3><p>{asString(member.phoneMasked, 'No phone')}</p></div><SmsCharacterCounter preview={preview} /></div><p>{asString(preview.message)}</p></article>
+        })}</div>
         {mutation.data ? <p className="privacy-note">Queued: {asString(mutation.data.data.queued)} · Allowed: {asString(mutation.data.data.allowedBySmsBalance, 'unlimited')} · Batch {asString(mutation.data.data.batchId)}</p> : null}
         {mutation.error ? <p className="field-error">{errorMessage(mutation.error, 'Pledge requests could not be queued.')}</p> : null}
-        <div className="sheet-actions"><button type="button" onClick={() => setPreviewOpen(false)}>Cancel</button><button className="primary-button" type="button" disabled={!eligibleSelected.length || mutation.isPending} onClick={() => mutation.mutate()}>{mutation.isPending ? 'Queueing...' : `Queue ${eligibleSelected.length} Messages`}</button></div>
+        <div className="sheet-actions"><button type="button" onClick={() => setPreviewOpen(false)}>Cancel</button><button className="primary-button" type="button" disabled={!validPreviewRows.length || mutation.isPending || bulkPreview.isLoading} onClick={() => mutation.mutate()}>{mutation.isPending ? 'Queueing...' : `Send ${validPreviewRows.length} SMS`}</button></div>
       </section> : null}
     </div>
   )
@@ -1566,7 +1630,7 @@ function MessageHistoryCard({ message, tenantId, canResend, onResent }: { messag
       <div className="message-card-content">
         <div className="message-card-top">
           <div>
-            <strong>{asString(message.member_name, 'Recipient')}</strong>
+            <strong>{titleCaseMemberName(message.member_name, 'Recipient')}</strong>
             <span>{type} · {asString(message.event_name, 'No event')}</span>
           </div>
           <StatusBadge tone={statusTone(status)}>{status}</StatusBadge>
@@ -1579,6 +1643,7 @@ function MessageHistoryCard({ message, tenantId, canResend, onResent }: { messag
           <span><small>Delivered</small>{asDateTime(message.delivered_at)}</span>
           <span><small>Sender</small>{asString(message.sender_id, 'MICHANGO')}</span>
           <span><small>Provider</small>{asString(message.provider, 'SMS')}</span>
+          <span><small>Characters</small>{asNumber(message.character_count)} / {asNumber(message.max_characters_at_send)}</span>
           <span><small>Attempts</small>{String(asNumber(message.attempt_count))}</span>
         </div>
         {preview ? <p className="message-preview">{preview}</p> : null}
@@ -1591,11 +1656,6 @@ function MessageHistoryCard({ message, tenantId, canResend, onResent }: { messag
 
 function renderPreviewTemplate(body: string) {
   return body.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_match, key: string) => smsPreviewValues[key] ?? '')
-}
-
-function smsPartCount(body: string) {
-  const length = body.length
-  return length <= 160 ? 1 : Math.ceil(length / 153)
 }
 
 function SmsSettingsPanel({ tenantId, settings, loading, onSaved }: { tenantId: string; settings: Row | null; loading: boolean; onSaved: () => void }) {
@@ -1665,6 +1725,10 @@ function SmsTemplateEditorCard({ tenantId, option, template, onSaved }: { tenant
       onSaved()
     },
   })
+  const samplePreview = renderPreviewTemplate(currentBody)
+  const maxCharacters = asNumber(template?.maxCharacters)
+  const sampleCharacters = samplePreview.length
+  const sampleOverLimit = maxCharacters > 0 && sampleCharacters > maxCharacters
   return (
     <article className="content-panel">
       <div className="panel-header">
@@ -1672,11 +1736,13 @@ function SmsTemplateEditorCard({ tenantId, option, template, onSaved }: { tenant
           <h3>{option.label}</h3>
           <p>{template?.hasTenantOverride ? 'Tenant override active.' : 'Using system default.'}</p>
         </div>
-        <StatusBadge>{currentBody.length} chars · {smsPartCount(currentBody)} SMS</StatusBadge>
+        <StatusBadge tone={sampleOverLimit ? 'warning' : 'success'}>{sampleCharacters} / {maxCharacters || asString(template?.maxCharacters, 'max')} sample</StatusBadge>
       </div>
       <label>Template<textarea value={currentBody} onChange={(event) => setBody(event.target.value)} rows={4} /></label>
       <p className="privacy-note">{option.variables.map((variable) => `{{${variable}}}`).join(' ')}</p>
-      <div className="template-preview-card"><p>{renderPreviewTemplate(currentBody)}</p></div>
+      <p className="privacy-note">Template Characters: {currentBody.length} · Sample Preview Characters: {sampleCharacters} · Maximum: {maxCharacters || asString(template?.maxCharacters, 'Not loaded')}</p>
+      {sampleOverLimit ? <p className="field-error">Sample preview exceeds the limit. Messages exceeding the maximum after rendering cannot be sent.</p> : null}
+      <div className="template-preview-card"><p>{samplePreview}</p></div>
       {mutation.error ? <p className="field-error">{errorMessage(mutation.error, 'Template could not be saved.')}</p> : null}
       {reset.error ? <p className="field-error">{errorMessage(reset.error, 'Template could not be reset.')}</p> : null}
       <div className="sheet-actions">
@@ -2212,7 +2278,7 @@ function ReportDetailPage({ tenantId, eventId, eventName, reportType }: { tenant
       <PageHeader title={reportTitle(reportType)} description={`${eventName} report`} action={<div className="inline-actions"><Link to={`/app/events/${eventId}/reports`}><ArrowLeft size={18} aria-hidden /> Reports</Link><button type="button" onClick={() => setExportOpen((value) => !value)}><Share2 size={18} aria-hidden /> Export</button></div>} />
       {exportOpen ? <ExportReportSheet reportType={reportType} rowCount={totalRows} filterCount={filterCount} canExport={permissions.has('reports.export') || Boolean(reportTenantContext?.membership?.isOwner)} formats={reportExportFormats[reportType] ?? ['PDF', 'PRINT']} pendingFormat={exportMutation.variables ?? null} isPending={exportMutation.isPending} error={exportMutation.error} lastExport={lastExport} onClose={() => setExportOpen(false)} onExport={(format) => exportMutation.mutate(format)} /> : null}
       <form className="filter-bar" onSubmit={applyFilters}>
-        {reportType === 'member-statement' ? <label>Member<select value={draft.eventMemberId} onChange={(event) => setDraft((current) => ({ ...current, eventMemberId: event.target.value }))}><option value="">First matching member</option>{members.map((member) => <option key={asString(member.eventMemberId)} value={asString(member.eventMemberId)}>{asString(member.name)} · {asString(member.memberCode)}</option>)}</select></label> : null}
+        {reportType === 'member-statement' ? <label>Member<select value={draft.eventMemberId} onChange={(event) => setDraft((current) => ({ ...current, eventMemberId: event.target.value }))}><option value="">First matching member</option>{members.map((member) => <option key={asString(member.eventMemberId)} value={asString(member.eventMemberId)}>{titleCaseMemberName(member.name, '')} · {asString(member.memberCode)}</option>)}</select></label> : null}
         <label>Search<input type="search" value={draft.search} onChange={(event) => setDraft((current) => ({ ...current, search: event.target.value }))} placeholder="Member, receipt or payment" /></label>
         {['pledges', 'payments'].includes(reportType) ? <label>Status<select value={draft.status} onChange={(event) => setDraft((current) => ({ ...current, status: event.target.value }))}>{['ALL', 'PENDING', 'PARTIALLY_PAID', 'PAID', 'OVERDUE', 'CONFIRMED', 'REVERSED', 'CANCELLED'].map((item) => <option key={item} value={item}>{item.replaceAll('_', ' ')}</option>)}</select></label> : null}
         {reportType === 'outstanding' ? <label>Filter<select value={draft.filter} onChange={(event) => setDraft((current) => ({ ...current, filter: event.target.value }))}>{['ALL', 'OVERDUE', 'DUE_SOON', 'PARTIAL', 'UNPAID'].map((item) => <option key={item} value={item}>{item.replaceAll('_', ' ')}</option>)}</select></label> : null}
@@ -2249,6 +2315,13 @@ function ReportSummaryCards({ reportType, summary }: { reportType: string; summa
   return <section className="stats-grid">{entries.map(([label, value]) => <StatCard key={label} label={label} value={typeof value === 'number' || String(label).toLowerCase().includes('amount') || String(label).toLowerCase().includes('total') || ['Pledged', 'Collected', 'Allocated', 'Unallocated', 'Outstanding', 'Net Confirmed'].some((word) => String(label).includes(word)) ? moneyText(value) : displayValue(value)} icon={FileText} />)}</section>
 }
 
+function reportRowValue(key: string, value: unknown) {
+  const normalized = key.toLowerCase()
+  if (normalized === 'member' || normalized === 'membername' || normalized === 'fullname') return titleCaseMemberName(value, '')
+  if (normalized.includes('date') || normalized.includes('payment') && String(value).includes('T')) return asDateTime(value)
+  return displayValue(value)
+}
+
 function ReportRowCard({ reportType, row, summary }: { reportType: string; row: Row; summary: Row }) {
   if (reportType === 'summary') {
     return <article className="finance-card">{Object.entries(row).map(([key, value]) => <ReviewLine key={key} label={key} value={displayValue(value)} />)}</article>
@@ -2256,10 +2329,11 @@ function ReportRowCard({ reportType, row, summary }: { reportType: string; row: 
   if (reportType === 'member-statement') {
     const member = jsonRecord(summary.member)
     const pledge = jsonRecord(summary.pledge)
-    return <article className="finance-card"><div className="card-title-row"><div><strong>{asString(member.name, 'Member Statement')}</strong><span>{asString(member.memberCode)} · {asString(member.phone, 'No phone')}</span></div><StatusBadge>{asString(row.status, asString(pledge.status))}</StatusBadge></div><ReviewLine label="Date" value={asDateTime(row.date)} /><ReviewLine label="Type" value={displayValue(row.type)} /><ReviewLine label="Receipt" value={displayValue(row.receipt)} /><ReviewLine label="Method" value={displayValue(row.method)} /><ReviewLine label="Amount" value={moneyText(row.amount)} /></article>
+    return <article className="finance-card"><div className="card-title-row"><div><strong>{titleCaseMemberName(member.name, 'Member Statement')}</strong><span>{asString(member.memberCode)} · {asString(member.phone, 'No phone')}</span></div><StatusBadge>{asString(row.status, asString(pledge.status))}</StatusBadge></div><ReviewLine label="Date" value={asDateTime(row.date)} /><ReviewLine label="Type" value={displayValue(row.type)} /><ReviewLine label="Receipt" value={displayValue(row.receipt)} /><ReviewLine label="Method" value={displayValue(row.method)} /><ReviewLine label="Amount" value={moneyText(row.amount)} /></article>
   }
-  const title = asString(row.member ?? row.collectorName ?? row.paymentMethod ?? row.eventName, reportTitle(reportType))
-  return <article className="finance-card"><div className="card-title-row"><div><strong>{title}</strong><span>{asString(row.memberCode ?? row.paymentNumber ?? row.receiptNumber ?? row.category, '')}</span></div><StatusBadge tone={statusTone(row.status)}>{asString(row.status ?? row.paymentMethod, 'Report')}</StatusBadge></div><div className="amount-triplet">{Object.entries(row).filter(([key]) => ['pledged', 'paid', 'outstanding', 'amount', 'allocatedAmount', 'unallocatedAmount', 'netConfirmedAmount', 'grossAmount', 'reversedAmount', 'netCollected', 'grossRecorded'].includes(key)).slice(0, 3).map(([key, value]) => <span key={key}><small>{key.replace(/([A-Z])/g, ' $1')}</small>{moneyText(value)}</span>)}</div>{Object.entries(row).filter(([key]) => !['pledgeId', 'paymentId', 'eventMemberId', 'memberId', 'collectorId'].includes(key)).slice(0, 8).map(([key, value]) => <ReviewLine key={key} label={key.replace(/([A-Z])/g, ' $1')} value={key.toLowerCase().includes('date') || key.toLowerCase().includes('payment') && String(value).includes('T') ? asDateTime(value) : displayValue(value)} />)}</article>
+  const memberTitle = asString(row.member, '')
+  const title = memberTitle ? titleCaseMemberName(memberTitle, '') : asString(row.collectorName ?? row.paymentMethod ?? row.eventName, reportTitle(reportType))
+  return <article className="finance-card"><div className="card-title-row"><div><strong>{title}</strong><span>{asString(row.memberCode ?? row.paymentNumber ?? row.receiptNumber ?? row.category, '')}</span></div><StatusBadge tone={statusTone(row.status)}>{asString(row.status ?? row.paymentMethod, 'Report')}</StatusBadge></div><div className="amount-triplet">{Object.entries(row).filter(([key]) => ['pledged', 'paid', 'outstanding', 'amount', 'allocatedAmount', 'unallocatedAmount', 'netConfirmedAmount', 'grossAmount', 'reversedAmount', 'netCollected', 'grossRecorded'].includes(key)).slice(0, 3).map(([key, value]) => <span key={key}><small>{key.replace(/([A-Z])/g, ' $1')}</small>{moneyText(value)}</span>)}</div>{Object.entries(row).filter(([key]) => !['pledgeId', 'paymentId', 'eventMemberId', 'memberId', 'collectorId'].includes(key)).slice(0, 8).map(([key, value]) => <ReviewLine key={key} label={key.replace(/([A-Z])/g, ' $1')} value={reportRowValue(key, value)} />)}</article>
 }
 
 function Input({ label, value, onChange, inputMode, type = 'text' }: { label: string; value: string; onChange: (value: string) => void; inputMode?: 'decimal' | 'tel'; type?: string }) {
