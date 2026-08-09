@@ -1483,7 +1483,7 @@ export function SmsHistoryPage() {
         </section>
         {(canManageTemplates || canManageSettings) ? (
           <aside className="messages-template-block">
-            {canManageSettings ? <SmsSettingsPanel key={`${String(settings.data?.smsEnabled)}-${asString(settings.data?.senderId, 'MICHANGO')}`} tenantId={tenantId} settings={settings.data ?? null} loading={settings.isLoading} onSaved={() => void queryClient.invalidateQueries({ queryKey: ['sms-settings', tenantId] })} /> : null}
+            {canManageSettings ? <SmsSettingsPanel key={`${String(settings.data?.smsEnabled)}-${asString(settings.data?.provider, 'NEXTSMS')}-${asString(settings.data?.senderId, 'MICHANGO')}`} tenantId={tenantId} settings={settings.data ?? null} loading={settings.isLoading} onSaved={() => void queryClient.invalidateQueries({ queryKey: ['sms-settings', tenantId] })} /> : null}
             {canManageTemplates ? <SmsTemplateManager tenantId={tenantId} templates={templates.data ?? []} loading={templates.isLoading} onSaved={() => void queryClient.invalidateQueries({ queryKey: ['sms-templates', tenantId] })} /> : null}
           </aside>
         ) : null}
@@ -1660,11 +1660,16 @@ function renderPreviewTemplate(body: string) {
 
 function SmsSettingsPanel({ tenantId, settings, loading, onSaved }: { tenantId: string; settings: Row | null; loading: boolean; onSaved: () => void }) {
   const [smsEnabled, setSmsEnabled] = useState(Boolean(settings?.smsEnabled ?? true))
+  const [provider, setProvider] = useState(asString(settings?.provider ?? settings?.selectedProvider, 'NEXTSMS'))
   const [senderId, setSenderId] = useState(asString(settings?.senderId, 'MICHANGO'))
+  const providers = jsonArray(settings?.providers)
+  const selectedProvider = providers.find((item) => asString(item.code) === provider) ?? providers[0] ?? null
+  const senderIds = Array.isArray(selectedProvider?.senderIds) ? selectedProvider.senderIds.map((item) => asString(item)).filter(Boolean) : []
   const mutation = useMutation({
-    mutationFn: () => api.saveSmsSettings(tenantId, { smsEnabled, senderId, defaultLanguage: asString(settings?.defaultLanguage, 'sw') }),
+    mutationFn: () => api.saveSmsSettings(tenantId, { smsEnabled, provider, senderId, defaultLanguage: asString(settings?.defaultLanguage, 'sw') }),
     onSuccess: (result) => {
       setSmsEnabled(Boolean(result.data.smsEnabled ?? true))
+      setProvider(asString(result.data.provider ?? result.data.selectedProvider, 'NEXTSMS'))
       setSenderId(asString(result.data.senderId, 'MICHANGO'))
       onSaved()
     },
@@ -1677,12 +1682,21 @@ function SmsSettingsPanel({ tenantId, settings, loading, onSaved }: { tenantId: 
           <h2>SMS Settings</h2>
           <p>{smsEnabled ? 'Business SMS is enabled.' : 'Business SMS is paused.'}</p>
         </div>
-        <StatusBadge>{senderId}</StatusBadge>
+        <StatusBadge>{provider} · {senderId}</StatusBadge>
       </div>
       <label className="checkbox-line"><input type="checkbox" checked={smsEnabled} onChange={(event) => setSmsEnabled(event.target.checked)} /> SMS Enabled</label>
-      <label>Sender ID<select value={senderId} onChange={(event) => setSenderId(event.target.value)}>{['MICHANGO', 'SHEREHE', 'KIKAO'].map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
+      <label>SMS Provider<select value={provider} onChange={(event) => {
+        const nextProvider = event.target.value
+        const nextProviderRow = providers.find((item) => asString(item.code) === nextProvider) ?? null
+        const nextSenderIds = Array.isArray(nextProviderRow?.senderIds) ? nextProviderRow.senderIds.map((item) => asString(item)).filter(Boolean) : []
+        setProvider(nextProvider)
+        setSenderId(nextSenderIds[0] ?? '')
+      }}>{providers.map((item) => <option key={asString(item.code)} value={asString(item.code)}>{asString(item.name, asString(item.code))}</option>)}</select></label>
+      <label>Sender ID<select value={senderId} onChange={(event) => setSenderId(event.target.value)}>{senderIds.map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
+      {!providers.length ? <p className="field-error">No active SMS provider is available.</p> : null}
+      {selectedProvider && !senderIds.length ? <p className="field-error">Provider unavailable: no active Sender ID is configured.</p> : null}
       {mutation.error ? <p className="field-error">{errorMessage(mutation.error, 'SMS settings could not be saved.')}</p> : null}
-      <div className="sheet-actions"><button className="primary-button" type="button" disabled={mutation.isPending} onClick={() => mutation.mutate()}>{mutation.isPending ? 'Saving...' : 'Save Settings'}</button></div>
+      <div className="sheet-actions"><button className="primary-button" type="button" disabled={mutation.isPending || !provider || !senderId} onClick={() => mutation.mutate()}>{mutation.isPending ? 'Saving...' : 'Save Settings'}</button></div>
     </section>
   )
 }

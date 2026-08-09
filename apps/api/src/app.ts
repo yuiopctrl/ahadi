@@ -371,8 +371,19 @@ const smsTemplateSaveSchema = templateBodySchema.extend({
 
 const smsSettingsSchema = z.object({
   smsEnabled: z.boolean(),
-  senderId: z.enum(['MICHANGO', 'SHEREHE', 'KIKAO']),
+  provider: z.enum(['NEXTSMS', 'WEBBULKSMS']),
+  senderId: z.string().trim().min(1).max(40),
   defaultLanguage: z.enum(['sw', 'en']).default('sw'),
+})
+
+const platformSmsProviderUpdateSchema = z.object({
+  status: z.enum(['ACTIVE', 'DISABLED']).optional(),
+  isDefault: z.boolean().optional(),
+})
+
+const platformSmsSenderUpdateSchema = z.object({
+  status: z.enum(['ACTIVE', 'DISABLED']).optional(),
+  isDefault: z.boolean().optional(),
 })
 
 const resendBalanceReminderSchema = z.object({
@@ -2288,6 +2299,59 @@ app.get('/api/v1/platform/billing/reconciliation', requireAuth, loadUserContext,
   }
 })
 
+app.get('/api/v1/platform/sms/providers', requireAuth, loadUserContext, requirePlatformPermission('platform.sms.view'), async (request, response, next) => {
+  try {
+    const client = createUserSupabase(request.auth?.accessToken ?? '')
+    const { data, error } = await client.rpc('rpc_get_platform_sms_providers')
+    if (error) {
+      throwFinancialDatabaseError(error, 'PLATFORM_SMS_PROVIDERS_FAILED')
+    }
+    response.json({ data: jsonRecord(data) })
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.patch('/api/v1/platform/sms/providers/:providerCode', requireAuth, loadUserContext, requirePlatformPermission('platform.sms.manage'), async (request, response, next) => {
+  try {
+    const providerCode = String(request.params['providerCode'] ?? '').trim().toUpperCase()
+    const input = platformSmsProviderUpdateSchema.parse(request.body)
+    const client = createUserSupabase(request.auth?.accessToken ?? '')
+    const { data, error } = await client.rpc('rpc_update_platform_sms_provider', {
+      p_provider_code: providerCode,
+      p_status: input.status ?? null,
+      p_is_default: input.isDefault ?? null,
+    })
+    if (error) {
+      throwFinancialDatabaseError(error, 'PLATFORM_SMS_PROVIDER_UPDATE_FAILED')
+    }
+    response.json({ data: jsonRecord(data) })
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.patch('/api/v1/platform/sms/providers/:providerCode/sender-ids/:senderId', requireAuth, loadUserContext, requirePlatformPermission('platform.sms.manage'), async (request, response, next) => {
+  try {
+    const providerCode = String(request.params['providerCode'] ?? '').trim().toUpperCase()
+    const senderId = String(request.params['senderId'] ?? '').trim().toUpperCase()
+    const input = platformSmsSenderUpdateSchema.parse(request.body)
+    const client = createUserSupabase(request.auth?.accessToken ?? '')
+    const { data, error } = await client.rpc('rpc_update_platform_sms_sender_id', {
+      p_provider_code: providerCode,
+      p_sender_id: senderId,
+      p_status: input.status ?? null,
+      p_is_default: input.isDefault ?? null,
+    })
+    if (error) {
+      throwFinancialDatabaseError(error, 'PLATFORM_SMS_SENDER_UPDATE_FAILED')
+    }
+    response.json({ data: jsonRecord(data) })
+  } catch (error) {
+    next(error)
+  }
+})
+
 app.get('/api/v1/platform/beta', requireAuth, loadUserContext, requirePlatformPermission('platform.beta.view'), async (request, response, next) => {
   try {
     const client = createUserSupabase(request.auth?.accessToken ?? '')
@@ -3277,7 +3341,21 @@ app.get('/api/v1/messages/settings', requireAuth, loadUserContext, requireTenant
   }
 })
 
-app.put('/api/v1/messages/settings', requireAuth, loadUserContext, requireTenantContext, async (request, response, next) => {
+app.get('/api/v1/settings/messages/providers', requireAuth, loadUserContext, requireTenantContext, async (request, response, next) => {
+  try {
+    const tenantId = tenantIdFromRequest(request)
+    const client = createUserSupabase(request.auth?.accessToken ?? '')
+    const { data, error } = await client.rpc('rpc_get_sms_provider_options', { p_tenant_id: tenantId })
+    if (error) {
+      throwFinancialDatabaseError(error, 'SMS_PROVIDER_OPTIONS_FAILED')
+    }
+    response.json({ data: jsonRecord(data) })
+  } catch (error) {
+    next(error)
+  }
+})
+
+async function saveTenantSmsSettings(request: express.Request, response: express.Response, next: express.NextFunction) {
   try {
     const tenantId = tenantIdFromRequest(request)
     const input = smsSettingsSchema.parse(request.body)
@@ -3285,6 +3363,7 @@ app.put('/api/v1/messages/settings', requireAuth, loadUserContext, requireTenant
     const { data, error } = await client.rpc('rpc_update_sms_settings', {
       p_tenant_id: tenantId,
       p_sms_enabled: input.smsEnabled,
+      p_provider_code: input.provider,
       p_sender_id: input.senderId,
       p_default_language: input.defaultLanguage,
     })
@@ -3295,7 +3374,10 @@ app.put('/api/v1/messages/settings', requireAuth, loadUserContext, requireTenant
   } catch (error) {
     next(error)
   }
-})
+}
+
+app.put('/api/v1/messages/settings', requireAuth, loadUserContext, requireTenantContext, saveTenantSmsSettings)
+app.patch('/api/v1/settings/messages', requireAuth, loadUserContext, requireTenantContext, saveTenantSmsSettings)
 
 app.get('/api/v1/messages/templates', requireAuth, loadUserContext, requireTenantContext, async (request, response, next) => {
   try {

@@ -22,16 +22,18 @@ test('SMS_API_KEY is no longer required', () => {
   assert.equal('SMS_API_KEY' in parsed, false)
 })
 
-test('missing SMS_USERNAME fails environment validation', () => {
+test('missing SMS_USERNAME no longer blocks API boot', () => {
   const { SMS_USERNAME: _removed, ...input } = validEnv
   void _removed
-  assert.throws(() => parseApiEnv(input), /SMS_USERNAME/)
+  const parsed = parseApiEnv(input)
+  assert.equal(parsed.SMS_USERNAME, undefined)
 })
 
-test('missing SMS_PASSWORD fails environment validation', () => {
+test('missing SMS_PASSWORD no longer blocks API boot', () => {
   const { SMS_PASSWORD: _removed, ...input } = validEnv
   void _removed
-  assert.throws(() => parseApiEnv(input), /SMS_PASSWORD/)
+  const parsed = parseApiEnv(input)
+  assert.equal(parsed.SMS_PASSWORD, undefined)
 })
 
 test('NEXTSMS mode does not require legacy WebBulkSMS credentials', () => {
@@ -52,8 +54,8 @@ test('NEXTSMS mode does not require legacy WebBulkSMS credentials', () => {
   assert.equal(parsed.NEXTSMS_DEFAULT_SENDER_ID, 'MICHANGO')
 })
 
-test('NEXTSMS authorization is required in NEXTSMS mode', () => {
-  assert.throws(() => parseApiEnv({
+test('NEXTSMS authorization no longer blocks API boot', () => {
+  const parsed = parseApiEnv({
     NODE_ENV: 'test',
     PORT: '4000',
     WEB_URL: 'http://localhost:5173',
@@ -62,5 +64,7 @@ test('NEXTSMS authorization is required in NEXTSMS mode', () => {
     SUPABASE_PUBLISHABLE_KEY: 'sb_publishable_test',
     SEND_SMS_HOOK_SECRET: 'v1,whsec_dGVzdA==',
     SMS_PROVIDER: 'NEXTSMS',
-  }), /NEXTSMS_AUTHORIZATION/)
+  })
+  assert.equal(parsed.SMS_PROVIDER, 'NEXTSMS')
+  assert.equal(parsed.NEXTSMS_AUTHORIZATION, undefined)
 })

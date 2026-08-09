@@ -121,6 +121,11 @@ export const api = {
   platformPlans: () => apiFetch<{ data: unknown[] }>('/platform/plans'),
   platformBillingGateways: () => apiFetch<{ data: Record<string, unknown> }>('/platform/billing/gateways'),
   platformBillingReconciliation: () => apiFetch<{ data: Record<string, unknown>[] }>('/platform/billing/reconciliation'),
+  platformSmsProviders: () => apiFetch<{ data: Record<string, unknown> }>('/platform/sms/providers'),
+  updatePlatformSmsProvider: (providerCode: string, payload: Record<string, unknown>) =>
+    apiFetch<{ data: Record<string, unknown> }>(`/platform/sms/providers/${providerCode}`, { method: 'PATCH', body: JSON.stringify(payload) }),
+  updatePlatformSmsSenderId: (providerCode: string, senderId: string, payload: Record<string, unknown>) =>
+    apiFetch<{ data: Record<string, unknown> }>(`/platform/sms/providers/${providerCode}/sender-ids/${encodeURIComponent(senderId)}`, { method: 'PATCH', body: JSON.stringify(payload) }),
   platformBeta: () => apiFetch<{ data: Record<string, unknown> }>('/platform/beta'),
   updateRolloutSettings: (payload: Record<string, unknown>) =>
     apiFetch<{ data: Record<string, unknown> }>('/platform/beta/settings', { method: 'PUT', body: JSON.stringify(payload) }),
@@ -204,8 +209,9 @@ export const api = {
   processQueuedMessages: (tenantId: string, batchSize = 10) =>
     apiFetch<{ data: Record<string, unknown> }>('/messages/process-queued', { tenantId, method: 'POST', body: JSON.stringify({ batchSize }) }),
   smsSettings: (tenantId: string) => apiFetch<{ data: Record<string, unknown> }>('/messages/settings', { tenantId }),
+  smsProviderOptions: (tenantId: string) => apiFetch<{ data: Record<string, unknown> }>('/settings/messages/providers', { tenantId }),
   saveSmsSettings: (tenantId: string, payload: Record<string, unknown>) =>
-    apiFetch<{ data: Record<string, unknown> }>('/messages/settings', { tenantId, method: 'PUT', body: JSON.stringify(payload) }),
+    apiFetch<{ data: Record<string, unknown> }>('/settings/messages', { tenantId, method: 'PATCH', body: JSON.stringify(payload) }),
   smsTemplates: (tenantId: string) => apiFetch<{ data: Record<string, unknown>[] }>('/messages/templates', { tenantId }),
   saveSmsTemplate: (tenantId: string, code: string, payload: Record<string, unknown>) =>
     apiFetch<{ data: Record<string, unknown> }>(`/messages/templates/${code}`, { tenantId, method: 'PUT', body: JSON.stringify(payload) }),

@@ -18,11 +18,15 @@ export const apiEnvSchema = z.object({
     .refine((value) => value.startsWith('v1,whsec_') || value.startsWith('whsec_'), {
       message: 'SEND_SMS_HOOK_SECRET must start with v1,whsec_ or whsec_',
     }),
-  SMS_PROVIDER: z.enum(['WEBBULKSMS', 'NEXTSMS']).default('WEBBULKSMS'),
+  SMS_PROVIDER: z.enum(['WEBBULKSMS', 'NEXTSMS']).default('NEXTSMS'),
   SMS_PROVIDER_URL: z.string().url().optional(),
   SMS_USERNAME: z.string().min(1).optional(),
   SMS_PASSWORD: z.string().min(1).optional(),
   SMS_SENDER_ID: z.string().trim().min(1).max(20).default('MICHANGO'),
+  WEBBULKSMS_URL: z.string().url().optional(),
+  WEBBULKSMS_USERNAME: z.string().min(1).optional(),
+  WEBBULKSMS_PASSWORD: z.string().min(1).optional(),
+  WEBBULKSMS_SENDER_ID: z.string().trim().min(1).max(20).optional(),
   NEXTSMS_BASE_URL: z.string().url().default('https://messaging-service.co.tz'),
   NEXTSMS_SINGLE_SMS_PATH: z.string().trim().min(1).default('/api/sms/v1/text/single'),
   NEXTSMS_AUTHORIZATION: z.string().trim().min(1).optional(),
@@ -42,16 +46,6 @@ export const apiEnvSchema = z.object({
   NMB_CLIENT_SECRET: z.string().trim().optional(),
   NMB_WEBHOOK_SECRET: z.string().trim().optional(),
 }).superRefine((value, context) => {
-  if (value.SMS_PROVIDER === 'WEBBULKSMS') {
-    for (const key of ['SMS_PROVIDER_URL', 'SMS_USERNAME', 'SMS_PASSWORD'] as const) {
-      if (!value[key]) {
-        context.addIssue({ code: 'custom', path: [key], message: `${key} is required when SMS_PROVIDER=WEBBULKSMS` })
-      }
-    }
-  }
-  if (value.SMS_PROVIDER === 'NEXTSMS' && !value.NEXTSMS_AUTHORIZATION) {
-    context.addIssue({ code: 'custom', path: ['NEXTSMS_AUTHORIZATION'], message: 'NEXTSMS_AUTHORIZATION is required when SMS_PROVIDER=NEXTSMS' })
-  }
   const allowed = value.NEXTSMS_ALLOWED_SENDER_IDS.split(',').map((item) => item.trim().toUpperCase()).filter(Boolean)
   const supported = new Set(['MICHANGO', 'SHEREHE', 'KIKAO'])
   if (!allowed.length || allowed.some((item) => !supported.has(item))) {

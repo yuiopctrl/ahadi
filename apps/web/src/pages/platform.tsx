@@ -268,6 +268,76 @@ export function PlatformFeaturesPage() {
   )
 }
 
+export function PlatformSmsProvidersPage() {
+  const queryClient = useQueryClient()
+  const query = useQuery({ queryKey: ['platform-sms-providers'], queryFn: async () => (await api.platformSmsProviders()).data })
+  const providerMutation = useMutation({
+    mutationFn: async ({ code, payload }: { code: string; payload: Record<string, unknown> }) => api.updatePlatformSmsProvider(code, payload),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['platform-sms-providers'] }),
+  })
+  const senderMutation = useMutation({
+    mutationFn: async ({ providerCode, senderId, payload }: { providerCode: string; senderId: string; payload: Record<string, unknown> }) => api.updatePlatformSmsSenderId(providerCode, senderId, payload),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['platform-sms-providers'] }),
+  })
+  const providers = asRows(query.data?.providers)
+
+  if (query.isLoading) return <PageContainer><LoadingState title="Loading SMS providers" message="Reading global provider and sender configuration." /></PageContainer>
+  if (query.isError) return <PageContainer><ErrorState title="Unable to load SMS providers" message="Check platform SMS permissions." /></PageContainer>
+
+  return (
+    <PageContainer>
+      <PageHeader title="SMS Providers" description="Global provider availability and sender IDs. Credentials stay in server environment secrets." />
+      <section className="stats-grid">
+        <StatCard label="Providers" value={String(providers.length)} meta={`${providers.filter((row) => asString(row.status) === 'ACTIVE').length} active`} icon={MessageSquareText} />
+        <StatCard label="Default" value={asString(providers.find((row) => row.isDefault)?.name, 'Not set')} meta="Used by tenants without explicit selection" icon={CheckCircle2} tone={providers.some((row) => row.isDefault) ? 'success' : 'warning'} />
+        <StatCard label="Credentials" value="Hidden" meta="Environment only" icon={ShieldCheck} />
+      </section>
+      <div className="platform-card-grid">
+        {providers.map((provider) => {
+          const code = asString(provider.code)
+          const active = asString(provider.status) === 'ACTIVE'
+          const senderIds = asRows(provider.senderIds)
+          return (
+            <article className="platform-panel" key={code}>
+              <div className="panel-header">
+                <div>
+                  <h2>{asString(provider.name, code)}</h2>
+                  <p>{code} · {senderIds.length} sender IDs</p>
+                </div>
+                <StatusBadge tone={active ? 'success' : 'danger'}>{active ? 'Active' : 'Disabled'}{provider.isDefault ? ' · Default' : ''}</StatusBadge>
+              </div>
+              <div className="inline-actions">
+                <button type="button" disabled={providerMutation.isPending || active} onClick={() => providerMutation.mutate({ code, payload: { status: 'ACTIVE' } })}>Enable</button>
+                <button type="button" disabled={providerMutation.isPending || !active || provider.isDefault === true} onClick={() => providerMutation.mutate({ code, payload: { status: 'DISABLED' } })}>Disable</button>
+                <button className="primary-button" type="button" disabled={providerMutation.isPending || !active || provider.isDefault === true} onClick={() => providerMutation.mutate({ code, payload: { isDefault: true } })}>Set Default</button>
+              </div>
+              <div className="finance-card-list">
+                {senderIds.map((sender) => {
+                  const senderId = asString(sender.senderId)
+                  const senderActive = asString(sender.status) === 'ACTIVE'
+                  return (
+                    <section className="support-ticket" key={`${code}-${senderId}`}>
+                      <div><strong>{senderId}</strong><span>{sender.isDefault ? 'Default sender' : 'Sender ID'}</span></div>
+                      <StatusBadge tone={senderActive ? 'success' : 'danger'}>{senderActive ? 'Active' : 'Disabled'}</StatusBadge>
+                      <div className="inline-actions">
+                        <button type="button" disabled={senderMutation.isPending || senderActive} onClick={() => senderMutation.mutate({ providerCode: code, senderId, payload: { status: 'ACTIVE' } })}>Enable</button>
+                        <button type="button" disabled={senderMutation.isPending || !senderActive || sender.isDefault === true} onClick={() => senderMutation.mutate({ providerCode: code, senderId, payload: { status: 'DISABLED' } })}>Disable</button>
+                        <button type="button" disabled={senderMutation.isPending || !senderActive || sender.isDefault === true} onClick={() => senderMutation.mutate({ providerCode: code, senderId, payload: { isDefault: true } })}>Set Default</button>
+                      </div>
+                    </section>
+                  )
+                })}
+              </div>
+            </article>
+          )
+        })}
+      </div>
+      {providerMutation.error ? <p className="field-error">{providerMutation.error.message}</p> : null}
+      {senderMutation.error ? <p className="field-error">{senderMutation.error.message}</p> : null}
+    </PageContainer>
+  )
+}
+
 export function PlatformErrorsPage() {
   const query = useQuery({ queryKey: ['platform-errors'], queryFn: async () => (await api.platformErrors()).data })
   if (query.isLoading) return <PageContainer><LoadingState title="Loading errors" message="Aggregating frontend error reports." /></PageContainer>

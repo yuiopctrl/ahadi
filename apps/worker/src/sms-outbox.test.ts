@@ -17,6 +17,8 @@ function job(overrides: Partial<SmsOutboxJob> = {}): SmsOutboxJob {
     status: 'PROCESSING',
     attempt_count: 1,
     max_attempts: 3,
+    provider: 'NEXTSMS',
+    sender_id: 'MICHANGO',
     ...overrides,
   }
 }
@@ -60,7 +62,7 @@ test('permanent failures are not retried', () => {
     retryable: false,
   })
   assert.equal(classifySmsFailure(new SmsProviderError('Unauthorized', 401)).retryable, false)
-  assert.equal(classifySmsFailure(new SmsProviderError('NEXTSMS_REQUEST_BODY_CONTRACT_REQUIRED', 400, 'NEXTSMS_REQUEST_BODY_CONTRACT_REQUIRED')).retryable, false)
+  assert.equal(classifySmsFailure(new SmsProviderError('SMS_PROVIDER_NOT_SUPPORTED', 400, 'SMS_PROVIDER_NOT_SUPPORTED')).retryable, false)
 })
 
 test('worker environment accepts publishable Supabase key and SMS provider configuration', () => {
@@ -78,11 +80,13 @@ test('worker environment accepts publishable Supabase key and SMS provider confi
   assert.equal(env.WORKER_BATCH_SIZE, 10)
 })
 
-test('worker environment error points to SMS env file locations', () => {
-  assert.throws(() => parseWorkerEnv({
+test('worker environment no longer requires one global SMS provider credential set', () => {
+  const env = parseWorkerEnv({
     SUPABASE_URL: 'https://example.supabase.co',
     SUPABASE_PUBLISHABLE_KEY: 'publishable-key',
-  }), /SMS_PROVIDER=NEXTSMS.*apps\/api\/\.env or apps\/worker\/\.env/)
+  })
+  assert.equal(env.SMS_PROVIDER, 'NEXTSMS')
+  assert.equal(env.NEXTSMS_DEFAULT_SENDER_ID, 'MICHANGO')
 })
 
 test('worker environment accepts NEXTSMS without legacy WebBulkSMS credentials', () => {

@@ -1,6 +1,6 @@
 import dotenv from 'dotenv'
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
-import { maskSmsPhone, normalizeSmsProviderName, sendSmsWithProvider, SmsProviderError, type ConfiguredSmsProviderOptions, type SmsProviderResult } from '@ahadi/sms'
+import { maskSmsPhone, SmsProviderError, SmsProviderRegistry, type SmsProviderResult } from '@ahadi/sms'
 import { fileURLToPath } from 'node:url'
 import { z } from 'zod'
 
@@ -25,27 +25,20 @@ export const workerEnvSchema = z.object({
   SUPABASE_URL: z.string().url(),
   SUPABASE_PUBLISHABLE_KEY: z.string().min(1),
   SUPABASE_WORKER_ACCESS_TOKEN: z.string().min(1).optional(),
-  SMS_PROVIDER: z.enum(['WEBBULKSMS', 'NEXTSMS']).default('WEBBULKSMS'),
+  SMS_PROVIDER: z.enum(['WEBBULKSMS', 'NEXTSMS']).default('NEXTSMS'),
   SMS_PROVIDER_URL: z.string().url().optional(),
   SMS_USERNAME: z.string().min(1).optional(),
   SMS_PASSWORD: z.string().min(1).optional(),
   SMS_SENDER_ID: z.string().trim().min(1).max(20).default('MICHANGO'),
+  WEBBULKSMS_URL: z.string().url().optional(),
+  WEBBULKSMS_USERNAME: z.string().min(1).optional(),
+  WEBBULKSMS_PASSWORD: z.string().min(1).optional(),
+  WEBBULKSMS_SENDER_ID: z.string().trim().min(1).max(20).optional(),
   NEXTSMS_BASE_URL: z.string().url().default('https://messaging-service.co.tz'),
   NEXTSMS_SINGLE_SMS_PATH: z.string().trim().min(1).default('/api/sms/v1/text/single'),
   NEXTSMS_AUTHORIZATION: z.string().trim().min(1).optional(),
   NEXTSMS_DEFAULT_SENDER_ID: z.enum(['MICHANGO', 'SHEREHE', 'KIKAO']).default('MICHANGO'),
   NEXTSMS_ALLOWED_SENDER_IDS: z.string().trim().min(1).default('SHEREHE,MICHANGO,KIKAO'),
-}).superRefine((value, context) => {
-  if (value.SMS_PROVIDER === 'WEBBULKSMS') {
-    for (const key of ['SMS_PROVIDER_URL', 'SMS_USERNAME', 'SMS_PASSWORD'] as const) {
-      if (!value[key]) {
-        context.addIssue({ code: 'custom', path: [key], message: `${key} is required when SMS_PROVIDER=WEBBULKSMS` })
-      }
-    }
-  }
-  if (value.SMS_PROVIDER === 'NEXTSMS' && !value.NEXTSMS_AUTHORIZATION) {
-    context.addIssue({ code: 'custom', path: ['NEXTSMS_AUTHORIZATION'], message: 'NEXTSMS_AUTHORIZATION is required when SMS_PROVIDER=NEXTSMS' })
-  }
 })
 
 export type WorkerEnv = z.infer<typeof workerEnvSchema>
@@ -56,7 +49,7 @@ export function parseWorkerEnv(input: NodeJS.ProcessEnv): WorkerEnv {
     const fields = [...new Set(parsed.error.issues.map((issue) => issue.path.join('.') || 'environment'))]
     throw new Error(
       `Invalid worker environment. Missing or invalid: ${fields.join(', ')}. ` +
-      'Configure SMS_PROVIDER=NEXTSMS with NEXTSMS_AUTHORIZATION, or WEBBULKSMS with SMS_PROVIDER_URL, SMS_USERNAME, and SMS_PASSWORD in apps/api/.env or apps/worker/.env.',
+      'Configure Supabase worker access and provider credentials for the SMS providers enabled in the platform.',
     )
   }
   return parsed.data
@@ -146,36 +139,27 @@ export class SupabaseSmsOutboxStore implements SmsOutboxStore {
 }
 
 export class ConfiguredSmsOutboxProvider implements SmsOutboxProvider {
+  private registry?: SmsProviderRegistry
+
   constructor(private readonly config: WorkerEnv & { fetchImpl?: typeof fetch }) {}
 
   async send(job: SmsOutboxJob): Promise<SmsProviderResult> {
-    const provider = normalizeSmsProviderName(job.provider ?? this.config.SMS_PROVIDER)
-    const senderId = job.sender_id ?? (provider === 'NEXTSMS' ? this.config.NEXTSMS_DEFAULT_SENDER_ID : this.config.SMS_SENDER_ID)
-    let providerOptions: ConfiguredSmsProviderOptions
-    if (provider === 'NEXTSMS') {
-      providerOptions = {
-        provider,
-        baseUrl: this.config.NEXTSMS_BASE_URL,
-        singleSmsPath: this.config.NEXTSMS_SINGLE_SMS_PATH,
-        defaultSenderId: this.config.NEXTSMS_DEFAULT_SENDER_ID,
-        allowedSenderIds: this.config.NEXTSMS_ALLOWED_SENDER_IDS.split(',').map((item) => item.trim().toUpperCase()).filter(Boolean),
-        ...(this.config.NEXTSMS_AUTHORIZATION ? { authorization: this.config.NEXTSMS_AUTHORIZATION } : {}),
-        ...(this.config.fetchImpl ? { fetchImpl: this.config.fetchImpl } : {}),
-      }
-    } else {
-      if (!this.config.SMS_PROVIDER_URL || !this.config.SMS_USERNAME || !this.config.SMS_PASSWORD) {
-        throw new SmsProviderError('WebBulkSMS provider is not configured', 401, 'PROVIDER_AUTH_FAILED', 'PROVIDER_AUTH_FAILED', false)
-      }
-      providerOptions = {
-        provider,
-        password: this.config.SMS_PASSWORD,
-        providerUrl: this.config.SMS_PROVIDER_URL,
-        senderId: this.config.SMS_SENDER_ID,
-        username: this.config.SMS_USERNAME,
-        ...(this.config.fetchImpl ? { fetchImpl: this.config.fetchImpl } : {}),
-      }
+    this.registry ??= new SmsProviderRegistry({
+      fetchImpl: this.config.fetchImpl,
+      nextSmsAuthorization: this.config.NEXTSMS_AUTHORIZATION,
+      nextSmsBaseUrl: this.config.NEXTSMS_BASE_URL,
+      nextSmsDefaultSenderId: this.config.NEXTSMS_DEFAULT_SENDER_ID,
+      nextSmsSingleSmsPath: this.config.NEXTSMS_SINGLE_SMS_PATH,
+      nextSmsAllowedSenderIds: this.config.NEXTSMS_ALLOWED_SENDER_IDS.split(',').map((item) => item.trim().toUpperCase()).filter(Boolean),
+      webBulkSmsPassword: this.config.WEBBULKSMS_PASSWORD ?? this.config.SMS_PASSWORD,
+      webBulkSmsSenderId: this.config.WEBBULKSMS_SENDER_ID ?? this.config.SMS_SENDER_ID,
+      webBulkSmsUrl: this.config.WEBBULKSMS_URL ?? this.config.SMS_PROVIDER_URL,
+      webBulkSmsUsername: this.config.WEBBULKSMS_USERNAME ?? this.config.SMS_USERNAME,
+    })
+    if (!job.provider || !job.sender_id) {
+      throw new SmsProviderError('Queued SMS is missing provider selection', 400, 'SMS_PROVIDER_NOT_SELECTED', 'SMS_PROVIDER_NOT_SELECTED', false)
     }
-    return sendSmsWithProvider({ to: job.phone_e164, message: job.message_body, senderId }, providerOptions)
+    return this.registry.sendSingle({ providerCode: job.provider, to: job.phone_e164, message: job.message_body, senderId: job.sender_id })
   }
 }
 
@@ -188,6 +172,8 @@ export async function processSmsOutboxBatch(store: SmsOutboxStore, provider: Sms
         tenantId: job.tenant_id,
         paymentId: job.payment_id,
         templateCode: job.template_code,
+        provider: job.provider,
+        senderId: job.sender_id,
         attempt: job.attempt_count,
         maskedPhone: maskSmsPhone(job.phone_e164),
       })
@@ -198,6 +184,8 @@ export async function processSmsOutboxBatch(store: SmsOutboxStore, provider: Sms
         tenantId: job.tenant_id,
         paymentId: job.payment_id,
         templateCode: job.template_code,
+        provider: job.provider,
+        senderId: job.sender_id,
         providerHttpStatus: result.providerHttpStatus,
         providerMessageId: result.providerMessageId,
       })

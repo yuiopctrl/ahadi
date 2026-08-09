@@ -3,7 +3,7 @@ import { AuthLayout } from '../layouts/AuthLayout'
 import { PlatformAppLayout } from '../layouts/PlatformAppLayout'
 import { TenantAppLayout } from '../layouts/TenantAppLayout'
 import { AuthPage } from '../pages/auth'
-import { PlatformBetaPage, PlatformBillingGatewaysPage, PlatformBillingReconciliationPage, PlatformErrorsPage, PlatformFeaturesPage, PlatformFeedbackPage, PlatformPage, PlatformSupportPage, PlatformTenantDetailPage } from '../pages/platform'
+import { PlatformBetaPage, PlatformBillingGatewaysPage, PlatformBillingReconciliationPage, PlatformErrorsPage, PlatformFeaturesPage, PlatformFeedbackPage, PlatformPage, PlatformSmsProvidersPage, PlatformSupportPage, PlatformTenantDetailPage } from '../pages/platform'
 import { EventDetailPage, MemberDetailPage, OutstandingPage, PaymentEntryPage, ReceiptPage, ReportsPage, ShareListPage, SmsHistoryPage, TenantBillingInvoicePage, TenantBillingPage, TenantDashboardPage, TenantHelpPage, TenantListPage, TenantSettingsPage, TenantUsersPage } from '../pages/tenant'
 import { AuthenticatedRoute, OnboardingRoute, PinUnlockedRoute, PlatformOwnerRoute, PublicRoute, TenantRoute } from './guards'
 
@@ -98,7 +98,7 @@ export const router = createBrowserRouter([
                   { path: 'subscriptions', element: <PlatformPage title="Subscriptions" /> },
                   { path: 'billing/gateways', element: <PlatformBillingGatewaysPage /> },
                   { path: 'billing/reconciliation', element: <PlatformBillingReconciliationPage /> },
-                  { path: 'sms', element: <PlatformPage title="SMS" /> },
+                  { path: 'sms', element: <PlatformSmsProvidersPage /> },
                   { path: 'system/errors', element: <PlatformErrorsPage /> },
                   { path: 'audit', element: <PlatformPage title="Audit Logs" /> },
                   { path: 'settings', element: <PlatformPage title="System Settings" /> },

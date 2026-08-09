@@ -95,8 +95,9 @@ export function assertSmsCharacterLimit(message: string): string {
 }
 
 export function normalizeSmsProviderName(value: string | null | undefined): SmsProviderName {
-  const normalized = (value ?? 'WEBBULKSMS').trim().toUpperCase()
-  return normalized === 'NEXTSMS' ? 'NEXTSMS' : 'WEBBULKSMS'
+  const normalized = (value ?? '').trim().toUpperCase()
+  if (normalized === 'NEXTSMS' || normalized === 'WEBBULKSMS') return normalized
+  throw new SmsProviderError('SMS provider is not supported', 400, 'SMS_PROVIDER_NOT_SUPPORTED', 'SMS_PROVIDER_NOT_SUPPORTED', false)
 }
 
 export function normalizeSmsSenderId(value: string | null | undefined, allowedSenderIds: readonly string[] = nextSmsAllowedSenderIds): string {
@@ -275,16 +276,51 @@ export async function sendWebBulkSms(input: SmsProviderInput, options: WebBulkSm
 }
 
 export async function sendNextSms(input: SmsProviderInput, options: NextSmsProviderOptions): Promise<SmsProviderResult> {
-  normalizeSmsSenderId(input.senderId ?? options.defaultSenderId, options.allowedSenderIds ?? nextSmsAllowedSenderIds)
-  formatNextSmsPhone(input.to)
-  assertSmsCharacterLimit(input.message)
+  const senderId = normalizeSmsSenderId(input.senderId ?? options.defaultSenderId, options.allowedSenderIds ?? nextSmsAllowedSenderIds)
+  const providerPhoneNumber = formatNextSmsPhone(input.to)
+  const normalizedMessage = assertSmsCharacterLimit(input.message)
   if (!options.authorization?.trim()) {
     throw new SmsProviderError('NextSMS authorization is not configured', 401, 'PROVIDER_AUTH_FAILED', 'PROVIDER_AUTH_FAILED', false)
   }
   if (!options.baseUrl.trim() || !options.singleSmsPath.trim()) {
     throw new SmsProviderError('NextSMS endpoint is not configured', 400, 'PROVIDER_CONFIG_INVALID', 'PROVIDER_CONFIG_INVALID', false)
   }
-  throw new SmsProviderError('NEXTSMS_REQUEST_BODY_CONTRACT_REQUIRED', 400, 'NEXTSMS_REQUEST_BODY_CONTRACT_REQUIRED', 'NEXTSMS_REQUEST_BODY_CONTRACT_REQUIRED', false)
+
+  const payload = new FormData()
+  payload.set('from', senderId)
+  payload.set('to', providerPhoneNumber)
+  payload.set('text', normalizedMessage)
+
+  let response: Response
+  try {
+    response = await (options.fetchImpl ?? fetch)(`${options.baseUrl.replace(/\/+$/, '')}/${options.singleSmsPath.replace(/^\/+/, '')}`, {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        Authorization: options.authorization.trim(),
+      },
+      body: payload,
+      signal: AbortSignal.timeout(options.timeoutMs ?? 10_000),
+    })
+  } catch (error) {
+    const isTimeout = error instanceof Error && error.name === 'TimeoutError'
+    throw new SmsProviderError(isTimeout ? 'SMS provider timeout' : 'SMS provider network error')
+  }
+
+  const responseContentType = response.headers.get('content-type') ?? ''
+  const responseBody: unknown = responseContentType.includes('application/json') ? await response.json().catch(() => null) : await response.text().catch(() => null)
+  const result = parseWebBulkSmsResponse({ httpStatus: response.status, responseBody })
+  const providerReason = result.safeReason ?? (typeof responseBody === 'string' ? sanitizeProviderReason(responseBody) : undefined)
+
+  if (!response.ok) {
+    throw new SmsProviderError('SMS provider rejected message', response.status, providerReason, result.providerStatusCode, result.accepted)
+  }
+
+  if (!result.accepted) {
+    throw new SmsProviderError('SMS provider reported failure', response.status, providerReason, result.providerStatusCode, result.accepted)
+  }
+
+  return result
 }
 
 export async function sendSmsWithProvider(input: SmsProviderInput, options: ConfiguredSmsProviderOptions): Promise<SmsProviderResult> {
@@ -299,6 +335,56 @@ export async function sendSmsWithProvider(input: SmsProviderInput, options: Conf
     ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {}),
     ...(options.timeoutMs ? { timeoutMs: options.timeoutMs } : {}),
   })
+}
+
+export interface SmsProviderRuntimeConfig {
+  fetchImpl?: typeof fetch | undefined
+  nextSmsAuthorization?: string | null | undefined
+  nextSmsBaseUrl?: string | null | undefined
+  nextSmsDefaultSenderId?: string | null | undefined
+  nextSmsSingleSmsPath?: string | null | undefined
+  nextSmsAllowedSenderIds?: string[] | readonly string[] | null | undefined
+  webBulkSmsPassword?: string | null | undefined
+  webBulkSmsSenderId?: string | null | undefined
+  webBulkSmsUrl?: string | null | undefined
+  webBulkSmsUsername?: string | null | undefined
+}
+
+export class SmsProviderRegistry {
+  constructor(private readonly config: SmsProviderRuntimeConfig) {}
+
+  getProviderOptions(providerCode: string): ConfiguredSmsProviderOptions {
+    const provider = normalizeSmsProviderName(providerCode)
+    if (provider === 'NEXTSMS') {
+      return {
+        provider,
+        baseUrl: this.config.nextSmsBaseUrl?.trim() || defaultNextSmsBaseUrl,
+        singleSmsPath: this.config.nextSmsSingleSmsPath?.trim() || defaultNextSmsSingleSmsPath,
+        defaultSenderId: normalizeSmsSenderId(this.config.nextSmsDefaultSenderId ?? 'MICHANGO', this.config.nextSmsAllowedSenderIds ?? nextSmsAllowedSenderIds),
+        allowedSenderIds: (this.config.nextSmsAllowedSenderIds ?? nextSmsAllowedSenderIds).map((item) => item.trim().toUpperCase()).filter(Boolean),
+        ...(this.config.nextSmsAuthorization?.trim() ? { authorization: this.config.nextSmsAuthorization.trim() } : {}),
+        ...(this.config.fetchImpl ? { fetchImpl: this.config.fetchImpl } : {}),
+      }
+    }
+
+    if (!this.config.webBulkSmsUrl?.trim() || !this.config.webBulkSmsUsername?.trim() || !this.config.webBulkSmsPassword?.trim()) {
+      throw new SmsProviderError('WebBulkSMS provider is not configured', 401, 'PROVIDER_AUTH_FAILED', 'PROVIDER_AUTH_FAILED', false)
+    }
+
+    return {
+      provider,
+      password: this.config.webBulkSmsPassword,
+      providerUrl: this.config.webBulkSmsUrl,
+      senderId: this.config.webBulkSmsSenderId?.trim() || 'MICHANGO',
+      username: this.config.webBulkSmsUsername,
+      ...(this.config.fetchImpl ? { fetchImpl: this.config.fetchImpl } : {}),
+    }
+  }
+
+  async sendSingle(input: SmsProviderInput & { providerCode: string }): Promise<SmsProviderResult> {
+    const options = this.getProviderOptions(input.providerCode)
+    return sendSmsWithProvider(input, options)
+  }
 }
 
 export function formatTzsAmount(value: unknown): string {
