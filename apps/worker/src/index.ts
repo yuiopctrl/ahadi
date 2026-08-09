@@ -1,6 +1,6 @@
 import dotenv from 'dotenv'
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
-import { maskSmsPhone, sendWebBulkSms, SmsProviderError, type SmsProviderResult } from '@ahadi/sms'
+import { maskSmsPhone, normalizeSmsProviderName, sendSmsWithProvider, SmsProviderError, type ConfiguredSmsProviderOptions, type SmsProviderResult } from '@ahadi/sms'
 import { fileURLToPath } from 'node:url'
 import { z } from 'zod'
 
@@ -25,10 +25,27 @@ export const workerEnvSchema = z.object({
   SUPABASE_URL: z.string().url(),
   SUPABASE_PUBLISHABLE_KEY: z.string().min(1),
   SUPABASE_WORKER_ACCESS_TOKEN: z.string().min(1).optional(),
-  SMS_PROVIDER_URL: z.string().url(),
-  SMS_USERNAME: z.string().min(1),
-  SMS_PASSWORD: z.string().min(1),
-  SMS_SENDER_ID: z.string().trim().min(1).max(20),
+  SMS_PROVIDER: z.enum(['WEBBULKSMS', 'NEXTSMS']).default('WEBBULKSMS'),
+  SMS_PROVIDER_URL: z.string().url().optional(),
+  SMS_USERNAME: z.string().min(1).optional(),
+  SMS_PASSWORD: z.string().min(1).optional(),
+  SMS_SENDER_ID: z.string().trim().min(1).max(20).default('MICHANGO'),
+  NEXTSMS_BASE_URL: z.string().url().default('https://messaging-service.co.tz'),
+  NEXTSMS_SINGLE_SMS_PATH: z.string().trim().min(1).default('/api/sms/v1/text/single'),
+  NEXTSMS_AUTHORIZATION: z.string().trim().min(1).optional(),
+  NEXTSMS_DEFAULT_SENDER_ID: z.enum(['MICHANGO', 'SHEREHE', 'KIKAO']).default('MICHANGO'),
+  NEXTSMS_ALLOWED_SENDER_IDS: z.string().trim().min(1).default('SHEREHE,MICHANGO,KIKAO'),
+}).superRefine((value, context) => {
+  if (value.SMS_PROVIDER === 'WEBBULKSMS') {
+    for (const key of ['SMS_PROVIDER_URL', 'SMS_USERNAME', 'SMS_PASSWORD'] as const) {
+      if (!value[key]) {
+        context.addIssue({ code: 'custom', path: [key], message: `${key} is required when SMS_PROVIDER=WEBBULKSMS` })
+      }
+    }
+  }
+  if (value.SMS_PROVIDER === 'NEXTSMS' && !value.NEXTSMS_AUTHORIZATION) {
+    context.addIssue({ code: 'custom', path: ['NEXTSMS_AUTHORIZATION'], message: 'NEXTSMS_AUTHORIZATION is required when SMS_PROVIDER=NEXTSMS' })
+  }
 })
 
 export type WorkerEnv = z.infer<typeof workerEnvSchema>
@@ -39,7 +56,7 @@ export function parseWorkerEnv(input: NodeJS.ProcessEnv): WorkerEnv {
     const fields = [...new Set(parsed.error.issues.map((issue) => issue.path.join('.') || 'environment'))]
     throw new Error(
       `Invalid worker environment. Missing or invalid: ${fields.join(', ')}. ` +
-      'Configure SMS_PROVIDER_URL, SMS_USERNAME, SMS_PASSWORD, and SMS_SENDER_ID in apps/api/.env or apps/worker/.env.',
+      'Configure SMS_PROVIDER=NEXTSMS with NEXTSMS_AUTHORIZATION, or WEBBULKSMS with SMS_PROVIDER_URL, SMS_USERNAME, and SMS_PASSWORD in apps/api/.env or apps/worker/.env.',
     )
   }
   return parsed.data
@@ -58,6 +75,8 @@ export interface SmsOutboxJob {
   status: 'PROCESSING'
   attempt_count: number
   max_attempts: number
+  provider?: string | null
+  sender_id?: string | null
 }
 
 export interface SmsOutboxStore {
@@ -90,7 +109,7 @@ export function classifySmsFailure(error: unknown): SmsFailureClassification {
     if (status === 401 || status === 403 || reason.includes('auth') || reason.includes('password') || reason.includes('credential')) {
       return { code: 'PROVIDER_AUTH_FAILED', message: safeErrorMessage(error), retryable: false }
     }
-    if (status === 400 || reason.includes('invalid phone') || reason.includes('unsupported') || reason.includes('sender id')) {
+    if (status === 400 || reason.includes('invalid phone') || reason.includes('unsupported') || reason.includes('sender id') || reason.includes('contract_required')) {
       return { code: 'PROVIDER_PERMANENT_FAILURE', message: safeErrorMessage(error), retryable: false }
     }
     if (status === 429 || (status !== undefined && status >= 500)) {
@@ -126,23 +145,37 @@ export class SupabaseSmsOutboxStore implements SmsOutboxStore {
   }
 }
 
-export class WebBulkSmsOutboxProvider implements SmsOutboxProvider {
-  constructor(private readonly config: { providerUrl: string; username: string; password: string; senderId: string; fetchImpl?: typeof fetch }) {}
+export class ConfiguredSmsOutboxProvider implements SmsOutboxProvider {
+  constructor(private readonly config: WorkerEnv & { fetchImpl?: typeof fetch }) {}
 
   async send(job: SmsOutboxJob): Promise<SmsProviderResult> {
-    const providerOptions = this.config.fetchImpl ? {
-      fetchImpl: this.config.fetchImpl,
-      password: this.config.password,
-      providerUrl: this.config.providerUrl,
-      senderId: this.config.senderId,
-      username: this.config.username,
-    } : {
-        password: this.config.password,
-        providerUrl: this.config.providerUrl,
-        senderId: this.config.senderId,
-        username: this.config.username,
+    const provider = normalizeSmsProviderName(job.provider ?? this.config.SMS_PROVIDER)
+    const senderId = job.sender_id ?? (provider === 'NEXTSMS' ? this.config.NEXTSMS_DEFAULT_SENDER_ID : this.config.SMS_SENDER_ID)
+    let providerOptions: ConfiguredSmsProviderOptions
+    if (provider === 'NEXTSMS') {
+      providerOptions = {
+        provider,
+        baseUrl: this.config.NEXTSMS_BASE_URL,
+        singleSmsPath: this.config.NEXTSMS_SINGLE_SMS_PATH,
+        defaultSenderId: this.config.NEXTSMS_DEFAULT_SENDER_ID,
+        allowedSenderIds: this.config.NEXTSMS_ALLOWED_SENDER_IDS.split(',').map((item) => item.trim().toUpperCase()).filter(Boolean),
+        ...(this.config.NEXTSMS_AUTHORIZATION ? { authorization: this.config.NEXTSMS_AUTHORIZATION } : {}),
+        ...(this.config.fetchImpl ? { fetchImpl: this.config.fetchImpl } : {}),
+      }
+    } else {
+      if (!this.config.SMS_PROVIDER_URL || !this.config.SMS_USERNAME || !this.config.SMS_PASSWORD) {
+        throw new SmsProviderError('WebBulkSMS provider is not configured', 401, 'PROVIDER_AUTH_FAILED', 'PROVIDER_AUTH_FAILED', false)
+      }
+      providerOptions = {
+        provider,
+        password: this.config.SMS_PASSWORD,
+        providerUrl: this.config.SMS_PROVIDER_URL,
+        senderId: this.config.SMS_SENDER_ID,
+        username: this.config.SMS_USERNAME,
+        ...(this.config.fetchImpl ? { fetchImpl: this.config.fetchImpl } : {}),
+      }
     }
-    return sendWebBulkSms({ to: job.phone_e164, message: job.message_body }, providerOptions)
+    return sendSmsWithProvider({ to: job.phone_e164, message: job.message_body, senderId }, providerOptions)
   }
 }
 
@@ -206,12 +239,7 @@ function createSupabaseWorkerClient(input: WorkerEnv) {
 async function main() {
   const env = parseWorkerEnv(process.env)
   const store = new SupabaseSmsOutboxStore(createSupabaseWorkerClient(env))
-  const provider = new WebBulkSmsOutboxProvider({
-    providerUrl: env.SMS_PROVIDER_URL,
-    username: env.SMS_USERNAME,
-    password: env.SMS_PASSWORD,
-    senderId: env.SMS_SENDER_ID,
-  })
+  const provider = new ConfiguredSmsOutboxProvider(env)
 
   console.log(`Ahadi worker booted in ${env.NODE_ENV} mode with ${env.WORKER_POLL_INTERVAL_MS}ms poll interval`)
   setInterval(() => {

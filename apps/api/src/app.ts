@@ -341,6 +341,18 @@ const templateBodySchema = z.object({
   body: z.string().trim().min(1).max(918),
 })
 
+const smsTemplateCodeSchema = z.enum(['PLEDGE_REGISTRATION', 'PAYMENT_CONFIRMATION', 'BALANCE_REMINDER', 'PLEDGE_COMPLETED'])
+
+const smsTemplateSaveSchema = templateBodySchema.extend({
+  language: z.enum(['sw', 'en']).default('sw'),
+})
+
+const smsSettingsSchema = z.object({
+  smsEnabled: z.boolean(),
+  senderId: z.enum(['MICHANGO', 'SHEREHE', 'KIKAO']),
+  defaultLanguage: z.enum(['sw', 'en']).default('sw'),
+})
+
 const resendBalanceReminderSchema = z.object({
   idempotencyKey: z.string().uuid(),
 })
@@ -1268,6 +1280,38 @@ function notificationFromEnqueue(data: unknown): Record<string, unknown> {
 
 function queuedOutboxId(data: Record<string, unknown>): string | null {
   return typeof data['outboxId'] === 'string' ? data['outboxId'] : null
+}
+
+function parseSmsTemplateCodeParam(value: unknown): z.infer<typeof smsTemplateCodeSchema> {
+  return smsTemplateCodeSchema.parse(String(value ?? '').trim().toUpperCase().replaceAll('-', '_'))
+}
+
+async function enqueueAndAttemptPledgeRegistrationSms(client: ReturnType<typeof createUserSupabase>, tenantId: string, eventId: string, pledgeId: string, requestId: string): Promise<Record<string, unknown>> {
+  const enqueue = await client.rpc('rpc_enqueue_pledge_registration_sms', {
+    p_tenant_id: tenantId,
+    p_event_id: eventId,
+    p_pledge_id: pledgeId,
+  })
+  if (enqueue.error) {
+    console.error('Pledge registration SMS enqueue failed', {
+      requestId,
+      tenantId,
+      eventId,
+      pledgeId,
+      safeMessage: databaseMessage(enqueue.error).slice(0, 160),
+    })
+    return { smsQueued: false, reason: 'ENQUEUE_FAILED', template: 'PLEDGE_REGISTRATION' }
+  }
+  const notification = notificationFromEnqueue(enqueue.data)
+  const outboxId = queuedOutboxId(notification)
+  if (notification['smsQueued'] === true && outboxId) {
+    notification['sendAttempt'] = await attemptTenantQueuedSms(client, tenantId, {
+      batchSize: 1,
+      outboxIds: [outboxId],
+      requestId,
+    })
+  }
+  return notification
 }
 
 function queuedBatchId(data: Record<string, unknown>): string | null {
@@ -2506,7 +2550,11 @@ app.post('/api/v1/events/:eventId/members', requireAuth, loadUserContext, requir
       if (pledgeResult.error) {
         throwFinancialDatabaseError(pledgeResult.error, 'CREATE_INITIAL_PLEDGE_FAILED')
       }
-      response.status(201).json({ data: { ...data, pledge: pledgeResult.data } })
+      const pledge = jsonRecord(pledgeResult.data)
+      const notification = typeof pledge['pledge_id'] === 'string'
+        ? await enqueueAndAttemptPledgeRegistrationSms(client, tenantId, eventId, pledge['pledge_id'], request.requestId)
+        : { smsQueued: false, reason: 'PLEDGE_ID_MISSING', template: 'PLEDGE_REGISTRATION' }
+      response.status(201).json({ data: { ...data, pledge, notification } })
       return
     }
     response.status(201).json({ data })
@@ -2782,6 +2830,16 @@ app.post('/api/v1/events/:eventId/pledges', requireAuth, loadUserContext, requir
     const eventId = uuidParamSchema.parse(request.params['eventId'])
     const input = upsertPledgeSchema.parse(request.body)
     const client = createUserSupabase(request.auth?.accessToken ?? '')
+    const existingPledge = await client.from('v_event_pledges_list').select('pledge_id').eq('tenant_id', tenantId).eq('event_id', eventId).eq('event_member_id', input.eventMemberId).maybeSingle()
+    if (existingPledge.error) {
+      console.warn('Pledge registration SMS pre-check failed; skipping automatic registration SMS', {
+        requestId: request.requestId,
+        tenantId,
+        eventId,
+        safeMessage: databaseMessage(existingPledge.error).slice(0, 160),
+      })
+    }
+    const shouldQueueRegistrationSms = !existingPledge.error && !existingPledge.data?.pledge_id
     const { data, error } = await client.rpc('rpc_create_or_update_pledge', {
       p_tenant_id: tenantId,
       p_event_id: eventId,
@@ -2794,7 +2852,11 @@ app.post('/api/v1/events/:eventId/pledges', requireAuth, loadUserContext, requir
     if (error) {
       throwFinancialDatabaseError(error, 'UPSERT_PLEDGE_FAILED')
     }
-    response.status(201).json({ data })
+    const pledge = jsonRecord(data)
+    const notification = shouldQueueRegistrationSms && typeof pledge['pledge_id'] === 'string'
+      ? await enqueueAndAttemptPledgeRegistrationSms(client, tenantId, eventId, pledge['pledge_id'], request.requestId)
+      : { smsQueued: false, reason: shouldQueueRegistrationSms ? 'PLEDGE_ID_MISSING' : 'PLEDGE_ALREADY_EXISTS', template: 'PLEDGE_REGISTRATION' }
+    response.status(201).json({ data: { ...pledge, notification } })
   } catch (error) {
     next(error)
   }
@@ -2979,6 +3041,90 @@ app.get('/api/v1/messages', requireAuth, loadUserContext, requireTenantContext, 
   }
 })
 
+app.get('/api/v1/messages/settings', requireAuth, loadUserContext, requireTenantContext, async (request, response, next) => {
+  try {
+    const tenantId = tenantIdFromRequest(request)
+    const client = createUserSupabase(request.auth?.accessToken ?? '')
+    const { data, error } = await client.rpc('rpc_get_sms_settings', { p_tenant_id: tenantId })
+    if (error) {
+      throwFinancialDatabaseError(error, 'SMS_SETTINGS_GET_FAILED')
+    }
+    response.json({ data: jsonRecord(data) })
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.put('/api/v1/messages/settings', requireAuth, loadUserContext, requireTenantContext, async (request, response, next) => {
+  try {
+    const tenantId = tenantIdFromRequest(request)
+    const input = smsSettingsSchema.parse(request.body)
+    const client = createUserSupabase(request.auth?.accessToken ?? '')
+    const { data, error } = await client.rpc('rpc_update_sms_settings', {
+      p_tenant_id: tenantId,
+      p_sms_enabled: input.smsEnabled,
+      p_sender_id: input.senderId,
+      p_default_language: input.defaultLanguage,
+    })
+    if (error) {
+      throwFinancialDatabaseError(error, 'SMS_SETTINGS_SAVE_FAILED')
+    }
+    response.json({ data: jsonRecord(data) })
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.get('/api/v1/messages/templates', requireAuth, loadUserContext, requireTenantContext, async (request, response, next) => {
+  try {
+    const tenantId = tenantIdFromRequest(request)
+    const client = createUserSupabase(request.auth?.accessToken ?? '')
+    const { data, error } = await client.rpc('rpc_list_sms_templates', { p_tenant_id: tenantId })
+    if (error) {
+      throwFinancialDatabaseError(error, 'SMS_TEMPLATES_LIST_FAILED')
+    }
+    response.json({ data: jsonArray(data) })
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.put('/api/v1/messages/templates/:code', requireAuth, loadUserContext, requireTenantContext, async (request, response, next) => {
+  try {
+    const tenantId = tenantIdFromRequest(request)
+    const code = parseSmsTemplateCodeParam(request.params['code'])
+    const input = smsTemplateSaveSchema.parse(request.body)
+    const client = createUserSupabase(request.auth?.accessToken ?? '')
+    const { data, error } = await client.rpc('rpc_upsert_sms_template', {
+      p_tenant_id: tenantId,
+      p_code: code,
+      p_language: input.language,
+      p_body: input.body,
+    })
+    if (error) {
+      throwFinancialDatabaseError(error, 'SMS_TEMPLATE_SAVE_FAILED')
+    }
+    response.json({ data: jsonRecord(data) })
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.post('/api/v1/messages/templates/:code/reset', requireAuth, loadUserContext, requireTenantContext, async (request, response, next) => {
+  try {
+    const tenantId = tenantIdFromRequest(request)
+    const code = parseSmsTemplateCodeParam(request.params['code'])
+    const client = createUserSupabase(request.auth?.accessToken ?? '')
+    const { data, error } = await client.rpc('rpc_reset_sms_template', { p_tenant_id: tenantId, p_code: code, p_language: 'sw' })
+    if (error) {
+      throwFinancialDatabaseError(error, 'SMS_TEMPLATE_RESET_FAILED')
+    }
+    response.json({ data: jsonRecord(data) })
+  } catch (error) {
+    next(error)
+  }
+})
+
 app.get('/api/v1/messages/templates/balance-reminder', requireAuth, loadUserContext, requireTenantContext, async (request, response, next) => {
   try {
     const tenantId = tenantIdFromRequest(request)
@@ -3020,6 +3166,35 @@ app.post('/api/v1/messages/templates/balance-reminder/reset', requireAuth, loadU
       throwFinancialDatabaseError(error, 'BALANCE_REMINDER_TEMPLATE_RESET_FAILED')
     }
     response.json({ data })
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.post('/api/v1/messages/:outboxId/retry', requireAuth, loadUserContext, requireTenantContext, async (request, response, next) => {
+  try {
+    const tenantId = tenantIdFromRequest(request)
+    const outboxId = uuidParamSchema.parse(request.params['outboxId'])
+    const input = resendBalanceReminderSchema.parse(request.body)
+    const client = createUserSupabase(request.auth?.accessToken ?? '')
+    const { data, error } = await client.rpc('rpc_resend_failed_sms', {
+      p_tenant_id: tenantId,
+      p_outbox_id: outboxId,
+      p_idempotency_key: input.idempotencyKey,
+    })
+    if (error) {
+      throwFinancialDatabaseError(error, 'SMS_RETRY_FAILED')
+    }
+    const result = notificationFromEnqueue(data)
+    const newOutboxId = queuedOutboxId(result)
+    if (result['queued'] === true && newOutboxId) {
+      result['sendAttempt'] = await attemptTenantQueuedSms(client, tenantId, {
+        batchSize: 1,
+        outboxIds: [newOutboxId],
+        requestId: request.requestId,
+      })
+    }
+    response.status(201).json({ data: result })
   } catch (error) {
     next(error)
   }

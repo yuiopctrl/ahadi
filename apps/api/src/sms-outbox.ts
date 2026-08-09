@@ -1,5 +1,12 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { maskSmsPhone, sendWebBulkSms, SmsProviderError, type SmsProviderResult } from '@ahadi/sms'
+import {
+  maskSmsPhone,
+  normalizeSmsProviderName,
+  sendSmsWithProvider,
+  SmsProviderError,
+  type ConfiguredSmsProviderOptions,
+  type SmsProviderResult,
+} from '@ahadi/sms'
 import { env } from './env.js'
 
 export interface SmsOutboxJob {
@@ -15,6 +22,8 @@ export interface SmsOutboxJob {
   status: 'PROCESSING'
   attempt_count: number
   max_attempts: number
+  provider?: string | null
+  sender_id?: string | null
 }
 
 export interface SmsSendSummary {
@@ -50,7 +59,7 @@ function classifySmsFailure(error: unknown): SmsFailureClassification {
     if (status === 401 || status === 403 || reason.includes('auth') || reason.includes('password') || reason.includes('credential')) {
       return { code: 'PROVIDER_AUTH_FAILED', message: safeErrorMessage(error), retryable: false }
     }
-    if (status === 400 || reason.includes('invalid phone') || reason.includes('unsupported') || reason.includes('sender id')) {
+    if (status === 400 || reason.includes('invalid phone') || reason.includes('unsupported') || reason.includes('sender id') || reason.includes('contract_required')) {
       return { code: 'PROVIDER_PERMANENT_FAILURE', message: safeErrorMessage(error), retryable: false }
     }
     if (status === 429 || (status !== undefined && status >= 500)) {
@@ -75,15 +84,31 @@ async function markFailed(client: SupabaseClient, outboxId: string, errorCode: s
 }
 
 async function sendJob(job: SmsOutboxJob): Promise<SmsProviderResult> {
-  return sendWebBulkSms(
-    { to: job.phone_e164, message: job.message_body },
-    {
+  const provider = normalizeSmsProviderName(job.provider ?? env.SMS_PROVIDER)
+  const senderId = job.sender_id ?? (provider === 'NEXTSMS' ? env.NEXTSMS_DEFAULT_SENDER_ID : env.SMS_SENDER_ID)
+  let options: ConfiguredSmsProviderOptions
+  if (provider === 'NEXTSMS') {
+    options = {
+      provider,
+      baseUrl: env.NEXTSMS_BASE_URL,
+      singleSmsPath: env.NEXTSMS_SINGLE_SMS_PATH,
+      defaultSenderId: env.NEXTSMS_DEFAULT_SENDER_ID,
+      allowedSenderIds: env.NEXTSMS_ALLOWED_SENDER_IDS.split(',').map((item) => item.trim().toUpperCase()).filter(Boolean),
+      ...(env.NEXTSMS_AUTHORIZATION ? { authorization: env.NEXTSMS_AUTHORIZATION } : {}),
+    }
+  } else {
+    if (!env.SMS_PROVIDER_URL || !env.SMS_USERNAME || !env.SMS_PASSWORD) {
+      throw new SmsProviderError('WebBulkSMS provider is not configured', 401, 'PROVIDER_AUTH_FAILED', 'PROVIDER_AUTH_FAILED', false)
+    }
+    options = {
+      provider,
       password: env.SMS_PASSWORD,
       providerUrl: env.SMS_PROVIDER_URL,
       senderId: env.SMS_SENDER_ID,
       username: env.SMS_USERNAME,
-    },
-  )
+    }
+  }
+  return sendSmsWithProvider({ to: job.phone_e164, message: job.message_body, senderId }, options)
 }
 
 export async function sendTenantQueuedSms(client: SupabaseClient, tenantId: string, options: SendTenantQueuedSmsOptions = {}, logger: Pick<Console, 'info' | 'warn'> = console): Promise<SmsSendSummary> {

@@ -193,6 +193,16 @@ export const api = {
   messages: (tenantId: string) => apiFetch<{ data: Record<string, unknown>[] }>('/messages', { tenantId }),
   processQueuedMessages: (tenantId: string, batchSize = 10) =>
     apiFetch<{ data: Record<string, unknown> }>('/messages/process-queued', { tenantId, method: 'POST', body: JSON.stringify({ batchSize }) }),
+  smsSettings: (tenantId: string) => apiFetch<{ data: Record<string, unknown> }>('/messages/settings', { tenantId }),
+  saveSmsSettings: (tenantId: string, payload: Record<string, unknown>) =>
+    apiFetch<{ data: Record<string, unknown> }>('/messages/settings', { tenantId, method: 'PUT', body: JSON.stringify(payload) }),
+  smsTemplates: (tenantId: string) => apiFetch<{ data: Record<string, unknown>[] }>('/messages/templates', { tenantId }),
+  saveSmsTemplate: (tenantId: string, code: string, payload: Record<string, unknown>) =>
+    apiFetch<{ data: Record<string, unknown> }>(`/messages/templates/${code}`, { tenantId, method: 'PUT', body: JSON.stringify(payload) }),
+  resetSmsTemplate: (tenantId: string, code: string) =>
+    apiFetch<{ data: Record<string, unknown> }>(`/messages/templates/${code}/reset`, { tenantId, method: 'POST' }),
+  retrySms: (tenantId: string, outboxId: string, idempotencyKey: string) =>
+    apiFetch<{ data: Record<string, unknown> }>(`/messages/${outboxId}/retry`, { tenantId, method: 'POST', body: JSON.stringify({ idempotencyKey }) }),
   balanceReminderTemplate: (tenantId: string) => apiFetch<{ data: Record<string, unknown> }>('/messages/templates/balance-reminder', { tenantId }),
   saveBalanceReminderTemplate: (tenantId: string, body: string) => apiFetch<{ data: Record<string, unknown> }>('/messages/templates/balance-reminder', { tenantId, method: 'PUT', body: JSON.stringify({ body }) }),
   resetBalanceReminderTemplate: (tenantId: string) => apiFetch<{ data: Record<string, unknown> }>('/messages/templates/balance-reminder/reset', { tenantId, method: 'POST' }),

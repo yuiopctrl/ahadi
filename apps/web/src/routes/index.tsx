@@ -73,6 +73,7 @@ export const router = createBrowserRouter([
                   { path: 'users', element: <TenantUsersPage /> },
                   { path: 'help', element: <TenantHelpPage /> },
                   { path: 'settings', element: <TenantSettingsPage /> },
+                  { path: 'settings/messages', element: <SmsHistoryPage /> },
                   { path: 'settings/billing', element: <TenantBillingPage /> },
                   { path: 'settings/billing/invoices/:invoiceId', element: <TenantBillingInvoicePage /> },
                 ],

@@ -1431,6 +1431,27 @@ th {
   box-shadow: 0 0 0 3px rgba(143, 29, 44, 0.12);
 }
 
+.messages-status-tabs {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.messages-status-tabs button {
+  min-height: 40px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: white;
+  color: var(--color-muted);
+  font-weight: 900;
+}
+
+.messages-status-tabs button.active {
+  border-color: rgba(143, 29, 44, 0.35);
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+}
+
 .messages-filter-grid {
   display: grid;
   gap: 10px;
@@ -1609,21 +1630,47 @@ th {
   font-weight: 800;
 }
 
+.reminder-template-panel select,
 .reminder-template-panel textarea {
   width: 100%;
-  min-height: 150px;
   border: 1px solid var(--color-border);
   border-radius: 8px;
   background: white;
   color: var(--color-text);
   padding: 12px;
   outline: none;
+}
+
+.reminder-template-panel select {
+  min-height: 44px;
+}
+
+.reminder-template-panel textarea {
+  min-height: 150px;
   resize: vertical;
 }
 
+.reminder-template-panel select:focus,
 .reminder-template-panel textarea:focus {
   border-color: var(--color-primary);
   box-shadow: 0 0 0 3px rgba(143, 29, 44, 0.12);
+}
+
+.reminder-template-panel .checkbox-line {
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: white;
+  padding: 0 12px;
+}
+
+.reminder-template-panel .checkbox-line input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--color-primary);
 }
 
 .template-preview-card {
@@ -1996,6 +2043,10 @@ th {
 
   .messages-filter-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .messages-status-tabs {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 
   .message-meta-grid {

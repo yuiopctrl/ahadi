@@ -4,9 +4,12 @@ export interface SmsProviderInput {
   requestId?: string
   to: string
   message: string
+  senderId?: string | null
 }
 
-export interface SmsProviderOptions {
+export type SmsProviderName = 'WEBBULKSMS' | 'NEXTSMS'
+
+export interface WebBulkSmsProviderOptions {
   fetchImpl?: typeof fetch
   password: string
   providerUrl: string
@@ -14,6 +17,22 @@ export interface SmsProviderOptions {
   timeoutMs?: number
   username: string
 }
+
+export type SmsProviderOptions = WebBulkSmsProviderOptions
+
+export interface NextSmsProviderOptions {
+  authorization?: string
+  baseUrl: string
+  defaultSenderId: string
+  fetchImpl?: typeof fetch
+  singleSmsPath: string
+  allowedSenderIds?: string[]
+  timeoutMs?: number
+}
+
+export type ConfiguredSmsProviderOptions =
+  | ({ provider: 'WEBBULKSMS' } & WebBulkSmsProviderOptions)
+  | ({ provider: 'NEXTSMS' } & NextSmsProviderOptions)
 
 export interface SmsProviderResult {
   accepted: boolean
@@ -50,6 +69,26 @@ interface WebBulkSmsRequest {
   senderId: string
   message: string
   phoneNumbers: string[]
+}
+
+export const defaultNextSmsBaseUrl = 'https://messaging-service.co.tz'
+export const defaultNextSmsSingleSmsPath = '/api/sms/v1/text/single'
+export const nextSmsAllowedSenderIds = ['SHEREHE', 'MICHANGO', 'KIKAO'] as const
+export type NextSmsSenderId = typeof nextSmsAllowedSenderIds[number]
+
+export function normalizeSmsProviderName(value: string | null | undefined): SmsProviderName {
+  const normalized = (value ?? 'WEBBULKSMS').trim().toUpperCase()
+  return normalized === 'NEXTSMS' ? 'NEXTSMS' : 'WEBBULKSMS'
+}
+
+export function normalizeSmsSenderId(value: string | null | undefined, allowedSenderIds: readonly string[] = nextSmsAllowedSenderIds): string {
+  const normalized = (value ?? 'MICHANGO').trim().toUpperCase()
+  const senderId = normalized || 'MICHANGO'
+  const allowed = allowedSenderIds.map((item) => item.trim().toUpperCase()).filter(Boolean)
+  if (!allowed.includes(senderId)) {
+    throw new SmsProviderError('SMS sender id is not allowed', 400, 'SMS_SENDER_ID_NOT_ALLOWED', 'SMS_SENDER_ID_NOT_ALLOWED', false)
+  }
+  return senderId
 }
 
 function getStringProperty(value: unknown, keys: string[]): string | null {
@@ -165,11 +204,16 @@ export function formatWebBulkSmsPhone(phoneE164: string): string {
   return normalized.startsWith('+') ? normalized.slice(1) : normalized
 }
 
+export function formatNextSmsPhone(phoneE164: string): string {
+  const normalized = normalizeTanzaniaPhone(phoneE164)
+  return normalized.startsWith('+') ? normalized.slice(1) : normalized
+}
+
 export function maskSmsPhone(phone: string): string {
   return phone.replace(/[0-9](?=[0-9]{3})/g, '*')
 }
 
-export async function sendWebBulkSms(input: SmsProviderInput, options: SmsProviderOptions): Promise<SmsProviderResult> {
+export async function sendWebBulkSms(input: SmsProviderInput, options: WebBulkSmsProviderOptions): Promise<SmsProviderResult> {
   const providerPhoneNumber = formatWebBulkSmsPhone(input.to)
   const payload: WebBulkSmsRequest = {
     username: options.username,
@@ -209,6 +253,32 @@ export async function sendWebBulkSms(input: SmsProviderInput, options: SmsProvid
   }
 
   return result
+}
+
+export async function sendNextSms(input: SmsProviderInput, options: NextSmsProviderOptions): Promise<SmsProviderResult> {
+  normalizeSmsSenderId(input.senderId ?? options.defaultSenderId, options.allowedSenderIds ?? nextSmsAllowedSenderIds)
+  formatNextSmsPhone(input.to)
+  if (!options.authorization?.trim()) {
+    throw new SmsProviderError('NextSMS authorization is not configured', 401, 'PROVIDER_AUTH_FAILED', 'PROVIDER_AUTH_FAILED', false)
+  }
+  if (!options.baseUrl.trim() || !options.singleSmsPath.trim()) {
+    throw new SmsProviderError('NextSMS endpoint is not configured', 400, 'PROVIDER_CONFIG_INVALID', 'PROVIDER_CONFIG_INVALID', false)
+  }
+  throw new SmsProviderError('NEXTSMS_REQUEST_BODY_CONTRACT_REQUIRED', 400, 'NEXTSMS_REQUEST_BODY_CONTRACT_REQUIRED', 'NEXTSMS_REQUEST_BODY_CONTRACT_REQUIRED', false)
+}
+
+export async function sendSmsWithProvider(input: SmsProviderInput, options: ConfiguredSmsProviderOptions): Promise<SmsProviderResult> {
+  if (options.provider === 'NEXTSMS') {
+    return sendNextSms(input, options)
+  }
+  return sendWebBulkSms(input, {
+    password: options.password,
+    providerUrl: options.providerUrl,
+    senderId: input.senderId ?? options.senderId,
+    username: options.username,
+    ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {}),
+    ...(options.timeoutMs ? { timeoutMs: options.timeoutMs } : {}),
+  })
 }
 
 export function formatTzsAmount(value: unknown): string {

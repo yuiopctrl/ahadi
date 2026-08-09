@@ -36,6 +36,9 @@ export async function sendAuthenticationSms(input: AuthenticationSmsInput, optio
   const senderId = (options.senderId ?? env.SMS_SENDER_ID).trim()
   const timeoutMs = options.timeoutMs ?? 10_000
   const logger = options.logger ?? console
+  if (!providerUrl || !username || !password) {
+    throw new SmsProviderError('Authentication SMS provider is not configured', 401, 'PROVIDER_AUTH_FAILED', 'PROVIDER_AUTH_FAILED', false)
+  }
   const providerPhoneNumber = formatWebBulkSmsPhone(input.to)
   const providerHost = new URL(providerUrl).hostname
 

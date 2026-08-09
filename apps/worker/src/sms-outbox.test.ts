@@ -60,6 +60,7 @@ test('permanent failures are not retried', () => {
     retryable: false,
   })
   assert.equal(classifySmsFailure(new SmsProviderError('Unauthorized', 401)).retryable, false)
+  assert.equal(classifySmsFailure(new SmsProviderError('NEXTSMS_REQUEST_BODY_CONTRACT_REQUIRED', 400, 'NEXTSMS_REQUEST_BODY_CONTRACT_REQUIRED')).retryable, false)
 })
 
 test('worker environment accepts publishable Supabase key and SMS provider configuration', () => {
@@ -81,5 +82,17 @@ test('worker environment error points to SMS env file locations', () => {
   assert.throws(() => parseWorkerEnv({
     SUPABASE_URL: 'https://example.supabase.co',
     SUPABASE_PUBLISHABLE_KEY: 'publishable-key',
-  }), /SMS_PROVIDER_URL.*apps\/api\/\.env or apps\/worker\/\.env/)
+  }), /SMS_PROVIDER=NEXTSMS.*apps\/api\/\.env or apps\/worker\/\.env/)
+})
+
+test('worker environment accepts NEXTSMS without legacy WebBulkSMS credentials', () => {
+  const env = parseWorkerEnv({
+    SUPABASE_URL: 'https://example.supabase.co',
+    SUPABASE_PUBLISHABLE_KEY: 'publishable-key',
+    SMS_PROVIDER: 'NEXTSMS',
+    NEXTSMS_AUTHORIZATION: 'Basic test',
+  })
+
+  assert.equal(env.SMS_PROVIDER, 'NEXTSMS')
+  assert.equal(env.NEXTSMS_BASE_URL, 'https://messaging-service.co.tz')
 })

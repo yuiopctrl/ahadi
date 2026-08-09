@@ -66,6 +66,23 @@ const reportExportFormats: Record<string, Array<'CSV' | 'XLSX' | 'PDF' | 'PRINT'
   collectors: ['XLSX', 'PDF', 'PRINT'],
   'member-statement': ['PDF', 'PRINT'],
 }
+const smsTemplateOptions = [
+  { code: 'ALL', label: 'All messages', variables: [] },
+  { code: 'PLEDGE_REGISTRATION', label: 'Pledge Registration', variables: ['member_name', 'pledge_amount', 'event_name', 'due_date'] },
+  { code: 'PAYMENT_CONFIRMATION', label: 'Payment Confirmation', variables: ['member_name', 'payment_amount', 'payment_method', 'event_name', 'balance', 'receipt_number'] },
+  { code: 'BALANCE_REMINDER', label: 'Balance Reminder', variables: ['member_name', 'event_name', 'balance', 'due_date'] },
+  { code: 'PLEDGE_COMPLETED', label: 'Pledge Completed', variables: ['member_name', 'pledge_amount', 'event_name'] },
+] as const
+const smsPreviewValues: Record<string, string> = {
+  member_name: 'Asha Mrema',
+  pledge_amount: '500,000',
+  payment_amount: '100,000',
+  payment_method: 'M-Pesa',
+  event_name: 'Harusi ya Asha',
+  balance: '400,000',
+  receipt_number: 'RCT-00024',
+  due_date: '15/08/2026',
+}
 
 function asString(value: unknown, fallback = '') {
   return typeof value === 'string' && value ? value : fallback
@@ -1258,6 +1275,8 @@ export function SmsHistoryPage() {
   const eventOptions = session.selectedTenantContext?.events ?? []
   const permissions = new Set(session.selectedTenantContext?.permissions ?? [])
   const queryClient = useQueryClient()
+  const canManageTemplates = permissions.has('messages.manage_templates')
+  const canManageSettings = permissions.has('messages.manage_settings')
   const [status, setStatus] = useState('ALL')
   const [type, setType] = useState('ALL')
   const [eventId, setEventId] = useState('ALL')
@@ -1265,14 +1284,16 @@ export function SmsHistoryPage() {
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
   const messages = useQuery({ queryKey: ['sms-history', tenantId], queryFn: async () => (await api.messages(tenantId ?? '')).data, enabled: Boolean(tenantId) })
-  const template = useQuery({ queryKey: ['balance-reminder-template', tenantId], queryFn: async () => (await api.balanceReminderTemplate(tenantId ?? '')).data, enabled: Boolean(tenantId && permissions.has('messages.manage_templates')) })
+  const settings = useQuery({ queryKey: ['sms-settings', tenantId], queryFn: async () => (await api.smsSettings(tenantId ?? '')).data, enabled: Boolean(tenantId && canManageSettings) })
+  const templates = useQuery({ queryKey: ['sms-templates', tenantId], queryFn: async () => (await api.smsTemplates(tenantId ?? '')).data, enabled: Boolean(tenantId && canManageTemplates) })
   const processQueued = useMutation({
     mutationFn: () => api.processQueuedMessages(tenantId ?? '', 25),
     onSuccess: () => void messages.refetch(),
   })
   const rows = messages.data ?? []
   const filtered = rows.filter((message) => {
-    const statusMatches = status === 'ALL' || message.status === status
+    const messageStatus = asString(message.status)
+    const statusMatches = status === 'ALL' || (status === 'SENT' ? ['SENT', 'DELIVERED'].includes(messageStatus) : messageStatus === status)
     const typeMatches = type === 'ALL' || message.template_code === type
     const eventMatches = eventId === 'ALL' || message.event_id === eventId
     const queryMatches = `${message.member_name ?? ''} ${message.phone_e164 ?? ''} ${message.template_code ?? ''}`.toLowerCase().includes(query.toLowerCase())
@@ -1294,7 +1315,7 @@ export function SmsHistoryPage() {
     <PageContainer>
       <PageHeader
         title="Messages"
-        description="SMS delivery history and balance reminder controls for this tenant."
+        description="SMS delivery history and balance reminder controls, plus sender settings and business message templates for this tenant."
         action={<div className="inline-actions">{permissions.has('messages.send') ? <button type="button" disabled={processQueued.isPending || queuedCount === 0} onClick={() => processQueued.mutate()}><Send size={18} aria-hidden /> {processQueued.isPending ? 'Sending...' : 'Send queued'}</button> : null}{activeEvent ? <Link className="desktop-primary-button" to={`/app/events/${activeEvent.id}/outstanding`}><Clock3 size={18} aria-hidden /> Reminders</Link> : null}</div>}
       />
       <section className="messages-hero">
@@ -1317,7 +1338,7 @@ export function SmsHistoryPage() {
       </section>
       {processQueued.data ? <p className="message-send-result">Processed {displayValue(processQueued.data.data.claimed, '0')} queued messages · Sent {displayValue(processQueued.data.data.sent, '0')} · Failed {displayValue(processQueued.data.data.failed, '0')}</p> : null}
       {processQueued.error ? <p className="field-error">Unable to process queued messages: {errorMessage(processQueued.error, 'Send attempt failed.')}</p> : null}
-      <div className={permissions.has('messages.manage_templates') ? 'messages-layout messages-layout-with-template' : 'messages-layout'}>
+      <div className={(canManageTemplates || canManageSettings) ? 'messages-layout messages-layout-with-template' : 'messages-layout'}>
         <section className="messages-history-panel">
           <div className="messages-filter-panel">
             <div className="messages-filter-header">
@@ -1330,8 +1351,11 @@ export function SmsHistoryPage() {
                 <input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search member or phone" />
               </label>
             </div>
+            <div className="messages-status-tabs">
+              {['ALL', 'QUEUED', 'SENT', 'FAILED'].map((item) => <button key={item} className={status === item ? 'active' : ''} type="button" onClick={() => setStatus(item)}>{item === 'SENT' ? 'Sent' : item.charAt(0) + item.slice(1).toLowerCase()}</button>)}
+            </div>
             <div className="messages-filter-grid">
-              <label>Type<select value={type} onChange={(event) => setType(event.target.value)}>{[['ALL', 'All messages'], ['PAYMENT_CONFIRMATION', 'Payment Confirmation'], ['BALANCE_REMINDER', 'Balance Reminder']].map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+              <label>Type<select value={type} onChange={(event) => setType(event.target.value)}>{smsTemplateOptions.map((option) => <option key={option.code} value={option.code}>{option.label}</option>)}</select></label>
               <label>Status<select value={status} onChange={(event) => setStatus(event.target.value)}>{['ALL', 'QUEUED', 'PROCESSING', 'SENT', 'DELIVERED', 'FAILED', 'CANCELLED'].map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
               <label>Event<select value={eventId} onChange={(event) => setEventId(event.target.value)}><option value="ALL">All events</option>{eventOptions.map((event) => <option key={event.id} value={event.id}>{event.name}</option>)}</select></label>
               <label>From<input type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} /></label>
@@ -1344,9 +1368,10 @@ export function SmsHistoryPage() {
             {rows.length > 0 && !filtered.length ? <EmptyState title="No messages match these filters." message="Change the status, event, or search text." /> : null}
           </div>
         </section>
-        {permissions.has('messages.manage_templates') ? (
+        {(canManageTemplates || canManageSettings) ? (
           <aside className="messages-template-block">
-            <BalanceReminderTemplateEditor tenantId={tenantId} template={template.data ?? null} loading={template.isLoading} onSaved={() => void queryClient.invalidateQueries({ queryKey: ['balance-reminder-template', tenantId] })} />
+            {canManageSettings ? <SmsSettingsPanel key={`${String(settings.data?.smsEnabled)}-${asString(settings.data?.senderId, 'MICHANGO')}`} tenantId={tenantId} settings={settings.data ?? null} loading={settings.isLoading} onSaved={() => void queryClient.invalidateQueries({ queryKey: ['sms-settings', tenantId] })} /> : null}
+            {canManageTemplates ? <SmsTemplateManager tenantId={tenantId} templates={templates.data ?? []} loading={templates.isLoading} onSaved={() => void queryClient.invalidateQueries({ queryKey: ['sms-templates', tenantId] })} /> : null}
           </aside>
         ) : null}
       </div>
@@ -1383,83 +1408,125 @@ function MessageHistoryCard({ message, tenantId, canResend, onResent }: { messag
           <span><small>Created</small>{asDateTime(message.created_at)}</span>
           <span><small>Sent</small>{asDateTime(message.sent_at)}</span>
           <span><small>Delivered</small>{asDateTime(message.delivered_at)}</span>
+          <span><small>Sender</small>{asString(message.sender_id, 'MICHANGO')}</span>
+          <span><small>Provider</small>{asString(message.provider, 'SMS')}</span>
           <span><small>Attempts</small>{String(asNumber(message.attempt_count))}</span>
         </div>
         {preview ? <p className="message-preview">{preview}</p> : null}
         {failed ? <div className="message-error-callout"><strong>{asString(message.last_error_code, 'Delivery failed')}</strong><span>{asString(message.last_error_message, 'SMS delivery failed.')}</span></div> : null}
-        {asString(message.template_code) === 'BALANCE_REMINDER' && failed && canResend ? <ResendBalanceReminderButton tenantId={tenantId} outboxId={asString(message.id)} onDone={onResent} /> : null}
+        {failed && canResend ? <RetrySmsButton tenantId={tenantId} outboxId={asString(message.id)} onDone={onResent} /> : null}
       </div>
     </article>
   )
 }
 
 function renderPreviewTemplate(body: string) {
-  return body
-    .replaceAll('{{member_name}}', 'Asha Mrema')
-    .replaceAll('{{ event_name }}', 'Harusi ya Asha')
-    .replaceAll('{{event_name}}', 'Harusi ya Asha')
-    .replaceAll('{{pledged_amount}}', '500,000')
-    .replaceAll('{{total_paid}}', '100,000')
-    .replaceAll('{{outstanding}}', '400,000')
-    .replaceAll('{{due_date}}', '15/08/2026')
-    .replaceAll('{{due_text}}', ' kabla ya 15/08/2026')
+  return body.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_match, key: string) => smsPreviewValues[key] ?? '')
 }
 
-function BalanceReminderTemplateEditor({ tenantId, template, loading, onSaved }: { tenantId: string; template: Row | null; loading: boolean; onSaved: () => void }) {
-  const [body, setBody] = useState('')
+function smsPartCount(body: string) {
+  const length = body.length
+  return length <= 160 ? 1 : Math.ceil(length / 153)
+}
+
+function SmsSettingsPanel({ tenantId, settings, loading, onSaved }: { tenantId: string; settings: Row | null; loading: boolean; onSaved: () => void }) {
+  const [smsEnabled, setSmsEnabled] = useState(Boolean(settings?.smsEnabled ?? true))
+  const [senderId, setSenderId] = useState(asString(settings?.senderId, 'MICHANGO'))
   const mutation = useMutation({
-    mutationFn: () => api.saveBalanceReminderTemplate(tenantId, body),
+    mutationFn: () => api.saveSmsSettings(tenantId, { smsEnabled, senderId, defaultLanguage: asString(settings?.defaultLanguage, 'sw') }),
+    onSuccess: (result) => {
+      setSmsEnabled(Boolean(result.data.smsEnabled ?? true))
+      setSenderId(asString(result.data.senderId, 'MICHANGO'))
+      onSaved()
+    },
+  })
+  if (loading) return <LoadingState title="Loading SMS settings" />
+  return (
+    <section className="content-panel reminder-template-panel">
+      <div className="panel-header">
+        <div>
+          <h2>SMS Settings</h2>
+          <p>{smsEnabled ? 'Business SMS is enabled.' : 'Business SMS is paused.'}</p>
+        </div>
+        <StatusBadge>{senderId}</StatusBadge>
+      </div>
+      <label className="checkbox-line"><input type="checkbox" checked={smsEnabled} onChange={(event) => setSmsEnabled(event.target.checked)} /> SMS Enabled</label>
+      <label>Sender ID<select value={senderId} onChange={(event) => setSenderId(event.target.value)}>{['MICHANGO', 'SHEREHE', 'KIKAO'].map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
+      {mutation.error ? <p className="field-error">{errorMessage(mutation.error, 'SMS settings could not be saved.')}</p> : null}
+      <div className="sheet-actions"><button className="primary-button" type="button" disabled={mutation.isPending} onClick={() => mutation.mutate()}>{mutation.isPending ? 'Saving...' : 'Save Settings'}</button></div>
+    </section>
+  )
+}
+
+function SmsTemplateManager({ tenantId, templates, loading, onSaved }: { tenantId: string; templates: Row[]; loading: boolean; onSaved: () => void }) {
+  if (loading) return <LoadingState title="Loading SMS templates" />
+  return (
+    <section className="content-panel reminder-template-panel">
+      <div className="panel-header">
+        <div>
+          <h2>SMS Templates</h2>
+          <p>Tenant overrides for pledge and payment messages.</p>
+        </div>
+        <StatusBadge>{String(templates.length)} templates</StatusBadge>
+      </div>
+      <div className="finance-card-list">
+        {smsTemplateOptions.filter((option) => option.code !== 'ALL').map((option) => {
+          const template = templates.find((row) => asString(row.code) === option.code) ?? null
+          return <SmsTemplateEditorCard key={option.code} tenantId={tenantId} option={option} template={template} onSaved={onSaved} />
+        })}
+      </div>
+    </section>
+  )
+}
+
+function SmsTemplateEditorCard({ tenantId, option, template, onSaved }: { tenantId: string; option: (typeof smsTemplateOptions)[number]; template: Row | null; onSaved: () => void }) {
+  const [body, setBody] = useState(asString(template?.body))
+  const currentBody = body || asString(template?.body)
+  const mutation = useMutation({
+    mutationFn: () => api.saveSmsTemplate(tenantId, option.code, { body: currentBody, language: asString(template?.language, 'sw') }),
     onSuccess: (result) => {
       setBody(asString(result.data.body))
       onSaved()
     },
   })
   const reset = useMutation({
-    mutationFn: () => api.resetBalanceReminderTemplate(tenantId),
+    mutationFn: () => api.resetSmsTemplate(tenantId, option.code),
     onSuccess: (result) => {
       setBody(asString(result.data.body))
       onSaved()
     },
   })
-
-  if (loading) {
-    return <LoadingState title="Loading reminder template" />
-  }
-  const currentBody = body || asString(template?.body)
   return (
-    <section className="content-panel reminder-template-panel">
+    <article className="content-panel">
       <div className="panel-header">
         <div>
-          <h2>Balance Reminder Template</h2>
+          <h3>{option.label}</h3>
           <p>{template?.hasTenantOverride ? 'Tenant override active.' : 'Using system default.'}</p>
         </div>
-        <StatusBadge>{String(currentBody.length)} chars</StatusBadge>
+        <StatusBadge>{currentBody.length} chars · {smsPartCount(currentBody)} SMS</StatusBadge>
       </div>
-      <label>
-        Template
-        <textarea value={currentBody} onChange={(event) => setBody(event.target.value)} rows={5} />
-      </label>
-      <p className="privacy-note">{['{{member_name}}', '{{event_name}}', '{{pledged_amount}}', '{{total_paid}}', '{{outstanding}}', '{{due_date}}', '{{due_text}}'].join(' ')}</p>
+      <label>Template<textarea value={currentBody} onChange={(event) => setBody(event.target.value)} rows={4} /></label>
+      <p className="privacy-note">{option.variables.map((variable) => `{{${variable}}}`).join(' ')}</p>
       <div className="template-preview-card"><p>{renderPreviewTemplate(currentBody)}</p></div>
       {mutation.error ? <p className="field-error">{errorMessage(mutation.error, 'Template could not be saved.')}</p> : null}
       {reset.error ? <p className="field-error">{errorMessage(reset.error, 'Template could not be reset.')}</p> : null}
       <div className="sheet-actions">
-        <button type="button" disabled={reset.isPending} onClick={() => reset.mutate()}>Reset to System Default</button>
+        <button type="button" disabled={reset.isPending} onClick={() => reset.mutate()}>Reset</button>
         <button className="primary-button" type="button" disabled={mutation.isPending || !currentBody.trim()} onClick={() => mutation.mutate()}>{mutation.isPending ? 'Saving...' : 'Save'}</button>
       </div>
-    </section>
+    </article>
   )
 }
 
-function ResendBalanceReminderButton({ tenantId, outboxId, onDone }: { tenantId: string; outboxId: string; onDone: () => void }) {
+function RetrySmsButton({ tenantId, outboxId, onDone }: { tenantId: string; outboxId: string; onDone: () => void }) {
   const [idempotencyKey] = useState(() => crypto.randomUUID())
   const mutation = useMutation({
-    mutationFn: () => api.resendBalanceReminder(tenantId, outboxId, idempotencyKey),
+    mutationFn: () => api.retrySms(tenantId, outboxId, idempotencyKey),
     onSuccess: onDone,
   })
   return (
     <div className="card-actions">
-      <button type="button" disabled={mutation.isPending} onClick={() => mutation.mutate()}>{mutation.isPending ? 'Queueing...' : 'Resend Current Balance'}</button>
+      <button type="button" disabled={mutation.isPending} onClick={() => mutation.mutate()}>{mutation.isPending ? 'Queueing...' : 'Retry SMS'}</button>
       {mutation.data?.data?.queued === false ? <span>{asString(mutation.data.data.reason)}</span> : null}
     </div>
   )
