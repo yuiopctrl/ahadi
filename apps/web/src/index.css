@@ -1102,6 +1102,242 @@ a {
   overflow-x: auto;
 }
 
+.data-table-shell {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: white;
+  box-shadow: var(--shadow-card);
+  padding: 10px;
+}
+
+.data-table-toolbar {
+  display: grid;
+  gap: 10px;
+  align-items: center;
+}
+
+.data-table-toolbar > div:first-child {
+  display: grid;
+  gap: 2px;
+}
+
+.data-table-toolbar strong {
+  color: var(--color-text);
+  font-size: 14px;
+}
+
+.data-table-toolbar span,
+.data-table-page-size span {
+  color: var(--color-muted);
+  font-size: 12px;
+}
+
+.data-table-search {
+  display: flex;
+  min-height: 40px;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: white;
+  padding: 0 10px;
+  color: var(--color-muted);
+}
+
+.data-table-search input {
+  min-width: 0;
+  width: 100%;
+  border: 0;
+  outline: 0;
+}
+
+.data-table-page-size {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.data-table-page-size select {
+  min-height: 38px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: white;
+  padding: 0 10px;
+}
+
+.data-table-wrap {
+  display: none;
+  overflow-x: auto;
+}
+
+.data-table {
+  min-width: 840px;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.data-table th,
+.data-table td {
+  height: 48px;
+  border-bottom: 1px solid var(--color-border);
+  padding: 8px 10px;
+  vertical-align: middle;
+}
+
+.data-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: white;
+}
+
+.data-table th button {
+  display: inline-flex;
+  min-height: 28px;
+  align-items: center;
+  gap: 6px;
+  border: 0;
+  background: transparent;
+  color: var(--color-muted);
+  padding: 0;
+  font-size: 11px;
+  font-weight: 900;
+  text-align: inherit;
+  text-transform: uppercase;
+}
+
+.data-table th button:disabled {
+  cursor: default;
+}
+
+.data-table th button span {
+  border-radius: 999px;
+  background: var(--color-background);
+  padding: 2px 5px;
+  color: var(--color-primary);
+  font-size: 10px;
+}
+
+.data-table td {
+  color: var(--color-text);
+  font-size: 13px;
+}
+
+.data-table td strong {
+  display: block;
+  line-height: 1.2;
+}
+
+.data-table td small {
+  display: block;
+  margin-top: 2px;
+  color: var(--color-muted);
+}
+
+.cell-right {
+  text-align: right;
+}
+
+.cell-center {
+  text-align: center;
+}
+
+.data-table-mobile {
+  display: grid;
+  gap: 10px;
+}
+
+.data-table-mobile-row {
+  display: grid;
+  gap: 8px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-background);
+  padding: 10px;
+}
+
+.data-table-mobile-row > div {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.data-table-mobile-row span {
+  color: var(--color-muted);
+  font-size: 12px;
+}
+
+.data-table-mobile-row strong {
+  color: var(--color-text);
+  font-size: 13px;
+  text-align: right;
+}
+
+.data-table-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--color-muted);
+  font-size: 13px;
+}
+
+.row-actions-menu {
+  position: relative;
+  display: inline-block;
+}
+
+.row-actions-menu summary {
+  display: inline-grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: white;
+  color: var(--color-text);
+  cursor: pointer;
+  font-weight: 900;
+  list-style: none;
+}
+
+.row-actions-menu summary::-webkit-details-marker {
+  display: none;
+}
+
+.row-actions-menu > div {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 5;
+  display: grid;
+  min-width: 150px;
+  gap: 4px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: white;
+  box-shadow: var(--shadow-card);
+  padding: 6px;
+}
+
+.row-actions-menu a,
+.row-actions-menu button {
+  min-height: 34px;
+  width: 100%;
+  justify-content: flex-start;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-text);
+  padding: 0 8px;
+  text-align: left;
+}
+
 table {
   width: 100%;
   min-width: 720px;
@@ -2026,6 +2262,20 @@ th {
 
   .settings-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 768px) {
+  .data-table-toolbar {
+    grid-template-columns: minmax(160px, 1fr) minmax(220px, 320px) auto auto;
+  }
+
+  .data-table-wrap {
+    display: block;
+  }
+
+  .data-table-mobile {
+    display: none;
   }
 }
 

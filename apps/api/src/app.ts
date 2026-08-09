@@ -266,6 +266,12 @@ const createMemberSchema = z.object({
   initialPledgeDueDate: z.string().date().optional().nullable(),
 })
 
+const createContactSchema = createMemberSchema.omit({
+  categoryId: true,
+  initialPledgeAmount: true,
+  initialPledgeDueDate: true,
+})
+
 const attachMemberSchema = z.object({
   memberId: z.string().uuid(),
   categoryId: z.string().uuid().optional().nullable(),
@@ -2694,6 +2700,59 @@ app.get('/api/v1/events/:eventId/members', requireAuth, loadUserContext, require
   }
 })
 
+app.get('/api/v1/contacts', requireAuth, loadUserContext, requireTenantContext, async (request, response, next) => {
+  try {
+    const tenantId = tenantIdFromRequest(request)
+    const client = createUserSupabase(request.auth?.accessToken ?? '')
+    const { data, error } = await client.rpc('rpc_list_contacts', { p_tenant_id: tenantId })
+    if (error) {
+      throwFinancialDatabaseError(error, 'CONTACTS_LIST_FAILED')
+    }
+    response.json({ data: jsonArray(data) })
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.post('/api/v1/contacts', requireAuth, loadUserContext, requireTenantContext, async (request, response, next) => {
+  try {
+    const tenantId = tenantIdFromRequest(request)
+    const input = createContactSchema.parse(request.body)
+    const client = createUserSupabase(request.auth?.accessToken ?? '')
+    const { data, error } = await client.rpc('rpc_create_contact', {
+      p_tenant_id: tenantId,
+      p_full_name: input.fullName,
+      p_phone: input.phone || null,
+      p_alternative_phone: input.alternativePhone || null,
+      p_email: input.email || null,
+      p_location: input.location || null,
+      p_notes: input.notes || null,
+      p_sms_enabled: input.smsEnabled ?? true,
+    })
+    if (error) {
+      throwFinancialDatabaseError(error, 'CREATE_CONTACT_FAILED')
+    }
+    response.status(201).json({ data })
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.get('/api/v1/contacts/:memberId', requireAuth, loadUserContext, requireTenantContext, async (request, response, next) => {
+  try {
+    const tenantId = tenantIdFromRequest(request)
+    const memberId = uuidParamSchema.parse(request.params['memberId'])
+    const client = createUserSupabase(request.auth?.accessToken ?? '')
+    const { data, error } = await client.rpc('rpc_get_contact_detail', { p_tenant_id: tenantId, p_member_id: memberId })
+    if (error) {
+      throwFinancialDatabaseError(error, 'CONTACT_DETAIL_FAILED')
+    }
+    response.json({ data })
+  } catch (error) {
+    next(error)
+  }
+})
+
 app.post('/api/v1/events/:eventId/members', requireAuth, loadUserContext, requireTenantContext, async (request, response, next) => {
   try {
     const tenantId = tenantIdFromRequest(request)
@@ -2736,6 +2795,21 @@ app.post('/api/v1/events/:eventId/members', requireAuth, loadUserContext, requir
       return
     }
     response.status(201).json({ data })
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.get('/api/v1/events/:eventId/contacts/available', requireAuth, loadUserContext, requireTenantContext, async (request, response, next) => {
+  try {
+    const tenantId = tenantIdFromRequest(request)
+    const eventId = uuidParamSchema.parse(request.params['eventId'])
+    const client = createUserSupabase(request.auth?.accessToken ?? '')
+    const { data, error } = await client.rpc('rpc_list_contacts_available_for_event', { p_tenant_id: tenantId, p_event_id: eventId })
+    if (error) {
+      throwFinancialDatabaseError(error, 'EVENT_AVAILABLE_CONTACTS_FAILED')
+    }
+    response.json({ data: jsonArray(data) })
   } catch (error) {
     next(error)
   }

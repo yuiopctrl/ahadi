@@ -162,6 +162,12 @@ export const api = {
       body: JSON.stringify(payload),
     }),
   eventMembers: (tenantId: string, eventId: string) => apiFetch<{ data: Record<string, unknown>[] }>(`/events/${eventId}/members`, { tenantId }),
+  contacts: (tenantId: string) => apiFetch<{ data: Record<string, unknown>[] }>('/contacts', { tenantId }),
+  contactDetail: (tenantId: string, memberId: string) => apiFetch<{ data: Record<string, unknown> }>(`/contacts/${memberId}`, { tenantId }),
+  createContact: (tenantId: string, payload: Record<string, unknown>) =>
+    apiFetch<{ data: Record<string, unknown> }>('/contacts', { tenantId, method: 'POST', body: JSON.stringify(payload) }),
+  availableContactsForEvent: (tenantId: string, eventId: string) =>
+    apiFetch<{ data: Record<string, unknown>[] }>(`/events/${eventId}/contacts/available`, { tenantId }),
   eventMemberDetail: (tenantId: string, eventId: string, eventMemberId: string) =>
     apiFetch<{ data: { member: Record<string, unknown>; payments: Record<string, unknown>[] } }>(`/events/${eventId}/members/${eventMemberId}`, { tenantId }),
   createEventMember: (tenantId: string, eventId: string, payload: Record<string, unknown>) =>

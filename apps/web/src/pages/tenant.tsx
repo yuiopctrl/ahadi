@@ -20,7 +20,8 @@ import { useMemo, useState } from 'react'
 import type { FormEvent } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import type { EventSummary } from '@ahadi/types'
-import { EmptyState, ErrorState, LoadingState, PageContainer, PageHeader, SearchInput, StatCard, StatusBadge } from '../components/ui'
+import { DataTable, EmptyState, ErrorState, LoadingState, PageContainer, PageHeader, SearchInput, StatCard, StatusBadge } from '../components/ui'
+import type { DataTableColumn } from '../components/ui'
 import { api, ApiClientError } from '../lib/api'
 import { useSessionStore } from '../stores/session-store'
 
@@ -126,6 +127,14 @@ function statusTone(status: unknown): 'success' | 'warning' | 'danger' | 'neutra
   if (status === 'OVERDUE' || status === 'REVERSED' || status === 'CANCELLED') return 'danger'
   if (status === 'PARTIALLY_PAID' || status === 'PENDING') return 'warning'
   return 'neutral'
+}
+
+function phoneKey(value: unknown) {
+  return asString(value).replace(/\D/g, '').replace(/^255/, '0')
+}
+
+function rowStatusLabel(value: unknown, fallback = 'Active') {
+  return asString(value, fallback).replaceAll('_', ' ')
 }
 
 function errorMessage(error: unknown, fallback: string) {
@@ -334,19 +343,24 @@ export function TenantListPage({ title, kind }: { title: string; kind: 'events' 
             navigate(`/app/events/${asString(created.eventId ?? created.event_id ?? created.id)}`)
           }}
         /> : null}
-        <section className="cards-list">
-          {tenantContext.events.map((tenantEvent) => (
-            <Link to={`/app/events/${tenantEvent.id}`} className="summary-card" key={tenantEvent.id}>
-              <CalendarDays size={20} aria-hidden />
-              <div>
-                <strong>{tenantEvent.name}</strong>
-                <span>{tenantEvent.eventDate ? `Event date ${asDate(tenantEvent.eventDate)}` : tenantEvent.eventType}</span>
-              </div>
-              <StatusBadge tone={statusTone(tenantEvent.status)}>{tenantEvent.status}</StatusBadge>
-            </Link>
-          ))}
-          {!tenantContext.events.length ? <EmptyState title="No events yet" message={canCreate ? 'Create your first event to begin collecting pledges.' : blockedMessage || 'No accessible events are available.'} /> : null}
-        </section>
+        <DataTable
+          title="Events"
+          rows={tenantContext.events}
+          columns={[
+            { key: 'event', header: 'Event', render: (tenantEvent) => <Link to={`/app/events/${tenantEvent.id}`}><strong>{tenantEvent.name}</strong><small>{asString((tenantEvent as unknown as Row).venue, 'No venue')}</small></Link>, sortValue: (tenantEvent) => tenantEvent.name },
+            { key: 'type', header: 'Type', render: (tenantEvent) => <span>{tenantEvent.eventType}</span>, sortValue: (tenantEvent) => tenantEvent.eventType },
+            { key: 'date', header: 'Date', render: (tenantEvent) => <span>{asDate(tenantEvent.eventDate)}</span>, sortValue: (tenantEvent) => tenantEvent.eventDate ?? '' },
+            { key: 'members', header: 'Members', render: (tenantEvent) => <span>{asNumber((tenantEvent as unknown as Row).memberCount)}</span>, sortValue: (tenantEvent) => asNumber((tenantEvent as unknown as Row).memberCount), align: 'right' },
+            { key: 'pledged', header: 'Pledged', render: (tenantEvent) => <span>{moneyText((tenantEvent as unknown as Row).totalPledged)}</span>, sortValue: (tenantEvent) => asNumber((tenantEvent as unknown as Row).totalPledged), align: 'right' },
+            { key: 'collected', header: 'Collected', render: (tenantEvent) => <span>{moneyText((tenantEvent as unknown as Row).totalCollected ?? (tenantEvent as unknown as Row).totalPaid)}</span>, sortValue: (tenantEvent) => asNumber((tenantEvent as unknown as Row).totalCollected ?? (tenantEvent as unknown as Row).totalPaid), align: 'right' },
+            { key: 'outstanding', header: 'Outstanding', render: (tenantEvent) => <span>{moneyText((tenantEvent as unknown as Row).totalOutstanding)}</span>, sortValue: (tenantEvent) => asNumber((tenantEvent as unknown as Row).totalOutstanding), align: 'right' },
+            { key: 'status', header: 'Status', render: (tenantEvent) => <StatusBadge tone={statusTone(tenantEvent.status)}>{tenantEvent.status}</StatusBadge>, sortValue: (tenantEvent) => tenantEvent.status },
+            { key: 'actions', header: 'Actions', render: (tenantEvent) => <Link to={`/app/events/${tenantEvent.id}`}>Open</Link>, align: 'right' },
+          ]}
+          getRowKey={(tenantEvent) => tenantEvent.id}
+          emptyTitle="No events yet"
+          emptyMessage={canCreate ? 'Create your first event to begin collecting pledges.' : blockedMessage || 'No accessible events are available.'}
+        />
         {canCreate ? <button className="mobile-sticky-button" type="button" onClick={() => setShowEventForm(true)}>Create Event</button> : null}
       </PageContainer>
     )
@@ -377,6 +391,218 @@ export function TenantListPage({ title, kind }: { title: string; kind: 'events' 
           <StatusBadge tone="success">Open</StatusBadge>
         </Link>
       </section>
+    </PageContainer>
+  )
+}
+
+export function ContactsPage() {
+  const session = useSessionStore()
+  const tenantId = session.selectedTenantId
+  const queryClient = useQueryClient()
+  const [query, setQuery] = useState('')
+  const [filter, setFilter] = useState('ACTIVE')
+  const [formOpen, setFormOpen] = useState(false)
+  const contacts = useQuery({ queryKey: ['contacts', tenantId], queryFn: async () => (await api.contacts(tenantId ?? '')).data, enabled: Boolean(tenantId) })
+  const rows = contacts.data ?? []
+  const filtered = rows.filter((contact) => {
+    const searchText = `${contact.full_name ?? ''} ${contact.phone_e164 ?? ''} ${contact.member_code ?? ''}`.toLowerCase()
+    const status = asString(contact.status, 'ACTIVE')
+    const statusMatches =
+      filter === 'ALL' ||
+      (filter === 'SMS_ENABLED' ? contact.sms_enabled !== false : filter === 'SMS_DISABLED' ? contact.sms_enabled === false : status === filter)
+    return statusMatches && searchText.includes(query.toLowerCase())
+  })
+  const columns: Array<DataTableColumn<Row>> = [
+    { key: 'code', header: 'Contact Code', render: (row) => <span>{asString(row.member_code)}</span>, sortValue: (row) => asString(row.member_code) },
+    { key: 'name', header: 'Name', render: (row) => <Link to={`/app/contacts/${asString(row.member_id)}`}><strong>{titleCaseMemberName(row.full_name, '')}</strong><small>{asString(row.email, 'No email')}</small></Link>, sortValue: (row) => titleCaseMemberName(row.full_name, '') },
+    { key: 'phone', header: 'Phone', render: (row) => <span>{asString(row.phone_e164, 'No phone')}</span>, sortValue: (row) => asString(row.phone_e164) },
+    { key: 'location', header: 'Location', render: (row) => <span>{asString(row.location, 'Not set')}</span>, sortValue: (row) => asString(row.location) },
+    { key: 'events', header: 'Events', render: (row) => <span>{asNumber(row.event_count)} Events</span>, sortValue: (row) => asNumber(row.event_count), align: 'right' },
+    { key: 'sms', header: 'SMS', render: (row) => <StatusBadge tone={row.sms_enabled === false ? 'warning' : 'success'}>{row.sms_enabled === false ? 'Disabled' : 'Enabled'}</StatusBadge>, sortValue: (row) => row.sms_enabled === false ? 'disabled' : 'enabled' },
+    { key: 'status', header: 'Status', render: (row) => <StatusBadge tone={statusTone(row.status)}>{rowStatusLabel(row.status)}</StatusBadge>, sortValue: (row) => asString(row.status) },
+    { key: 'created', header: 'Created', render: (row) => <span>{asDate(row.created_at)}</span>, sortValue: (row) => asString(row.created_at), hideOnMobile: true },
+    { key: 'actions', header: 'Actions', render: (row) => <ContactActions contact={row} tenantId={tenantId ?? ''} onChanged={() => void queryClient.invalidateQueries({ queryKey: ['contacts', tenantId] })} />, align: 'right' },
+  ]
+
+  if (!tenantId) return <ErrorState title="Unable to load contacts" message="Select a tenant first." />
+  if (contacts.isLoading) return <LoadingState title="Loading contacts" message="Fetching tenant contact directory." />
+  if (contacts.isError) return <ErrorState title="Unable to load contacts" message={errorMessage(contacts.error, 'Contacts could not be loaded.')} />
+
+  return (
+    <PageContainer>
+      <PageHeader
+        title="Contacts"
+        description="Reusable tenant contact directory. Contacts are added to events only when selected."
+        action={<button className="desktop-primary-button" type="button" onClick={() => setFormOpen((current) => !current)}><Plus size={18} aria-hidden /> Add Contact</button>}
+      />
+      {formOpen ? <ContactForm tenantId={tenantId} contacts={rows} onDone={() => { setFormOpen(false); void queryClient.invalidateQueries({ queryKey: ['contacts', tenantId] }) }} /> : null}
+      <DataTable
+        title="Contact Directory"
+        rows={filtered}
+        columns={columns}
+        getRowKey={(row) => asString(row.member_id)}
+        searchValue={query}
+        onSearchChange={setQuery}
+        searchPlaceholder="Search name, phone or contact code"
+        filters={<label className="data-table-page-size"><span>Filter</span><select value={filter} onChange={(event) => setFilter(event.target.value)}>{['ACTIVE', 'ALL', 'ARCHIVED', 'SMS_ENABLED', 'SMS_DISABLED'].map((item) => <option key={item} value={item}>{item.replaceAll('_', ' ')}</option>)}</select></label>}
+        emptyTitle="No contacts found."
+        emptyMessage={rows.length ? 'Change the search or filter.' : 'Add a contact to build your reusable directory.'}
+        mobileRender={(row) => (
+          <>
+            <div><span>Name</span><strong>{titleCaseMemberName(row.full_name, '')}</strong></div>
+            <div><span>Phone</span><strong>{asString(row.phone_e164, 'No phone')}</strong></div>
+            <div><span>Events</span><strong>{asNumber(row.event_count)} Events</strong></div>
+            <div><span>Status</span><strong>{rowStatusLabel(row.status)}</strong></div>
+            <div><span>Actions</span><strong><Link to={`/app/contacts/${asString(row.member_id)}`}>View</Link></strong></div>
+          </>
+        )}
+      />
+    </PageContainer>
+  )
+}
+
+function ContactActions({ contact, tenantId, onChanged }: { contact: Row; tenantId: string; onChanged: () => void }) {
+  const archive = useMutation({
+    mutationFn: () => api.updateMember(tenantId, asString(contact.member_id), { status: 'ARCHIVED' }),
+    onSuccess: onChanged,
+  })
+  return (
+    <details className="row-actions-menu">
+      <summary aria-label={`Actions for ${titleCaseMemberName(contact.full_name, 'contact')}`}>...</summary>
+      <div>
+        <Link to={`/app/contacts/${asString(contact.member_id)}`}>View</Link>
+        <Link to={`/app/contacts/${asString(contact.member_id)}?edit=1`}>Edit</Link>
+        <Link to="/app/events">Add to Event</Link>
+        {asString(contact.status) !== 'ARCHIVED' ? <button type="button" disabled={archive.isPending} onClick={() => archive.mutate()}>{archive.isPending ? 'Archiving...' : 'Archive'}</button> : null}
+      </div>
+    </details>
+  )
+}
+
+function ContactForm({ tenantId, contacts, eventId, onDone }: { tenantId: string; contacts: Row[]; eventId?: string; onDone: () => void }) {
+  const [form, setForm] = useState({ fullName: '', phone: '', alternativePhone: '', email: '', location: '', notes: '', smsEnabled: true })
+  const duplicate = form.phone ? contacts.find((contact) => phoneKey(contact.phone_e164) === phoneKey(form.phone) && phoneKey(contact.phone_e164)) : null
+  const mutation = useMutation({
+    mutationFn: async () => {
+      const result = await api.createContact(tenantId, form)
+      const memberId = asString(result.data.member_id)
+      if (eventId && memberId) {
+        await api.attachEventMember(tenantId, eventId, { memberId })
+      }
+      return result
+    },
+    onSuccess: onDone,
+  })
+  return (
+    <form className="mobile-sheet form-grid" onSubmit={(event) => { event.preventDefault(); if (!duplicate) mutation.mutate() }}>
+      <div className="panel-header">
+        <div>
+          <h2>{eventId ? 'Add New Contact to Event' : 'Add Contact'}</h2>
+          <p>{eventId ? 'Create one tenant contact and attach it to this event.' : 'Create a tenant contact without requiring an event or pledge.'}</p>
+        </div>
+      </div>
+      <Input label="Name" value={form.fullName} onChange={(fullName) => setForm((current) => ({ ...current, fullName }))} />
+      <Input label="Phone optional" inputMode="tel" value={form.phone} onChange={(phone) => setForm((current) => ({ ...current, phone }))} />
+      {duplicate ? (
+        <section className="state-card state-card-danger">
+          <h2>A contact with this phone already exists.</h2>
+          <p>{titleCaseMemberName(duplicate.full_name, '')} · {asString(duplicate.phone_e164)}</p>
+          <div className="inline-actions">
+            <Link to={`/app/contacts/${asString(duplicate.member_id)}`}>View Existing Contact</Link>
+            {eventId ? <button type="button" onClick={() => api.attachEventMember(tenantId, eventId, { memberId: asString(duplicate.member_id) }).then(onDone)}>Add Existing Contact to Event</button> : null}
+          </div>
+        </section>
+      ) : null}
+      <Input label="Alternative phone optional" inputMode="tel" value={form.alternativePhone} onChange={(alternativePhone) => setForm((current) => ({ ...current, alternativePhone }))} />
+      <Input label="Email optional" value={form.email} onChange={(email) => setForm((current) => ({ ...current, email }))} />
+      <Input label="Location optional" value={form.location} onChange={(location) => setForm((current) => ({ ...current, location }))} />
+      <Input label="Notes optional" value={form.notes} onChange={(notes) => setForm((current) => ({ ...current, notes }))} />
+      <label className="switch-row">
+        <span><strong>Send SMS notifications</strong><small>{form.phone ? 'This contact can receive event SMS after being added to an event.' : 'Add a phone number before enabling SMS.'}</small></span>
+        <input type="checkbox" role="switch" checked={form.smsEnabled && Boolean(form.phone)} disabled={!form.phone} onChange={(event) => setForm((current) => ({ ...current, smsEnabled: event.target.checked }))} />
+      </label>
+      {mutation.error ? <p className="field-error">{errorMessage(mutation.error, 'Contact could not be saved.')}</p> : null}
+      <div className="sheet-actions">
+        <button type="button" onClick={onDone}>Cancel</button>
+        <button className="primary-button" type="submit" disabled={mutation.isPending || Boolean(duplicate) || !form.fullName.trim()}>{mutation.isPending ? 'Saving...' : eventId ? 'Create and Add' : 'Save Contact'}</button>
+      </div>
+    </form>
+  )
+}
+
+export function ContactDetailPage() {
+  const { memberId = '' } = useParams()
+  const [search] = useSearchParams()
+  const session = useSessionStore()
+  const tenantId = session.selectedTenantId
+  const queryClient = useQueryClient()
+  const [editing, setEditing] = useState(search.get('edit') === '1')
+  const [eventId, setEventId] = useState('')
+  const detail = useQuery({ queryKey: ['contact-detail', tenantId, memberId], queryFn: async () => (await api.contactDetail(tenantId ?? '', memberId)).data, enabled: Boolean(tenantId && memberId) })
+  const attach = useMutation({
+    mutationFn: () => api.attachEventMember(tenantId ?? '', eventId, { memberId }),
+    onSuccess: () => {
+      setEventId('')
+      void queryClient.invalidateQueries({ queryKey: ['contact-detail', tenantId, memberId] })
+      void queryClient.invalidateQueries({ queryKey: ['contacts', tenantId] })
+    },
+  })
+  if (!tenantId) return <ErrorState title="Unable to load contact" message="Select a tenant first." />
+  if (detail.isLoading) return <LoadingState title="Loading contact" />
+  if (detail.isError || !detail.data) return <ErrorState title="Unable to load contact" message={errorMessage(detail.error, 'Contact could not be loaded.')} />
+
+  const contact = jsonRecord(detail.data.contact)
+  const events = jsonArray(detail.data.events)
+  const contactForEdit = { ...contact, member_id: contact.id, member_status: contact.status }
+  const columns: Array<DataTableColumn<Row>> = [
+    { key: 'event', header: 'Event Name', render: (row) => <Link to={`/app/events/${asString(row.event_id)}/members/${asString(row.event_member_id)}`}><strong>{asString(row.event_name)}</strong><small>{asString(row.event_type)}</small></Link>, sortValue: (row) => asString(row.event_name) },
+    { key: 'date', header: 'Event Date', render: (row) => <span>{asDate(row.event_date)}</span>, sortValue: (row) => asString(row.event_date) },
+    { key: 'status', header: 'Participation Status', render: (row) => <StatusBadge tone={statusTone(row.participation_status)}>{rowStatusLabel(row.participation_status)}</StatusBadge>, sortValue: (row) => asString(row.participation_status) },
+    { key: 'pledge', header: 'Pledge', render: (row) => <span>{moneyText(row.pledged_amount)}</span>, sortValue: (row) => asNumber(row.pledged_amount), align: 'right' },
+    { key: 'paid', header: 'Paid', render: (row) => <span>{moneyText(row.paid_amount)}</span>, sortValue: (row) => asNumber(row.paid_amount), align: 'right' },
+    { key: 'outstanding', header: 'Outstanding', render: (row) => <span>{moneyText(row.outstanding_amount)}</span>, sortValue: (row) => asNumber(row.outstanding_amount), align: 'right' },
+  ]
+  const availableEvents = session.selectedTenantContext?.events.filter((event) => !events.some((row) => asString(row.event_id) === event.id && asString(row.participation_status) === 'ACTIVE')) ?? []
+  return (
+    <PageContainer>
+      <PageHeader title={titleCaseMemberName(contact.full_name, 'Contact')} description={`${asString(contact.member_code)} · ${asString(contact.phone_e164, 'No phone')}`} action={<div className="inline-actions"><Link to="/app/contacts"><ArrowLeft size={18} aria-hidden /> Contacts</Link><button className="desktop-primary-button" type="button" onClick={() => setEditing((current) => !current)}><Pencil size={18} aria-hidden /> {editing ? 'Close' : 'Edit Contact'}</button></div>} />
+      <section className="content-panel">
+        <div className="panel-header">
+          <div><h2>Contact Information</h2><p>This tenant-level record can be reused across events.</p></div>
+          <StatusBadge tone={statusTone(contact.status)}>{rowStatusLabel(contact.status)}</StatusBadge>
+        </div>
+        {editing ? <MemberEditForm tenantId={tenantId} member={contactForEdit} onCancel={() => setEditing(false)} onSaved={() => { setEditing(false); void detail.refetch(); void queryClient.invalidateQueries({ queryKey: ['contacts', tenantId] }) }} /> : (
+          <>
+            <ReviewLine label="Phone" value={asString(contact.phone_e164, 'Not set')} />
+            <ReviewLine label="Alternative phone" value={asString(contact.alternative_phone_e164, 'Not set')} />
+            <ReviewLine label="Email" value={asString(contact.email, 'Not set')} />
+            <ReviewLine label="Location" value={asString(contact.location, 'Not set')} />
+            <ReviewLine label="SMS" value={contact.sms_enabled === false ? 'Disabled' : 'Enabled'} />
+            <ReviewLine label="Notes" value={asString(contact.notes, 'Not set')} />
+          </>
+        )}
+      </section>
+      <section className="content-panel">
+        <div className="panel-header">
+          <div><h2>Add to Event</h2><p>Only selected contacts become members of an event.</p></div>
+        </div>
+        <div className="inline-actions">
+          <select value={eventId} onChange={(event) => setEventId(event.target.value)}>
+            <option value="">Select event</option>
+            {availableEvents.map((event) => <option key={event.id} value={event.id}>{event.name}</option>)}
+          </select>
+          <button type="button" disabled={!eventId || attach.isPending || asString(contact.status) === 'ARCHIVED'} onClick={() => attach.mutate()}>{attach.isPending ? 'Adding...' : 'Add to Event'}</button>
+        </div>
+        {attach.error ? <p className="field-error">{errorMessage(attach.error, 'Contact could not be added to event.')}</p> : null}
+      </section>
+      <DataTable
+        title="Events"
+        rows={events}
+        columns={columns}
+        getRowKey={(row) => asString(row.event_member_id)}
+        emptyTitle="No event participation yet."
+        emptyMessage="Add this contact to an event before recording pledges or payments."
+      />
     </PageContainer>
   )
 }
@@ -503,7 +729,7 @@ export function EventDetailPage({ section = 'overview' }: { section?: EventSecti
       {section === 'members' ? (
         membersQuery.isLoading ? <LoadingState title="Loading members" message="Fetching event members." /> :
           membersQuery.isError ? <ErrorState title="Unable to load members" message={errorMessage(membersQuery.error, 'Members could not be loaded.')} /> :
-            <MembersPanel tenantId={tenantId ?? ''} event={event} eventId={eventId} members={membersQuery.data ?? []} refresh={() => invalidateEvent(queryClient, tenantId ?? '', eventId)} initialSearch={search.get('q') ?? ''} canCreate={activeEvent.canCollect} />
+            <MembersPanel tenantId={tenantId ?? ''} eventId={eventId} members={membersQuery.data ?? []} refresh={() => invalidateEvent(queryClient, tenantId ?? '', eventId)} initialSearch={search.get('q') ?? ''} canCreate={activeEvent.canCollect} />
       ) : null}
       {section === 'pledges' ? (
         pledgesQuery.isLoading || membersQuery.isLoading ? <LoadingState title="Loading pledges" message="Fetching pledges and members." /> :
@@ -571,61 +797,99 @@ function OverviewCards({ eventId, summary, payments, pledges }: { eventId: strin
   )
 }
 
-function MembersPanel({ tenantId, event, eventId, members, refresh, initialSearch, canCreate }: { tenantId: string; event: EventSummary | null; eventId: string; members: Row[]; refresh: () => void; initialSearch: string; canCreate: boolean }) {
+function MembersPanel({ tenantId, eventId, members, refresh, initialSearch, canCreate }: { tenantId: string; eventId: string; members: Row[]; refresh: () => void; initialSearch: string; canCreate: boolean }) {
   const [query, setQuery] = useState(initialSearch)
+  const [showPicker, setShowPicker] = useState(false)
   const [showForm, setShowForm] = useState(false)
+  const contacts = useQuery({ queryKey: ['contacts', tenantId], queryFn: async () => (await api.contacts(tenantId)).data, enabled: Boolean(tenantId && showForm) })
   const filtered = members.filter((member) => `${member.full_name ?? ''} ${member.phone_e164 ?? ''} ${member.member_code ?? ''}`.toLowerCase().includes(query.toLowerCase()))
+  const columns: Array<DataTableColumn<Row>> = [
+    { key: 'name', header: 'Name', render: (member) => <Link to={`/app/events/${eventId}/members/${asString(member.event_member_id)}`}><strong>{titleCaseMemberName(member.full_name, '')}</strong><small>{asString(member.member_code)}</small></Link>, sortValue: (member) => titleCaseMemberName(member.full_name, '') },
+    { key: 'phone', header: 'Phone', render: (member) => <span>{asString(member.phone_e164, 'No phone')}</span>, sortValue: (member) => asString(member.phone_e164) },
+    { key: 'category', header: 'Category', render: (member) => <span>{asString(member.category, 'No category')}</span>, sortValue: (member) => asString(member.category) },
+    { key: 'pledge', header: 'Pledge', render: (member) => <span>{moneyText(member.pledged_amount)}</span>, sortValue: (member) => asNumber(member.pledged_amount), align: 'right' },
+    { key: 'paid', header: 'Paid', render: (member) => <span>{moneyText(member.total_allocated)}</span>, sortValue: (member) => asNumber(member.total_allocated), align: 'right' },
+    { key: 'outstanding', header: 'Outstanding', render: (member) => <span>{moneyText(member.outstanding_amount)}</span>, sortValue: (member) => asNumber(member.outstanding_amount), align: 'right' },
+    { key: 'status', header: 'Status', render: (member) => <StatusBadge tone={statusTone(member.pledge_status)}>{asString(member.pledge_status, 'No Pledge')}</StatusBadge>, sortValue: (member) => asString(member.pledge_status) },
+    { key: 'sms', header: 'SMS', render: (member) => <StatusBadge tone={member.sms_enabled === false ? 'warning' : 'success'}>{member.sms_enabled === false ? 'Disabled' : 'Enabled'}</StatusBadge>, sortValue: (member) => member.sms_enabled === false ? 'disabled' : 'enabled' },
+    { key: 'actions', header: 'Actions', render: (member) => <div className="inline-actions"><Link to={`/app/events/${eventId}/payments/new?eventMemberId=${asString(member.event_member_id)}&pledgeId=${asString(member.pledge_id)}`}>Pay</Link><Link to={`/app/events/${eventId}/members/${asString(member.event_member_id)}`}>View</Link></div>, align: 'right' },
+  ]
 
   return (
     <section className="finance-section">
       <div className="toolbar-row">
-        <label className="search-input">
-          <Search size={18} aria-hidden />
-          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search members" />
-        </label>
-        {canCreate ? <button className="desktop-primary-button" type="button" onClick={() => setShowForm(true)}>
-          <Plus size={18} aria-hidden />
-          Add Member
-        </button> : null}
+        {canCreate ? <button className="desktop-primary-button" type="button" onClick={() => setShowPicker((current) => !current)}><Users size={18} aria-hidden /> Add Members</button> : null}
+        {canCreate ? <button type="button" onClick={() => setShowForm((current) => !current)}><Plus size={18} aria-hidden /> Add New Contact</button> : null}
       </div>
-      {showForm ? <MemberForm tenantId={tenantId} event={event} eventId={eventId} onDone={() => { setShowForm(false); refresh() }} /> : null}
-      <div className="finance-card-list">
-        {filtered.map((member) => <MemberCard key={asString(member.event_member_id)} member={member} eventId={eventId} />)}
-        {!members.length ? <EmptyState title="No members have been added to this event yet." message={canCreate ? 'Use Add Member to register the first contributor.' : 'You do not have permission to add members.'} /> : null}
-        {members.length > 0 && !filtered.length ? <EmptyState title="No members match your search." message="Try a different name, phone number or member code." /> : null}
-      </div>
-      {canCreate ? <button className="mobile-sticky-button" type="button" onClick={() => setShowForm(true)}>Add Member</button> : null}
+      {showPicker ? <EventContactPicker tenantId={tenantId} eventId={eventId} onDone={() => { setShowPicker(false); refresh() }} /> : null}
+      {showForm ? <ContactForm tenantId={tenantId} contacts={contacts.data ?? []} eventId={eventId} onDone={() => { setShowForm(false); refresh() }} /> : null}
+      <DataTable
+        title="Event Members"
+        rows={filtered.map((member, index) => ({ ...member, sequenceNumber: index + 1 })) as Row[]}
+        columns={[{ key: 'sn', header: 'S/N', render: (member) => <span>{asNumber(member.sequenceNumber)}</span>, sortValue: (member) => asNumber(member.sequenceNumber), align: 'right' }, ...columns]}
+        getRowKey={(member) => asString(member.event_member_id)}
+        searchValue={query}
+        onSearchChange={setQuery}
+        searchPlaceholder="Search members"
+        emptyTitle="No members have been added to this event yet."
+        emptyMessage={canCreate ? 'Use Add Members to select contacts for this event.' : 'You do not have permission to add members.'}
+        mobileRender={(member) => <MemberCard member={member} eventId={eventId} />}
+      />
+      {canCreate ? <button className="mobile-sticky-button" type="button" onClick={() => setShowPicker(true)}>Add Members</button> : null}
     </section>
   )
 }
 
-function MemberForm({ tenantId, event, eventId, onDone }: { tenantId: string; event: EventSummary | null; eventId: string; onDone: () => void }) {
-  const [form, setForm] = useState({ fullName: '', phone: '', alternativePhone: '', email: '', location: '', notes: '', smsEnabled: true, initialPledgeAmount: '', initialPledgeDueDate: '' })
-  const mutation = useMutation({
-    mutationFn: () => api.createEventMember(tenantId, eventId, { ...form, initialPledgeAmount: form.initialPledgeAmount ? Number(form.initialPledgeAmount) : null, initialPledgeDueDate: form.initialPledgeDueDate || null }),
+function EventContactPicker({ tenantId, eventId, onDone }: { tenantId: string; eventId: string; onDone: () => void }) {
+  const [query, setQuery] = useState('')
+  const [selected, setSelected] = useState<string[]>([])
+  const contacts = useQuery({ queryKey: ['event-available-contacts', tenantId, eventId], queryFn: async () => (await api.availableContactsForEvent(tenantId, eventId)).data, enabled: Boolean(tenantId && eventId) })
+  const rows = contacts.data ?? []
+  const filtered = rows.filter((contact) => `${contact.full_name ?? ''} ${contact.phone_e164 ?? ''} ${contact.member_code ?? ''}`.toLowerCase().includes(query.toLowerCase()))
+  const attach = useMutation({
+    mutationFn: async () => {
+      await Promise.all(selected.map((memberId) => api.attachEventMember(tenantId, eventId, { memberId })))
+    },
     onSuccess: onDone,
   })
+  if (contacts.isLoading) return <LoadingState title="Loading contacts" message="Finding contacts not yet attached to this event." />
+  if (contacts.isError) return <ErrorState title="Unable to load contacts" message={errorMessage(contacts.error, 'Available contacts could not be loaded.')} />
+  const visibleIds = filtered.map((contact) => asString(contact.member_id)).filter(Boolean)
+  const columns: Array<DataTableColumn<Row>> = [
+    { key: 'select', header: 'Select', render: (contact) => <input type="checkbox" checked={selected.includes(asString(contact.member_id))} onChange={(event) => setSelected((current) => event.target.checked ? [...current, asString(contact.member_id)] : current.filter((id) => id !== asString(contact.member_id)))} />, align: 'center' },
+    { key: 'name', header: 'Name', render: (contact) => <strong>{titleCaseMemberName(contact.full_name, '')}</strong>, sortValue: (contact) => titleCaseMemberName(contact.full_name, '') },
+    { key: 'phone', header: 'Phone', render: (contact) => <span>{asString(contact.phone_e164, 'No phone')}</span>, sortValue: (contact) => asString(contact.phone_e164) },
+    { key: 'code', header: 'Contact Code', render: (contact) => <span>{asString(contact.member_code)}</span>, sortValue: (contact) => asString(contact.member_code) },
+    { key: 'events', header: 'Other Events', render: (contact) => <span>{asNumber(contact.other_event_count)}</span>, sortValue: (contact) => asNumber(contact.other_event_count), align: 'right' },
+  ]
   return (
-    <form className="mobile-sheet form-grid" onSubmit={(event) => { event.preventDefault(); mutation.mutate() }}>
-      <Input label="Full name" value={form.fullName} onChange={(fullName) => setForm((current) => ({ ...current, fullName }))} />
-      <Input label="Phone number" inputMode="tel" value={form.phone} onChange={(phone) => setForm((current) => ({ ...current, phone }))} />
-      <Input label="Alternative phone optional" inputMode="tel" value={form.alternativePhone} onChange={(alternativePhone) => setForm((current) => ({ ...current, alternativePhone }))} />
-      <Input label="Email optional" value={form.email} onChange={(email) => setForm((current) => ({ ...current, email }))} />
-      <Input label="Location optional" value={form.location} onChange={(location) => setForm((current) => ({ ...current, location }))} />
-      <Input label="Initial pledge optional" inputMode="decimal" value={form.initialPledgeAmount} onChange={(initialPledgeAmount) => setForm((current) => ({ ...current, initialPledgeAmount }))} />
-      <Input label="Custom pledge due date optional" type="date" value={form.initialPledgeDueDate} onChange={(initialPledgeDueDate) => setForm((current) => ({ ...current, initialPledgeDueDate }))} />
-      <p className="privacy-note">Default due date: {asDate(event?.pledgeDeadline)}. Leave blank to follow the event deadline.</p>
-      <Input label="Notes optional" value={form.notes} onChange={(notes) => setForm((current) => ({ ...current, notes }))} />
-      <label className="switch-row">
-        <span><strong>Send SMS notifications</strong><small>{form.phone ? 'Payment confirmations will be queued after receipt creation.' : 'Add a phone number to send payment confirmations.'}</small></span>
-        <input type="checkbox" role="switch" checked={form.smsEnabled && Boolean(form.phone)} disabled={!form.phone} onChange={(event) => setForm((current) => ({ ...current, smsEnabled: event.target.checked }))} />
-      </label>
-      {mutation.error ? <p className="field-error">{mutation.error.message}</p> : null}
+    <section className="mobile-sheet form-grid">
+      <div className="panel-header">
+        <div>
+          <h2>Add Members</h2>
+          <p>Select existing contacts for this event. No duplicate contact rows are created.</p>
+        </div>
+      </div>
+      <div className="inline-actions">
+        <button type="button" onClick={() => setSelected(visibleIds)}>Select All Visible</button>
+        <button type="button" onClick={() => setSelected([])}>Clear</button>
+      </div>
+      <DataTable
+        rows={filtered}
+        columns={columns}
+        getRowKey={(contact) => asString(contact.member_id)}
+        searchValue={query}
+        onSearchChange={setQuery}
+        searchPlaceholder="Search contacts"
+        emptyTitle="No available contacts."
+        emptyMessage="Contacts already attached to this event are hidden."
+      />
+      {attach.error ? <p className="field-error">{errorMessage(attach.error, 'Selected contacts could not be added.')}</p> : null}
       <div className="sheet-actions">
         <button type="button" onClick={onDone}>Cancel</button>
-        <button className="primary-button" type="submit" disabled={mutation.isPending}>{mutation.isPending ? 'Saving...' : 'Create Member'}</button>
+        <button className="primary-button" type="button" disabled={!selected.length || attach.isPending} onClick={() => attach.mutate()}>{attach.isPending ? 'Adding...' : `Add Selected Members (${selected.length})`}</button>
       </div>
-    </form>
+    </section>
   )
 }
 
@@ -675,12 +939,28 @@ function PledgesPanel({ tenantId, event, eventId, pledges, members, refresh, can
       </div>
       {canCreate ? <button className="desktop-primary-button" type="button" onClick={() => setFormOpen(true)}><Plus size={18} aria-hidden /> Record Pledge</button> : null}
       {formOpen ? <PledgeForm tenantId={tenantId} event={event} eventId={eventId} members={members} onDone={() => { setFormOpen(false); refresh() }} /> : null}
-      <div className="finance-card-list">
-        {filtered.map((pledge) => <PledgeCard key={asString(pledge.pledge_id)} pledge={pledge} eventId={eventId} />)}
-        {!members.length ? <EmptyState title="No members available for pledges." message="Add a member before creating a pledge." /> : null}
-        {members.length > 0 && !pledges.length ? <EmptyState title="No pledges have been recorded yet." message={canCreate ? 'Use Record Pledge to create the first pledge.' : 'You do not have permission to create pledges.'} /> : null}
-        {pledges.length > 0 && !filtered.length ? <EmptyState title="No pledges match this filter." message="Choose another pledge status." /> : null}
-      </div>
+      {!members.length ? <EmptyState title="No members available for pledges." message="Add a member before creating a pledge." /> : null}
+      {members.length ? (
+        <DataTable
+          title="Pledges"
+          rows={filtered}
+          columns={[
+            { key: 'member', header: 'Member', render: (pledge) => <strong>{titleCaseMemberName(pledge.member_name, '')}</strong>, sortValue: (pledge) => titleCaseMemberName(pledge.member_name, '') },
+            { key: 'phone', header: 'Phone', render: (pledge) => <span>{asString(pledge.phone_e164, 'No phone')}</span>, sortValue: (pledge) => asString(pledge.phone_e164) },
+            { key: 'category', header: 'Category', render: (pledge) => <span>{asString(pledge.category, 'No category')}</span>, sortValue: (pledge) => asString(pledge.category) },
+            { key: 'pledged', header: 'Pledged', render: (pledge) => <span>{moneyText(pledge.pledged_amount)}</span>, sortValue: (pledge) => asNumber(pledge.pledged_amount), align: 'right' },
+            { key: 'paid', header: 'Paid', render: (pledge) => <span>{moneyText(pledge.total_allocated)}</span>, sortValue: (pledge) => asNumber(pledge.total_allocated), align: 'right' },
+            { key: 'outstanding', header: 'Outstanding', render: (pledge) => <span>{moneyText(pledge.outstanding_amount)}</span>, sortValue: (pledge) => asNumber(pledge.outstanding_amount), align: 'right' },
+            { key: 'due', header: 'Due Date', render: (pledge) => <span>{asDate(pledge.effective_due_date ?? pledge.due_date)}</span>, sortValue: (pledge) => asString(pledge.effective_due_date ?? pledge.due_date) },
+            { key: 'status', header: 'Status', render: (pledge) => <StatusBadge tone={statusTone(pledge.status)}>{asString(pledge.status)}</StatusBadge>, sortValue: (pledge) => asString(pledge.status) },
+            { key: 'actions', header: 'Actions', render: (pledge) => <Link to={`/app/events/${eventId}/payments/new?eventMemberId=${asString(pledge.event_member_id)}&pledgeId=${asString(pledge.pledge_id)}`}>Record Payment</Link>, align: 'right' },
+          ]}
+          getRowKey={(pledge) => asString(pledge.pledge_id)}
+          emptyTitle={pledges.length > 0 ? 'No pledges match this filter.' : 'No pledges have been recorded yet.'}
+          emptyMessage={pledges.length > 0 ? 'Choose another pledge status.' : canCreate ? 'Use Record Pledge to create the first pledge.' : 'You do not have permission to create pledges.'}
+          mobileRender={(pledge) => <PledgeCard pledge={pledge} eventId={eventId} />}
+        />
+      ) : null}
     </section>
   )
 }
@@ -736,12 +1016,42 @@ function PaymentsPanel({ tenantId, eventId, payments, summary, refresh, canCreat
         <StatCard label="Confirmed" value={String(payments.filter((payment) => payment.status === 'CONFIRMED').length)} icon={CheckCircle2} tone="success" />
       </div>
       {canCreate ? <Link className="desktop-primary-button" to={`/app/events/${eventId}/payments/new`}><Plus size={18} aria-hidden /> Record Payment</Link> : null}
-      <div className="finance-card-list">
-        {payments.map((payment) => <PaymentCard key={asString(payment.payment_id)} payment={payment} eventId={eventId} tenantId={tenantId} onReverse={refresh} />)}
-        {!payments.length ? <EmptyState title="No payments have been recorded yet." message={canCreate ? 'Use Record Payment after adding a member and pledge.' : 'You do not have permission to record payments.'} /> : null}
-        {!today.length && payments.length ? <p className="privacy-note">No payments recorded today.</p> : null}
-      </div>
+      <DataTable
+        title="Payments"
+        rows={payments}
+        columns={[
+          { key: 'date', header: 'Date', render: (payment) => <span>{asDate(payment.payment_date)}</span>, sortValue: (payment) => asString(payment.payment_date) },
+          { key: 'receipt', header: 'Receipt', render: (payment) => payment.receipt_number ? <Link to={`/app/receipts/${asString(payment.receipt_id)}`}>{asString(payment.receipt_number)}</Link> : <span>No receipt</span>, sortValue: (payment) => asString(payment.receipt_number) },
+          { key: 'member', header: 'Member', render: (payment) => <strong>{titleCaseMemberName(payment.member_name, '')}</strong>, sortValue: (payment) => titleCaseMemberName(payment.member_name, '') },
+          { key: 'amount', header: 'Amount', render: (payment) => <span>{moneyText(payment.amount)}</span>, sortValue: (payment) => asNumber(payment.amount), align: 'right' },
+          { key: 'method', header: 'Method', render: (payment) => <span>{asString(payment.payment_method)}</span>, sortValue: (payment) => asString(payment.payment_method) },
+          { key: 'reference', header: 'Reference', render: (payment) => <span>{asString(payment.transaction_reference, 'None')}</span>, sortValue: (payment) => asString(payment.transaction_reference) },
+          { key: 'collector', header: 'Collector', render: (payment) => <span>{asString(payment.received_by, 'Ahadi user')}</span>, sortValue: (payment) => asString(payment.received_by) },
+          { key: 'status', header: 'Status', render: (payment) => <StatusBadge tone={statusTone(payment.status)}>{asString(payment.status)}</StatusBadge>, sortValue: (payment) => asString(payment.status) },
+          { key: 'actions', header: 'Actions', render: (payment) => <PaymentTableActions payment={payment} eventId={eventId} tenantId={tenantId} onReverse={refresh} />, align: 'right' },
+        ]}
+        getRowKey={(payment) => asString(payment.payment_id)}
+        emptyTitle="No payments have been recorded yet."
+        emptyMessage={canCreate ? 'Use Record Payment after adding a member and pledge.' : 'You do not have permission to record payments.'}
+        mobileRender={(payment) => <PaymentCard payment={payment} eventId={eventId} tenantId={tenantId} onReverse={refresh} />}
+      />
+      {!today.length && payments.length ? <p className="privacy-note">No payments recorded today.</p> : null}
     </section>
+  )
+}
+
+function PaymentTableActions({ payment, eventId, tenantId, onReverse }: { payment: Row; eventId: string; tenantId: string; onReverse: () => void }) {
+  const [reason] = useState('Correction requested')
+  const [idempotencyKey] = useState(() => crypto.randomUUID())
+  const reverse = useMutation({
+    mutationFn: () => api.reversePayment(tenantId, eventId, asString(payment.payment_id), { reason, idempotencyKey }),
+    onSuccess: onReverse,
+  })
+  return (
+    <div className="inline-actions">
+      {payment.receipt_number ? <Link to={`/app/receipts/${asString(payment.receipt_id)}`}>Receipt</Link> : null}
+      {payment.status === 'CONFIRMED' ? <button type="button" disabled={reverse.isPending} onClick={() => reverse.mutate()}>{reverse.isPending ? 'Reversing...' : 'Reverse'}</button> : null}
+    </div>
   )
 }
 
@@ -1403,36 +1713,28 @@ export function OutstandingPage() {
         {permissions.has('messages.send') ? <button type="button" onClick={() => setSelectionMode((value) => !value)}>{selectionMode ? 'Done' : 'Select'}</button> : null}
         {selectionMode ? <button type="button" onClick={() => setSelected(eligibleVisible.map((row) => asString(row.eventMemberId)))}>Select All Visible</button> : null}
       </section>
-      <div className="finance-card-list">
-        {filtered.map((row) => {
-          const eventMemberId = asString(row.eventMemberId)
-          const eligible = canSendBalanceReminder(row)
-          return (
-            <article className="finance-card" key={eventMemberId}>
-              <div className="card-title-row">
-                <div>
-                  <strong>{titleCaseMemberName(row.fullName)}</strong>
-                  <span>{asString(row.phone, 'No phone')} · {asString(row.memberCode)}</span>
-                </div>
-                <StatusBadge tone={eligible ? 'success' : 'warning'}>{eligible ? 'SMS Available' : asString(row.ineligibleReason, 'Not eligible')}</StatusBadge>
-              </div>
-              <div className="amount-triplet">
-                <span><small>Pledged</small>{moneyText(row.pledgedAmount)}</span>
-                <span><small>Paid</small>{moneyText(row.totalPaid)}</span>
-                <span><small>Outstanding</small>{moneyText(row.outstandingAmount)}</span>
-              </div>
-              <p className="privacy-note">Due {asDate(row.dueDate)} · {asNumber(row.daysOverdue) > 0 ? `${asNumber(row.daysOverdue)} days overdue` : row.isDueSoon ? 'due soon' : 'not overdue'} · Last reminder: {reminderStatusText(row)}</p>
-              <div className="card-actions">
-                {selectionMode ? <label className="checkbox-row"><input type="checkbox" disabled={!eligible} checked={selected.includes(eventMemberId)} onChange={(event) => setSelected((current) => event.target.checked ? [...current, eventMemberId] : current.filter((id) => id !== eventMemberId))} /> Select</label> : null}
-                {permissions.has('messages.send') && eligible ? <button type="button" onClick={() => setSingleMember(row)}>Send Reminder</button> : null}
-                <Link to={`/app/events/${eventId}/members/${eventMemberId}`}>View Member</Link>
-              </div>
-            </article>
-          )
-        })}
-        {!rows.length ? <EmptyState title="No outstanding balances." message="Members with unpaid pledge balances will appear here." /> : null}
-        {rows.length > 0 && !filtered.length ? <EmptyState title="No members match these filters." message="Change the filter or search text." /> : null}
-      </div>
+      <DataTable
+        title="Outstanding Members"
+        rows={filtered}
+        columns={[
+          { key: 'member', header: 'Member', render: (row) => <Link to={`/app/events/${eventId}/members/${asString(row.eventMemberId)}`}><strong>{titleCaseMemberName(row.fullName, '')}</strong><small>{asString(row.memberCode)}</small></Link>, sortValue: (row) => titleCaseMemberName(row.fullName, '') },
+          { key: 'phone', header: 'Phone', render: (row) => <span>{asString(row.phone, 'No phone')}</span>, sortValue: (row) => asString(row.phone) },
+          { key: 'pledged', header: 'Pledged', render: (row) => <span>{moneyText(row.pledgedAmount)}</span>, sortValue: (row) => asNumber(row.pledgedAmount), align: 'right' },
+          { key: 'paid', header: 'Paid', render: (row) => <span>{moneyText(row.totalPaid)}</span>, sortValue: (row) => asNumber(row.totalPaid), align: 'right' },
+          { key: 'outstanding', header: 'Outstanding', render: (row) => <span>{moneyText(row.outstandingAmount)}</span>, sortValue: (row) => asNumber(row.outstandingAmount), align: 'right' },
+          { key: 'due', header: 'Due', render: (row) => <span>{asDate(row.dueDate)}</span>, sortValue: (row) => asString(row.dueDate) },
+          { key: 'days', header: 'Days Overdue', render: (row) => <span>{asNumber(row.daysOverdue)}</span>, sortValue: (row) => asNumber(row.daysOverdue), align: 'right' },
+          { key: 'lastReminder', header: 'Last Reminder', render: (row) => <span>{reminderStatusText(row)}</span>, sortValue: (row) => asString(row.lastReminder) },
+          { key: 'actions', header: 'Actions', render: (row) => {
+            const eventMemberId = asString(row.eventMemberId)
+            const eligible = canSendBalanceReminder(row)
+            return <div className="inline-actions">{selectionMode ? <input aria-label={`Select ${titleCaseMemberName(row.fullName, 'member')}`} type="checkbox" disabled={!eligible} checked={selected.includes(eventMemberId)} onChange={(event) => setSelected((current) => event.target.checked ? [...current, eventMemberId] : current.filter((id) => id !== eventMemberId))} /> : null}{permissions.has('messages.send') && eligible ? <button type="button" onClick={() => setSingleMember(row)}>SMS</button> : null}<Link to={`/app/events/${eventId}/members/${eventMemberId}`}>View</Link></div>
+          }, align: 'right' },
+        ]}
+        getRowKey={(row) => asString(row.eventMemberId)}
+        emptyTitle={rows.length ? 'No members match these filters.' : 'No outstanding balances.'}
+        emptyMessage={rows.length ? 'Change the filter or search text.' : 'Members with unpaid pledge balances will appear here.'}
+      />
       {selectionMode && selected.length ? <div className="mobile-action-bar"><button type="button" onClick={() => setBulkPreview(true)}>Send Reminders ({selected.length})</button></div> : null}
       {singleMember ? <BalanceReminderSheet tenantId={tenantId ?? ''} eventId={eventId} member={singleMember} onClose={() => setSingleMember(null)} onSent={() => { setSingleMember(null); void outstanding.refetch() }} /> : null}
       {bulkPreview ? <section className="mobile-sheet form-grid">
@@ -1602,9 +1904,25 @@ export function SmsHistoryPage() {
             </div>
           </div>
           <div className="messages-list">
-            {filtered.map((message) => <MessageHistoryCard key={asString(message.id)} message={message} tenantId={tenantId} canResend={canSendMessages} onResent={() => void messages.refetch()} />)}
-            {!rows.length ? <EmptyState title="No SMS messages yet." message="Payment confirmations will appear here after payments are recorded." /> : null}
-            {rows.length > 0 && !filtered.length ? <EmptyState title="No messages match these filters." message="Change the status, event, or search text." /> : null}
+            <DataTable
+              title="Message History"
+              rows={filtered}
+              columns={[
+                { key: 'date', header: 'Date', render: (message) => <span>{asDateTime(message.created_at)}</span>, sortValue: (message) => asString(message.created_at) },
+                { key: 'member', header: 'Member', render: (message) => <strong>{titleCaseMemberName(message.member_name, 'Recipient')}</strong>, sortValue: (message) => titleCaseMemberName(message.member_name, '') },
+                { key: 'event', header: 'Event', render: (message) => <span>{asString(message.event_name, 'No event')}</span>, sortValue: (message) => asString(message.event_name) },
+                { key: 'template', header: 'Template', render: (message) => <span>{asString(message.template_code, 'Message')}</span>, sortValue: (message) => asString(message.template_code) },
+                { key: 'provider', header: 'Provider', render: (message) => <span>{asString(message.provider, 'SMS')}</span>, sortValue: (message) => asString(message.provider) },
+                { key: 'sender', header: 'Sender ID', render: (message) => <span>{asString(message.sender_id, 'MICHANGO')}</span>, sortValue: (message) => asString(message.sender_id) },
+                { key: 'characters', header: 'Characters', render: (message) => <span>{asNumber(message.character_count)}</span>, sortValue: (message) => asNumber(message.character_count), align: 'right' },
+                { key: 'status', header: 'Status', render: (message) => <StatusBadge tone={statusTone(message.status)}>{asString(message.status, 'QUEUED')}</StatusBadge>, sortValue: (message) => asString(message.status) },
+                { key: 'actions', header: 'Actions', render: (message) => <MessageTableActions message={message} tenantId={tenantId} canResend={canSendMessages} onResent={() => void messages.refetch()} />, align: 'right' },
+              ]}
+              getRowKey={(message) => asString(message.id)}
+              emptyTitle={rows.length ? 'No messages match these filters.' : 'No SMS messages yet.'}
+              emptyMessage={rows.length ? 'Change the status, event, or search text.' : 'Payment confirmations will appear here after payments are recorded.'}
+              mobileRender={(message) => <MessageHistoryCard message={message} tenantId={tenantId} canResend={canSendMessages} onResent={() => void messages.refetch()} />}
+            />
           </div>
         </section>
         {(canManageTemplates || canManageSettings) ? (
@@ -2041,6 +2359,16 @@ function MessageHistoryCard({ message, tenantId, canResend, onResent }: { messag
   )
 }
 
+function MessageTableActions({ message, tenantId, canResend, onResent }: { message: Row; tenantId: string; canResend: boolean; onResent: () => void }) {
+  const status = asString(message.status, 'QUEUED')
+  return (
+    <div className="inline-actions">
+      {asString(message.event_id) && asString(message.event_member_id) ? <Link to={`/app/events/${asString(message.event_id)}/members/${asString(message.event_member_id)}`}>Member</Link> : null}
+      {status === 'FAILED' && canResend ? <RetrySmsButton tenantId={tenantId} outboxId={asString(message.id)} onDone={onResent} /> : null}
+    </div>
+  )
+}
+
 function renderPreviewTemplate(body: string) {
   return body.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_match, key: string) => smsPreviewValues[key] ?? '')
 }
@@ -2187,33 +2515,25 @@ export function TenantUsersPage() {
         description="Tenant team members, tenant roles and event assignments."
         action={permissions.has('users.invite') ? <button className="desktop-primary-button" type="button" disabled>Invite User</button> : null}
       />
-      <div className="finance-card-list">
-        {rows.map((user) => {
-          const roles = Array.isArray(user.roles) ? user.roles.map(String) : []
-          const assignedEvents = Array.isArray(user.assigned_events) ? user.assigned_events.map(jsonRecord) : []
-          return (
-            <article className="finance-card" key={asString(user.tenant_user_id)}>
-              <div className="card-title-row">
-                <div>
-                  <strong>{asString(user.full_name, 'User')}</strong>
-                  <span>{asString(user.phone_e164, 'No phone')} · {asString(user.email, 'No email')}</span>
-                </div>
-                <StatusBadge tone={statusTone(user.status)}>{asString(user.status, 'ACTIVE')}</StatusBadge>
-              </div>
-              <div className="amount-triplet">
-                <span><small>Roles</small>{roles.join(', ') || 'No role'}</span>
-                <span><small>Events</small>{assignedEvents.map((event) => asString(event.name)).filter(Boolean).join(', ') || 'All permitted events'}</span>
-                <span><small>Joined</small>{asDate(user.joined_at ?? user.created_at)}</span>
-              </div>
-              <div className="card-actions">
-                {permissions.has('users.manage_roles') ? <button type="button" disabled>Manage Roles</button> : null}
-                {permissions.has('users.suspend') && !roles.includes('TENANT_OWNER') ? <button type="button" disabled>Suspend</button> : null}
-              </div>
-            </article>
-          )
-        })}
-        {!rows.length ? <EmptyState title="No tenant users found." message="Tenant owners appear here after onboarding and invitations." /> : null}
-      </div>
+      <DataTable
+        title="Tenant Users"
+        rows={rows}
+        columns={[
+          { key: 'user', header: 'User', render: (user) => <strong>{asString(user.full_name, 'User')}<small>{asString(user.email, 'No email')}</small></strong>, sortValue: (user) => asString(user.full_name) },
+          { key: 'phone', header: 'Phone', render: (user) => <span>{asString(user.phone_e164, 'No phone')}</span>, sortValue: (user) => asString(user.phone_e164) },
+          { key: 'role', header: 'Role', render: (user) => <span>{Array.isArray(user.roles) ? user.roles.map(String).join(', ') || 'No role' : 'No role'}</span>, sortValue: (user) => Array.isArray(user.roles) ? user.roles.map(String).join(', ') : '' },
+          { key: 'events', header: 'Assigned Events', render: (user) => {
+            const assignedEvents = Array.isArray(user.assigned_events) ? user.assigned_events.map(jsonRecord) : []
+            return <span>{assignedEvents.map((event) => asString(event.name)).filter(Boolean).join(', ') || 'All permitted events'}</span>
+          }, sortValue: (user) => Array.isArray(user.assigned_events) ? user.assigned_events.length : 0 },
+          { key: 'status', header: 'Status', render: (user) => <StatusBadge tone={statusTone(user.status)}>{asString(user.status, 'ACTIVE')}</StatusBadge>, sortValue: (user) => asString(user.status) },
+          { key: 'lastSeen', header: 'Last Seen', render: (user) => <span>{asDateTime(user.last_seen_at ?? user.updated_at ?? user.joined_at)}</span>, sortValue: (user) => asString(user.last_seen_at ?? user.updated_at ?? user.joined_at) },
+          { key: 'actions', header: 'Actions', render: (user) => <div className="inline-actions">{permissions.has('users.manage_roles') ? <button type="button" disabled>Roles</button> : null}{permissions.has('users.suspend') && !(Array.isArray(user.roles) && user.roles.map(String).includes('TENANT_OWNER')) ? <button type="button" disabled>Suspend</button> : null}</div>, align: 'right' },
+        ]}
+        getRowKey={(user) => asString(user.tenant_user_id)}
+        emptyTitle="No tenant users found."
+        emptyMessage="Tenant owners appear here after onboarding and invitations."
+      />
     </PageContainer>
   )
 }
@@ -2695,7 +3015,19 @@ function ReportDetailPage({ tenantId, eventId, eventName, reportType }: { tenant
       {report.isLoading ? <LoadingState title="Loading report" message="Calculating server-side report data." /> : null}
       {report.isError ? <ErrorState title="Unable to load report" message={errorMessage(report.error, 'Report could not be loaded.')} /> : null}
       {!report.isLoading && !report.isError ? <ReportSummaryCards reportType={reportType} summary={summary} /> : null}
-      {!report.isLoading && !report.isError && rows.length ? <section className="finance-card-list">{rows.map((row, index) => <ReportRowCard key={`${reportType}-${index}-${asString(row.id ?? row.paymentId ?? row.pledgeId ?? row.date)}`} reportType={reportType} row={row} summary={summary} />)}</section> : null}
+      {!report.isLoading && !report.isError && rows.length ? (
+        <DataTable
+          title="Report Rows"
+          rows={rows}
+          columns={reportTableColumns(reportType, rows)}
+          getRowKey={(row, index) => `${reportType}-${index}-${asString(row.id ?? row.paymentId ?? row.pledgeId ?? row.date)}`}
+          emptyTitle={emptyReportMessage(reportType)}
+          emptyMessage="Adjust the report filters or add financial records to this event."
+          initialPageSize={Number(filters.pageSize)}
+          pageSizeOptions={[25, 50, 100]}
+          mobileRender={(row) => <ReportRowCard reportType={reportType} row={row} summary={summary} />}
+        />
+      ) : null}
       {!report.isLoading && !report.isError && !rows.length ? <EmptyState title={emptyReportMessage(reportType)} message="Adjust the report filters or add financial records to this event." /> : null}
       {!report.isLoading && !report.isError && asNumber(pagination.totalPages) > 1 ? <div className="sheet-actions"><button type="button" disabled={page <= 1} onClick={() => setPage((value) => Math.max(1, value - 1))}>Previous</button><span>Page {page} of {asNumber(pagination.totalPages)}</span><button type="button" disabled={page >= asNumber(pagination.totalPages)} onClick={() => setPage((value) => value + 1)}>Next</button></div> : null}
     </PageContainer>
@@ -2707,6 +3039,51 @@ function reportSortOptions(reportType: string) {
   if (reportType === 'payments') return ['DATE', 'AMOUNT', 'MEMBER']
   if (reportType === 'outstanding') return ['OUTSTANDING', 'DAYS_OVERDUE', 'DUE_DATE', 'MEMBER']
   return ['DATE']
+}
+
+function reportTableColumns(reportType: string, rows: Row[]): Array<DataTableColumn<Row>> {
+  if (reportType === 'pledges') {
+    return [
+      { key: 'member', header: 'Member', render: (row) => <strong>{titleCaseMemberName(row.member, titleCaseMemberName(row.memberName, ''))}</strong>, sortValue: (row) => titleCaseMemberName(row.member ?? row.memberName, '') },
+      { key: 'phone', header: 'Phone', render: (row) => <span>{asString(row.phone, 'No phone')}</span>, sortValue: (row) => asString(row.phone) },
+      { key: 'category', header: 'Category', render: (row) => <span>{asString(row.category, 'No category')}</span>, sortValue: (row) => asString(row.category) },
+      { key: 'pledged', header: 'Pledged', render: (row) => <span>{moneyText(row.pledged)}</span>, sortValue: (row) => asNumber(row.pledged), align: 'right' },
+      { key: 'paid', header: 'Paid', render: (row) => <span>{moneyText(row.paid)}</span>, sortValue: (row) => asNumber(row.paid), align: 'right' },
+      { key: 'outstanding', header: 'Outstanding', render: (row) => <span>{moneyText(row.outstanding)}</span>, sortValue: (row) => asNumber(row.outstanding), align: 'right' },
+      { key: 'dueDate', header: 'Due Date', render: (row) => <span>{asDate(row.dueDate)}</span>, sortValue: (row) => asString(row.dueDate) },
+      { key: 'status', header: 'Status', render: (row) => <StatusBadge tone={statusTone(row.status)}>{asString(row.status, 'Report')}</StatusBadge>, sortValue: (row) => asString(row.status) },
+    ]
+  }
+  if (reportType === 'payments') {
+    return [
+      { key: 'date', header: 'Date', render: (row) => <span>{asDateTime(row.date ?? row.paymentDate)}</span>, sortValue: (row) => asString(row.date ?? row.paymentDate) },
+      { key: 'receipt', header: 'Receipt', render: (row) => <span>{asString(row.receipt ?? row.receiptNumber, 'No receipt')}</span>, sortValue: (row) => asString(row.receipt ?? row.receiptNumber) },
+      { key: 'member', header: 'Member', render: (row) => <strong>{titleCaseMemberName(row.member ?? row.memberName, '')}</strong>, sortValue: (row) => titleCaseMemberName(row.member ?? row.memberName, '') },
+      { key: 'amount', header: 'Amount', render: (row) => <span>{moneyText(row.amount)}</span>, sortValue: (row) => asNumber(row.amount), align: 'right' },
+      { key: 'method', header: 'Method', render: (row) => <span>{asString(row.method ?? row.paymentMethod)}</span>, sortValue: (row) => asString(row.method ?? row.paymentMethod) },
+      { key: 'reference', header: 'Reference', render: (row) => <span>{asString(row.reference ?? row.transactionReference, 'None')}</span>, sortValue: (row) => asString(row.reference ?? row.transactionReference) },
+      { key: 'status', header: 'Status', render: (row) => <StatusBadge tone={statusTone(row.status)}>{asString(row.status, 'Report')}</StatusBadge>, sortValue: (row) => asString(row.status) },
+    ]
+  }
+  if (reportType === 'outstanding') {
+    return [
+      { key: 'member', header: 'Member', render: (row) => <strong>{titleCaseMemberName(row.member ?? row.memberName, '')}</strong>, sortValue: (row) => titleCaseMemberName(row.member ?? row.memberName, '') },
+      { key: 'phone', header: 'Phone', render: (row) => <span>{asString(row.phone, 'No phone')}</span>, sortValue: (row) => asString(row.phone) },
+      { key: 'pledged', header: 'Pledged', render: (row) => <span>{moneyText(row.pledged)}</span>, sortValue: (row) => asNumber(row.pledged), align: 'right' },
+      { key: 'paid', header: 'Paid', render: (row) => <span>{moneyText(row.paid)}</span>, sortValue: (row) => asNumber(row.paid), align: 'right' },
+      { key: 'outstanding', header: 'Outstanding', render: (row) => <span>{moneyText(row.outstanding)}</span>, sortValue: (row) => asNumber(row.outstanding), align: 'right' },
+      { key: 'due', header: 'Due', render: (row) => <span>{asDate(row.dueDate ?? row.due)}</span>, sortValue: (row) => asString(row.dueDate ?? row.due) },
+      { key: 'daysOverdue', header: 'Days Overdue', render: (row) => <span>{asNumber(row.daysOverdue)}</span>, sortValue: (row) => asNumber(row.daysOverdue), align: 'right' },
+    ]
+  }
+  const keys = Object.keys(rows[0] ?? {}).filter((key) => !['id', 'pledgeId', 'paymentId', 'eventMemberId', 'memberId', 'collectorId'].includes(key)).slice(0, 8)
+  return keys.map((key) => ({
+    key,
+    header: key.replace(/([A-Z])/g, ' $1'),
+    render: (row: Row) => <span>{reportRowValue(key, row[key])}</span>,
+    sortValue: (row: Row) => typeof row[key] === 'number' ? asNumber(row[key]) : asString(row[key]),
+    align: ['amount', 'total', 'pledged', 'paid', 'outstanding', 'collected'].some((word) => key.toLowerCase().includes(word)) ? 'right' : 'left',
+  }))
 }
 
 function ReportSummaryCards({ reportType, summary }: { reportType: string; summary: Row }) {

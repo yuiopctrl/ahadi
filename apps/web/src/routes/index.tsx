@@ -4,7 +4,7 @@ import { PlatformAppLayout } from '../layouts/PlatformAppLayout'
 import { TenantAppLayout } from '../layouts/TenantAppLayout'
 import { AuthPage } from '../pages/auth'
 import { PlatformBetaPage, PlatformBillingGatewaysPage, PlatformBillingReconciliationPage, PlatformErrorsPage, PlatformFeaturesPage, PlatformFeedbackPage, PlatformPage, PlatformSmsProvidersPage, PlatformSupportPage, PlatformTenantDetailPage } from '../pages/platform'
-import { EventDetailPage, MemberDetailPage, OutstandingPage, PaymentEntryPage, ReceiptPage, ReportsPage, ShareListPage, SmsHistoryPage, TenantBillingInvoicePage, TenantBillingPage, TenantDashboardPage, TenantHelpPage, TenantListPage, TenantSettingsPage, TenantUsersPage } from '../pages/tenant'
+import { ContactDetailPage, ContactsPage, EventDetailPage, MemberDetailPage, OutstandingPage, PaymentEntryPage, ReceiptPage, ReportsPage, ShareListPage, SmsHistoryPage, TenantBillingInvoicePage, TenantBillingPage, TenantDashboardPage, TenantHelpPage, TenantListPage, TenantSettingsPage, TenantUsersPage } from '../pages/tenant'
 import { AuthenticatedRoute, OnboardingRoute, PinUnlockedRoute, PlatformOwnerRoute, PublicRoute, TenantRoute } from './guards'
 
 export const router = createBrowserRouter([
@@ -66,7 +66,9 @@ export const router = createBrowserRouter([
                   { path: 'events/:eventId/payments/new', element: <PaymentEntryPage /> },
                   { path: 'events/:eventId/messages', element: <EventDetailPage section="messages" /> },
                   { path: 'receipts/:receiptId', element: <ReceiptPage /> },
-                  { path: 'members', element: <TenantListPage title="Members" kind="members" /> },
+                  { path: 'contacts', element: <ContactsPage /> },
+                  { path: 'contacts/:memberId', element: <ContactDetailPage /> },
+                  { path: 'members', element: <ContactsPage /> },
                   { path: 'payments', element: <TenantListPage title="Payments" kind="payments" /> },
                   { path: 'messages', element: <SmsHistoryPage /> },
                   { path: 'reports', element: <ReportsPage /> },

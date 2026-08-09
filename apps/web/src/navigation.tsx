@@ -23,7 +23,7 @@ import type { EventSummary, TenantMembershipContext } from '@ahadi/types'
 const mobileNav = [
   { to: '/app', label: 'Home', icon: Home, end: true },
   { to: '/app/events', label: 'Events', icon: CalendarDays, end: true },
-  { to: '/app/members', label: 'Members', icon: Users },
+  { to: '/app/contacts', label: 'Contacts', icon: Users },
   { to: '/app/payments', label: 'Payments', icon: CreditCard },
 ]
 
@@ -48,7 +48,7 @@ function desktopNav(event: EventSummary | null) {
   return [
     { to: '/app', label: 'Dashboard', icon: Gauge, end: true },
     { to: '/app/events', label: 'Events', icon: CalendarDays, end: true },
-    { to: event ? `${eventBase}/members` : '/app/members', label: 'Members', icon: Users },
+    { to: event ? `${eventBase}/members` : '/app/contacts', label: event ? 'Members' : 'Contacts', icon: Users },
     { to: event ? `${eventBase}/pledges` : '/app/events', label: 'Pledges', icon: PieChart },
     { to: event ? `${eventBase}/outstanding` : '/app/events', label: 'Outstanding', icon: Clock3 },
     { to: event ? `${eventBase}/share` : '/app/events', label: 'Share List', icon: Share2 },
