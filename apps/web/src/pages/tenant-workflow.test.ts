@@ -48,6 +48,35 @@ test('financial pages render explicit empty and error states instead of blank li
   assert.doesNotMatch(tenantPage, /return null/)
 })
 
+test('member detail page can edit member profile fields', () => {
+  assert.match(apiClient, /updateMember: \(tenantId: string, memberId: string, payload/)
+  assert.match(tenantPage, /permissions\.has\('members\.update'\)/)
+  assert.match(tenantPage, /MemberEditForm/)
+  assert.match(tenantPage, /api\.updateMember\(tenantId, memberId/)
+  assert.match(tenantPage, /Save Changes/)
+  assert.match(tenantPage, /SMS notifications/)
+})
+
+test('messages page can select and preview outstanding reminder SMS', () => {
+  assert.match(tenantPage, /Outstanding SMS Reminders/)
+  assert.match(tenantPage, /BalanceReminderSelection/)
+  assert.match(tenantPage, /api\.eventOutstandingMembers\(tenantId, eventId\)/)
+  assert.match(tenantPage, /templateCode: 'BALANCE_REMINDER'/)
+  assert.match(tenantPage, /api\.sendBulkBalanceReminders\(tenantId, eventId/)
+  assert.match(tenantPage, /Select All Ready/)
+  assert.match(tenantPage, /Review Reminder SMS/)
+})
+
+test('messages page can select and preview completed pledge SMS', () => {
+  assert.match(apiClient, /eventCompletedPledgeMembers/)
+  assert.match(apiClient, /sendBulkCompletedPledgeSms/)
+  assert.match(tenantPage, /Completed Pledge SMS/)
+  assert.match(tenantPage, /CompletedPledgeSelection/)
+  assert.match(tenantPage, /templateCode: 'PLEDGE_COMPLETED'/)
+  assert.match(tenantPage, /Preview Completed SMS/)
+  assert.match(tenantPage, /Review Completed Pledge SMS/)
+})
+
 test('record payment flow uses route event context and stable idempotency per attempt', () => {
   assert.match(tenantPage, /useActiveEventContext\(eventId\)/)
   assert.match(tenantPage, /const \[idempotencyKey, resetIdempotencyKey\] = useState\(\(\) => crypto\.randomUUID\(\)\)/)

@@ -346,7 +346,12 @@ const bulkPledgeRequestSchema = z.object({
   idempotencyKey: z.string().uuid(),
 })
 
-const smsManualTemplateCodeSchema = z.enum(['PLEDGE_REQUEST', 'BALANCE_REMINDER'])
+const bulkCompletedPledgeSchema = z.object({
+  eventMemberIds: z.array(z.string().uuid()).min(1),
+  idempotencyKey: z.string().uuid(),
+})
+
+const smsManualTemplateCodeSchema = z.enum(['PLEDGE_REQUEST', 'BALANCE_REMINDER', 'PLEDGE_COMPLETED'])
 
 const smsPreviewSchema = z.object({
   templateCode: smsManualTemplateCodeSchema,
@@ -1327,6 +1332,84 @@ function smsEnqueueFailureReason(error: unknown) {
 
 function parseSmsTemplateCodeParam(value: unknown): z.infer<typeof smsTemplateCodeSchema> {
   return smsTemplateCodeSchema.parse(String(value ?? '').trim().toUpperCase().replaceAll('-', '_'))
+}
+
+function normalizeSmsTemplateVariableName(value: string): string {
+  return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '')
+}
+
+function smsTemplateVariableAliases(code: SmsTemplateCode): Record<string, string> {
+  const shared = {
+    event: 'event_name',
+    eventname: 'event_name',
+    event_name: 'event_name',
+    member: 'member_name',
+    membername: 'member_name',
+    member_name: 'member_name',
+    name: 'member_name',
+  }
+  if (code === 'PAYMENT_CONFIRMATION') {
+    return {
+      ...shared,
+      amount: 'payment_amount',
+      balance: 'balance',
+      outstanding: 'balance',
+      payment: 'payment_amount',
+      paymentamount: 'payment_amount',
+      payment_amount: 'payment_amount',
+      paymentmethod: 'payment_method',
+      payment_method: 'payment_method',
+      receipt: 'receipt_number',
+      receiptno: 'receipt_number',
+      receiptnumber: 'receipt_number',
+      receipt_number: 'receipt_number',
+    }
+  }
+  if (code === 'PLEDGE_REQUEST') {
+    return {
+      ...shared,
+      deadline: 'pledge_deadline',
+      eventdate: 'event_date',
+      event_date: 'event_date',
+      pledgedate: 'pledge_deadline',
+      pledgedeadline: 'pledge_deadline',
+      pledge_deadline: 'pledge_deadline',
+    }
+  }
+  return {
+    ...shared,
+    amount: 'pledge_amount',
+    balance: 'balance',
+    due: 'due_date',
+    duedate: 'due_date',
+    due_date: 'due_date',
+    outstanding: 'balance',
+    pledge: 'pledge_amount',
+    pledgeamount: 'pledge_amount',
+    pledge_amount: 'pledge_amount',
+  }
+}
+
+function normalizeSmsTemplateBody(code: SmsTemplateCode, body: string): string {
+  if (/<[^>]+>/.test(body)) {
+    throw new AppError('SMS_TEMPLATE_INVALID', 'SMS templates cannot contain HTML.')
+  }
+  const allowedVariables = smsTemplateAllowedVariablesByCode[code]
+  const allowed = new Set(allowedVariables)
+  const aliases = smsTemplateVariableAliases(code)
+  const normalized = body.replace(/\{\{\s*([^{}]+?)\s*\}\}/g, (_match, rawVariable: string) => {
+    const normalizedName = normalizeSmsTemplateVariableName(rawVariable)
+    const compactName = normalizedName.replaceAll('_', '')
+    const allowedVariable = aliases[normalizedName] ?? aliases[compactName] ?? allowedVariables.find((variable) => variable === normalizedName || variable.replaceAll('_', '') === compactName)
+    if (!allowedVariable || !allowed.has(allowedVariable) || sensitiveSmsTemplateVariables.has(normalizedName) || sensitiveSmsTemplateVariables.has(compactName)) {
+      throw new AppError('SMS_TEMPLATE_INVALID', `Unsupported SMS template variable: ${rawVariable.trim()}`)
+    }
+    return `{{${allowedVariable}}}`
+  }).trim()
+  if (normalized.length > 918) {
+    throw new AppError('SMS_TEMPLATE_INVALID', 'SMS template is too long.')
+  }
+  return normalized
 }
 
 async function enqueuePledgeRegistrationSms(client: ReturnType<typeof createUserSupabase>, tenantId: string, eventId: string, pledgeId: string, requestId: string): Promise<Record<string, unknown>> {
@@ -2879,7 +2962,7 @@ app.post('/api/v1/events/:eventId/reminders/balance', requireAuth, loadUserConte
       p_event_id: eventId,
       p_event_member_id: input.eventMemberId,
       p_idempotency_key: input.idempotencyKey,
-      p_cooldown_hours: env.BALANCE_REMINDER_COOLDOWN_HOURS,
+      p_cooldown_hours: 0,
     })
     if (error) {
       throwFinancialDatabaseError(error, 'BALANCE_REMINDER_QUEUE_FAILED')
@@ -2923,7 +3006,7 @@ app.post('/api/v1/events/:eventId/messages/preview/bulk', requireAuth, loadUserC
       p_event_id: eventId,
       p_event_member_ids: input.eventMemberIds,
       p_template_code: input.templateCode,
-      p_cooldown_hours: input.templateCode === 'PLEDGE_REQUEST' ? env.PLEDGE_REQUEST_COOLDOWN_HOURS : env.BALANCE_REMINDER_COOLDOWN_HOURS,
+      p_cooldown_hours: input.templateCode === 'PLEDGE_REQUEST' ? env.PLEDGE_REQUEST_COOLDOWN_HOURS : 0,
     })
     if (error) {
       throwFinancialDatabaseError(error, 'SMS_BULK_PREVIEW_FAILED')
@@ -2946,6 +3029,24 @@ app.get('/api/v1/events/:eventId/messages/no-pledge-members', requireAuth, loadU
     })
     if (error) {
       throwFinancialDatabaseError(error, 'NO_PLEDGE_MEMBERS_LIST_FAILED')
+    }
+    response.json({ data: jsonArray(data) })
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.get('/api/v1/events/:eventId/messages/completed-pledges', requireAuth, loadUserContext, requireTenantContext, async (request, response, next) => {
+  try {
+    const tenantId = tenantIdFromRequest(request)
+    const eventId = uuidParamSchema.parse(request.params['eventId'])
+    const client = createUserSupabase(request.auth?.accessToken ?? '')
+    const { data, error } = await client.rpc('rpc_list_event_completed_pledge_members', {
+      p_tenant_id: tenantId,
+      p_event_id: eventId,
+    })
+    if (error) {
+      throwFinancialDatabaseError(error, 'COMPLETED_PLEDGE_MEMBERS_LIST_FAILED')
     }
     response.json({ data: jsonArray(data) })
   } catch (error) {
@@ -3029,6 +3130,44 @@ app.post('/api/v1/events/:eventId/messages/pledge-request/bulk', requireAuth, lo
   }
 })
 
+app.post('/api/v1/events/:eventId/messages/completed-pledges/bulk', requireAuth, loadUserContext, requireTenantContext, async (request, response, next) => {
+  try {
+    const tenantId = tenantIdFromRequest(request)
+    const eventId = uuidParamSchema.parse(request.params['eventId'])
+    const input = bulkCompletedPledgeSchema.parse(request.body)
+    const client = createUserSupabase(request.auth?.accessToken ?? '')
+    const preview = await client.rpc('rpc_preview_event_member_sms_bulk', {
+      p_tenant_id: tenantId,
+      p_event_id: eventId,
+      p_event_member_ids: input.eventMemberIds,
+      p_template_code: 'PLEDGE_COMPLETED',
+      p_cooldown_hours: 0,
+    })
+    if (preview.error) {
+      throwFinancialDatabaseError(preview.error, 'SMS_BULK_PREVIEW_FAILED')
+    }
+    const validIds = validPreviewEventMemberIds(preview.data)
+    if (!validIds.length) {
+      response.status(200).json({ data: { ...jsonRecord(preview.data), queued: 0, reason: 'NO_VALID_SMS_MESSAGES' } })
+      return
+    }
+    const { data, error } = await client.rpc('rpc_enqueue_completed_pledge_bulk', {
+      p_tenant_id: tenantId,
+      p_event_id: eventId,
+      p_event_member_ids: validIds,
+      p_idempotency_key: input.idempotencyKey,
+      p_max_batch_size: env.BALANCE_REMINDER_MAX_BATCH_SIZE,
+    })
+    if (error) {
+      throwFinancialDatabaseError(error, 'COMPLETED_PLEDGE_BULK_QUEUE_FAILED')
+    }
+    const result = notificationFromEnqueue(data)
+    response.status(201).json({ data: result })
+  } catch (error) {
+    next(error)
+  }
+})
+
 app.post('/api/v1/events/:eventId/reminders/balance/bulk', requireAuth, loadUserContext, requireTenantContext, async (request, response, next) => {
   try {
     const tenantId = tenantIdFromRequest(request)
@@ -3041,7 +3180,7 @@ app.post('/api/v1/events/:eventId/reminders/balance/bulk', requireAuth, loadUser
       p_event_id: eventId,
       p_event_member_ids: input.eventMemberIds,
       p_template_code: 'BALANCE_REMINDER',
-      p_cooldown_hours: env.BALANCE_REMINDER_COOLDOWN_HOURS,
+      p_cooldown_hours: 0,
     })
     if (preview.error) {
       throwFinancialDatabaseError(preview.error, 'SMS_BULK_PREVIEW_FAILED')
@@ -3056,7 +3195,7 @@ app.post('/api/v1/events/:eventId/reminders/balance/bulk', requireAuth, loadUser
       p_event_id: eventId,
       p_event_member_ids: validIds,
       p_idempotency_key: input.idempotencyKey,
-      p_cooldown_hours: env.BALANCE_REMINDER_COOLDOWN_HOURS,
+      p_cooldown_hours: 0,
       p_max_batch_size: env.BALANCE_REMINDER_MAX_BATCH_SIZE,
     })
     if (error) {
@@ -3349,14 +3488,21 @@ app.put('/api/v1/messages/templates/:code', requireAuth, loadUserContext, requir
     const tenantId = tenantIdFromRequest(request)
     const code = parseSmsTemplateCodeParam(request.params['code'])
     const input = smsTemplateSaveSchema.parse(request.body)
+    const body = normalizeSmsTemplateBody(code, input.body)
     const client = createUserSupabase(request.auth?.accessToken ?? '')
     const { data, error } = await client.rpc('rpc_upsert_sms_template', {
       p_tenant_id: tenantId,
       p_code: code,
       p_language: input.language,
-      p_body: input.body,
+      p_body: body,
     })
     if (error) {
+      console.warn('SMS template save rejected', {
+        requestId: request.requestId,
+        tenantId,
+        code,
+        safeMessage: databaseMessage(error).slice(0, 160),
+      })
       throwFinancialDatabaseError(error, 'SMS_TEMPLATE_SAVE_FAILED')
     }
     response.json({ data: jsonRecord(data) })

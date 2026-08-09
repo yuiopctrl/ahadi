@@ -8,9 +8,15 @@ const migration = [
   readFileSync(new URL('../../../supabase/migrations/040_strict_sms_preview_character_limit.sql', import.meta.url), 'utf8'),
   readFileSync(new URL('../../../supabase/migrations/041_sms_provider_selection.sql', import.meta.url), 'utf8'),
   readFileSync(new URL('../../../supabase/migrations/042_worker_nextsms_runtime.sql', import.meta.url), 'utf8'),
+  readFileSync(new URL('../../../supabase/migrations/043_sms_template_variable_normalization.sql', import.meta.url), 'utf8'),
+  readFileSync(new URL('../../../supabase/migrations/045_balance_reminder_provider_repair.sql', import.meta.url), 'utf8'),
+  readFileSync(new URL('../../../supabase/migrations/046_completed_pledge_manual_sms.sql', import.meta.url), 'utf8'),
 ].join('\n')
 const smsProviderSelectionMigration = readFileSync(new URL('../../../supabase/migrations/041_sms_provider_selection.sql', import.meta.url), 'utf8')
 const workerNextSmsRuntimeMigration = readFileSync(new URL('../../../supabase/migrations/042_worker_nextsms_runtime.sql', import.meta.url), 'utf8')
+const templateVariableNormalizationMigration = readFileSync(new URL('../../../supabase/migrations/043_sms_template_variable_normalization.sql', import.meta.url), 'utf8')
+const balanceReminderProviderRepairMigration = readFileSync(new URL('../../../supabase/migrations/045_balance_reminder_provider_repair.sql', import.meta.url), 'utf8')
+const completedPledgeManualSmsMigration = readFileSync(new URL('../../../supabase/migrations/046_completed_pledge_manual_sms.sql', import.meta.url), 'utf8')
 const app = readFileSync(new URL('./app.ts', import.meta.url), 'utf8')
 const apiClient = readFileSync(new URL('../../web/src/lib/api.ts', import.meta.url), 'utf8')
 const tenantPage = readFileSync(new URL('../../web/src/pages/tenant.tsx', import.meta.url), 'utf8')
@@ -84,6 +90,19 @@ test('strict SMS preview and character-limit validation are server-side', () => 
   assert.match(tenantPage, /SmsCharacterCounter/)
 })
 
+test('SMS template saves normalize harmless variable casing and spacing', () => {
+  assert.match(app, /normalizeSmsTemplateBody\(code, input\.body\)/)
+  assert.match(app, /Unsupported SMS template variable/)
+  assert.match(app, /membername: 'member_name'/)
+  assert.match(app, /paymentamount: 'payment_amount'/)
+  assert.match(app, /pledge_deadline: 'pledge_deadline'/)
+  assert.match(templateVariableNormalizationMigration, /normalize_sms_template_variable_name/)
+  assert.match(templateVariableNormalizationMigration, /when 'PLEDGE_REQUEST' then 'Pledge Request'/)
+  assert.match(templateVariableNormalizationMigration, /rpc_upsert_sms_template/)
+  assert.match(templateVariableNormalizationMigration, /\[\^a-z0-9\]\+/)
+  assert.match(templateVariableNormalizationMigration, /replace\(allowed_value\.value, '_', ''\) = replace\(normalized_variable, '_', ''\)/)
+})
+
 test('tenant SMS provider selection is persisted and worker routing does not fallback to WebBulkSMS', () => {
   assert.match(migration, /create table if not exists public\.sms_providers/)
   assert.match(migration, /create table if not exists public\.sms_provider_sender_ids/)
@@ -103,6 +122,39 @@ test('tenant SMS provider selection is persisted and worker routing does not fal
   assert.match(tenantPage, /SMS Provider/)
   assert.match(smsPackage, /class SmsProviderRegistry/)
   assert.match(smsPackage, /SMS_PROVIDER_NOT_SUPPORTED/)
+})
+
+test('outstanding balance reminders are queued with tenant SMS provider metadata', () => {
+  assert.match(balanceReminderProviderRepairMigration, /rpc_enqueue_balance_reminder_sms/)
+  assert.match(balanceReminderProviderRepairMigration, /select \* into provider_settings from public\.tenant_sms_provider_settings\(p_tenant_id\)/)
+  assert.match(balanceReminderProviderRepairMigration, /template_code, phone_e164, message_body, status, idempotency_key, original_outbox_id, batch_id, sender_id, provider/)
+  assert.match(balanceReminderProviderRepairMigration, /provider_settings\.sender_id, provider_settings\.provider_code/)
+  assert.match(balanceReminderProviderRepairMigration, /'template', 'BALANCE_REMINDER'[\s\S]+'provider', provider_settings\.provider_code[\s\S]+'senderId', provider_settings\.sender_id/)
+  assert.match(balanceReminderProviderRepairMigration, /v_balance_reminder_provider_repair_report/)
+  assert.match(balanceReminderProviderRepairMigration, /missing_provider_balance_reminders/)
+})
+
+test('balance reminder sending treats recently sent as resendable', () => {
+  assert.match(app, /p_template_code: 'BALANCE_REMINDER',\s+p_cooldown_hours: 0,/)
+  assert.match(app, /rpc_enqueue_balance_reminder_sms[\s\S]+p_cooldown_hours: 0/)
+  assert.match(app, /rpc_enqueue_balance_reminder_bulk[\s\S]+p_cooldown_hours: 0/)
+  assert.match(tenantPage, /reason === 'RECENTLY_SENT'/)
+})
+
+test('completed pledge SMS can be manually previewed and queued again', () => {
+  assert.match(completedPledgeManualSmsMigration, /rpc_list_event_completed_pledge_members/)
+  assert.match(completedPledgeManualSmsMigration, /render_completed_pledge_message/)
+  assert.match(completedPledgeManualSmsMigration, /rpc_enqueue_completed_pledge_bulk/)
+  assert.match(completedPledgeManualSmsMigration, /'PLEDGE_COMPLETED'/)
+  assert.match(completedPledgeManualSmsMigration, /provider_settings\.sender_id, provider_settings\.provider_code/)
+  assert.match(completedPledgeManualSmsMigration, /check \(batch_type in \('BALANCE_REMINDER', 'PLEDGE_REQUEST', 'PLEDGE_COMPLETED'\)\)/)
+  assert.match(app, /\/api\/v1\/events\/:eventId\/messages\/completed-pledges/)
+  assert.match(app, /p_template_code: 'PLEDGE_COMPLETED'/)
+  assert.match(app, /rpc_enqueue_completed_pledge_bulk/)
+  assert.match(apiClient, /eventCompletedPledgeMembers/)
+  assert.match(apiClient, /sendBulkCompletedPledgeSms/)
+  assert.match(tenantPage, /Completed Pledge SMS/)
+  assert.match(tenantPage, /CompletedPledgeSelection/)
 })
 
 test('worker runtime can claim queued SMS and diagnose safe outbox state with publishable key', () => {

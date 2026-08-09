@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import test from 'node:test'
 
-const migrations = ['011_members_and_event_members.sql', '012_pledges_and_history.sql', '013_payments_allocations_and_receipts.sql', '014_member_pledge_payment_rpcs.sql', '015_financial_views.sql', '016_financial_permissions_and_rls.sql', '018_repair_event_financial_access.sql', '019_stabilize_financial_summary_shape.sql', '020_grant_financial_read_views.sql', '021_financial_list_rpcs.sql', '022_payment_confirmation_sms_outbox.sql', '029_tenant_sms_outbox_processing.sql']
+const migrations = ['011_members_and_event_members.sql', '012_pledges_and_history.sql', '013_payments_allocations_and_receipts.sql', '014_member_pledge_payment_rpcs.sql', '015_financial_views.sql', '016_financial_permissions_and_rls.sql', '018_repair_event_financial_access.sql', '019_stabilize_financial_summary_shape.sql', '020_grant_financial_read_views.sql', '021_financial_list_rpcs.sql', '022_payment_confirmation_sms_outbox.sql', '029_tenant_sms_outbox_processing.sql', '044_member_detail_profile_columns.sql']
   .map((file) => readFileSync(new URL(`../../../supabase/migrations/${file}`, import.meta.url), 'utf8'))
   .join('\n')
 const app = readFileSync(new URL('./app.ts', import.meta.url), 'utf8')
@@ -55,6 +55,9 @@ test('financial summary returns zero-safe totals with stable allocated field nam
 test('financial read models and API routes are present', () => {
   for (const view of ['v_event_members_list', 'v_event_pledges_list', 'v_event_payments_list', 'v_event_outstanding_members', 'v_receipt_detail']) {
     assert.match(migrations, new RegExp(`view public\\.${view}`, 'i'))
+  }
+  for (const column of ['m.notes', 'm.preferred_language', 'm.status as member_status']) {
+    assert.match(migrations, new RegExp(column.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
   }
   for (const route of ['/api/v1/events/:eventId/members', '/api/v1/events/:eventId/pledges', '/api/v1/events/:eventId/payments', '/api/v1/receipts/:receiptId']) {
     assert.match(app, new RegExp(route.replace(/[/:]/g, (match) => `\\${match}`)))
