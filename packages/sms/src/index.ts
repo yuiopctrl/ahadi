@@ -77,6 +77,10 @@ export const nextSmsAllowedSenderIds = ['SHEREHE', 'MICHANGO', 'KIKAO'] as const
 export const MAX_SMS_CHARACTERS = 159
 export type NextSmsSenderId = typeof nextSmsAllowedSenderIds[number]
 
+export function buildNextSmsSingleSmsUrl(baseUrl: string, singleSmsPath: string): string {
+  return `${baseUrl.replace(/\/+$/, '')}/${singleSmsPath.replace(/^\/+/, '')}`
+}
+
 export function normalizeSmsMessageText(value: string): string {
   return value.replace(/\r\n/g, '\n').replace(/\n+/g, ' ').replace(/[ \t]+/g, ' ').trim()
 }
@@ -293,7 +297,7 @@ export async function sendNextSms(input: SmsProviderInput, options: NextSmsProvi
 
   let response: Response
   try {
-    response = await (options.fetchImpl ?? fetch)(`${options.baseUrl.replace(/\/+$/, '')}/${options.singleSmsPath.replace(/^\/+/, '')}`, {
+    response = await (options.fetchImpl ?? fetch)(buildNextSmsSingleSmsUrl(options.baseUrl, options.singleSmsPath), {
       method: 'POST',
       headers: {
         Accept: 'application/json',

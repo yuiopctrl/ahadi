@@ -30,7 +30,6 @@ import {
   supportedExportFormats,
   type ReportExportFormat,
 } from './report-exports.js'
-import { attemptTenantQueuedSms, sendTenantQueuedSms } from './sms-outbox.js'
 import { createUserSupabase, supabasePublic } from './supabase.js'
 import { loadUserContext, requestIdMiddleware, requireAuth, requirePlatformPermission, requireTenantContext } from './middleware.js'
 
@@ -1311,10 +1310,6 @@ function notificationFromEnqueue(data: unknown): Record<string, unknown> {
   return Object.keys(notification).length ? notification : { smsQueued: false, reason: 'ENQUEUE_FAILED' }
 }
 
-function queuedOutboxId(data: Record<string, unknown>): string | null {
-  return typeof data['outboxId'] === 'string' ? data['outboxId'] : null
-}
-
 function smsEnqueueFailureReason(error: unknown) {
   return databaseMessage(error).includes('SMS_CHARACTER_LIMIT_EXCEEDED') ? 'SMS_CHARACTER_LIMIT_EXCEEDED' : 'ENQUEUE_FAILED'
 }
@@ -1323,7 +1318,7 @@ function parseSmsTemplateCodeParam(value: unknown): z.infer<typeof smsTemplateCo
   return smsTemplateCodeSchema.parse(String(value ?? '').trim().toUpperCase().replaceAll('-', '_'))
 }
 
-async function enqueueAndAttemptPledgeRegistrationSms(client: ReturnType<typeof createUserSupabase>, tenantId: string, eventId: string, pledgeId: string, requestId: string): Promise<Record<string, unknown>> {
+async function enqueuePledgeRegistrationSms(client: ReturnType<typeof createUserSupabase>, tenantId: string, eventId: string, pledgeId: string, requestId: string): Promise<Record<string, unknown>> {
   const enqueue = await client.rpc('rpc_enqueue_pledge_registration_sms', {
     p_tenant_id: tenantId,
     p_event_id: eventId,
@@ -1339,20 +1334,7 @@ async function enqueueAndAttemptPledgeRegistrationSms(client: ReturnType<typeof 
     })
     return { smsQueued: false, reason: smsEnqueueFailureReason(enqueue.error), template: 'PLEDGE_REGISTRATION' }
   }
-  const notification = notificationFromEnqueue(enqueue.data)
-  const outboxId = queuedOutboxId(notification)
-  if (notification['smsQueued'] === true && outboxId) {
-    notification['sendAttempt'] = await attemptTenantQueuedSms(client, tenantId, {
-      batchSize: 1,
-      outboxIds: [outboxId],
-      requestId,
-    })
-  }
-  return notification
-}
-
-function queuedBatchId(data: Record<string, unknown>): string | null {
-  return typeof data['batchId'] === 'string' ? data['batchId'] : null
+  return notificationFromEnqueue(enqueue.data)
 }
 
 function previewIsValid(data: Record<string, unknown>): boolean {
@@ -2654,7 +2636,7 @@ app.post('/api/v1/events/:eventId/members', requireAuth, loadUserContext, requir
       }
       const pledge = jsonRecord(pledgeResult.data)
       const notification = typeof pledge['pledge_id'] === 'string'
-        ? await enqueueAndAttemptPledgeRegistrationSms(client, tenantId, eventId, pledge['pledge_id'], request.requestId)
+        ? await enqueuePledgeRegistrationSms(client, tenantId, eventId, pledge['pledge_id'], request.requestId)
         : { smsQueued: false, reason: 'PLEDGE_ID_MISSING', template: 'PLEDGE_REGISTRATION' }
       response.status(201).json({ data: { ...data, pledge, notification } })
       return
@@ -2892,14 +2874,6 @@ app.post('/api/v1/events/:eventId/reminders/balance', requireAuth, loadUserConte
       throwFinancialDatabaseError(error, 'BALANCE_REMINDER_QUEUE_FAILED')
     }
     const result = notificationFromEnqueue(data)
-    const outboxId = queuedOutboxId(result)
-    if (result['queued'] === true && outboxId) {
-      result['sendAttempt'] = await attemptTenantQueuedSms(client, tenantId, {
-        batchSize: 1,
-        outboxIds: [outboxId],
-        requestId: request.requestId,
-      })
-    }
     response.status(201).json({ data: result })
   } catch (error) {
     next(error)
@@ -2999,14 +2973,6 @@ app.post('/api/v1/events/:eventId/messages/pledge-request', requireAuth, loadUse
       throwFinancialDatabaseError(error, 'PLEDGE_REQUEST_QUEUE_FAILED')
     }
     const result = notificationFromEnqueue(data)
-    const outboxId = queuedOutboxId(result)
-    if (result['queued'] === true && outboxId) {
-      result['sendAttempt'] = await attemptTenantQueuedSms(client, tenantId, {
-        batchSize: 1,
-        outboxIds: [outboxId],
-        requestId: request.requestId,
-      })
-    }
     response.status(201).json({ data: result })
   } catch (error) {
     next(error)
@@ -3046,15 +3012,6 @@ app.post('/api/v1/events/:eventId/messages/pledge-request/bulk', requireAuth, lo
       throwFinancialDatabaseError(error, 'PLEDGE_REQUEST_BULK_QUEUE_FAILED')
     }
     const result = notificationFromEnqueue(data)
-    const batchId = queuedBatchId(result)
-    const queued = Number(result['queued'])
-    if (batchId && Number.isFinite(queued) && queued > 0) {
-      result['sendAttempt'] = await attemptTenantQueuedSms(client, tenantId, {
-        batchId,
-        batchSize: Math.min(queued, 50),
-        requestId: request.requestId,
-      })
-    }
     response.status(201).json({ data: result })
   } catch (error) {
     next(error)
@@ -3095,15 +3052,6 @@ app.post('/api/v1/events/:eventId/reminders/balance/bulk', requireAuth, loadUser
       throwFinancialDatabaseError(error, 'BALANCE_REMINDER_BULK_QUEUE_FAILED')
     }
     const result = notificationFromEnqueue(data)
-    const batchId = queuedBatchId(result)
-    const queued = Number(result['queued'])
-    if (batchId && Number.isFinite(queued) && queued > 0) {
-      result['sendAttempt'] = await attemptTenantQueuedSms(client, tenantId, {
-        batchId,
-        batchSize: Math.min(queued, 50),
-        requestId: request.requestId,
-      })
-    }
     response.status(201).json({ data: result })
   } catch (error) {
     next(error)
@@ -3140,7 +3088,7 @@ app.post('/api/v1/events/:eventId/pledges', requireAuth, loadUserContext, requir
     }
     const pledge = jsonRecord(data)
     const notification = shouldQueueRegistrationSms && typeof pledge['pledge_id'] === 'string'
-      ? await enqueueAndAttemptPledgeRegistrationSms(client, tenantId, eventId, pledge['pledge_id'], request.requestId)
+      ? await enqueuePledgeRegistrationSms(client, tenantId, eventId, pledge['pledge_id'], request.requestId)
       : { smsQueued: false, reason: shouldQueueRegistrationSms ? 'PLEDGE_ID_MISSING' : 'PLEDGE_ALREADY_EXISTS', template: 'PLEDGE_REGISTRATION' }
     response.status(201).json({ data: { ...pledge, notification } })
   } catch (error) {
@@ -3249,14 +3197,6 @@ app.post('/api/v1/events/:eventId/payments', requireAuth, loadUserContext, requi
         notification = { smsQueued: false, reason: smsEnqueueFailureReason(enqueue.error) }
       } else {
         notification = notificationFromEnqueue(enqueue.data)
-        const outboxId = queuedOutboxId(notification)
-        if (notification['smsQueued'] === true && outboxId) {
-          notification['sendAttempt'] = await attemptTenantQueuedSms(client, tenantId, {
-            batchSize: 1,
-            outboxIds: [outboxId],
-            requestId: request.requestId,
-          })
-        }
       }
     }
     response.status(201).json({ data: { ...payment, notification } })
@@ -3490,14 +3430,6 @@ app.post('/api/v1/messages/:outboxId/retry', requireAuth, loadUserContext, requi
       throwFinancialDatabaseError(error, 'SMS_RETRY_FAILED')
     }
     const result = notificationFromEnqueue(data)
-    const newOutboxId = queuedOutboxId(result)
-    if (result['queued'] === true && newOutboxId) {
-      result['sendAttempt'] = await attemptTenantQueuedSms(client, tenantId, {
-        batchSize: 1,
-        outboxIds: [newOutboxId],
-        requestId: request.requestId,
-      })
-    }
     response.status(201).json({ data: result })
   } catch (error) {
     next(error)
@@ -3521,14 +3453,6 @@ app.post('/api/v1/messages/:outboxId/resend-balance-reminder', requireAuth, load
       throwFinancialDatabaseError(error, 'BALANCE_REMINDER_RESEND_FAILED')
     }
     const result = notificationFromEnqueue(data)
-    const newOutboxId = queuedOutboxId(result)
-    if (result['queued'] === true && newOutboxId) {
-      result['sendAttempt'] = await attemptTenantQueuedSms(client, tenantId, {
-        batchSize: 1,
-        outboxIds: [newOutboxId],
-        requestId: request.requestId,
-      })
-    }
     response.status(201).json({ data: result })
   } catch (error) {
     next(error)
@@ -3541,14 +3465,8 @@ app.post('/api/v1/messages/process-queued', requireAuth, loadUserContext, requir
     if (!permissions.has('messages.send') && !request.tenantContext?.membership?.isOwner) {
       throw new AppError('TENANT_ACCESS_DENIED', 'Message send permission is required')
     }
-    const tenantId = tenantIdFromRequest(request)
-    const input = processQueuedSmsSchema.parse(request.body ?? {})
-    const client = createUserSupabase(request.auth?.accessToken ?? '')
-    const result = await sendTenantQueuedSms(client, tenantId, {
-      batchSize: input.batchSize ?? 10,
-      requestId: request.requestId,
-    })
-    response.json({ data: result })
+    processQueuedSmsSchema.parse(request.body ?? {})
+    response.status(202).json({ data: { accepted: true, processing: 'WORKER', message: 'Queued SMS is processed by the background worker.' } })
   } catch (error) {
     next(error)
   }

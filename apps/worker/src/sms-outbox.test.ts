@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { SmsProviderError } from '@ahadi/sms'
-import { classifySmsFailure, parseWorkerEnv, processSmsOutboxBatch, type SmsOutboxJob, type SmsOutboxProvider, type SmsOutboxStore } from './index.js'
+import { getNextSmsEndpoint, getNextSmsRuntimeDiagnostics, classifySmsFailure, parseWorkerEnv, processSmsOutboxBatch, type SmsOutboxJob, type SmsOutboxProvider, type SmsOutboxStore } from './index.js'
 
 function job(overrides: Partial<SmsOutboxJob> = {}): SmsOutboxJob {
   return {
@@ -33,9 +33,11 @@ test('worker marks provider success as sent and stores message id', async () => 
   const provider: SmsOutboxProvider = {
     send: async () => ({ accepted: true, providerHttpStatus: 200, providerMessageId: 'msg_123', providerStatusCode: 'success', safeReason: null }),
   }
+  const logs: unknown[] = []
 
-  assert.equal(await processSmsOutboxBatch(store, provider, 10), 1)
+  assert.equal(await processSmsOutboxBatch(store, provider, 10, { info: (...args) => logs.push(args), warn: () => undefined, error: () => undefined }), 1)
   assert.deepEqual(sent, [{ id: 'outbox_1', providerMessageId: 'msg_123' }])
+  assert.ok(logs.some((entry) => Array.isArray(entry) && entry[0] === 'SMS_SEND_START'))
 })
 
 test('worker schedules retryable provider failures', async () => {
@@ -50,9 +52,11 @@ test('worker schedules retryable provider failures', async () => {
       throw new SmsProviderError('SMS provider rejected message', 500)
     },
   }
+  const warnings: unknown[] = []
 
-  assert.equal(await processSmsOutboxBatch(store, provider, 10), 1)
+  assert.equal(await processSmsOutboxBatch(store, provider, 10, { info: () => undefined, warn: (...args) => warnings.push(args), error: () => undefined }), 1)
   assert.deepEqual(failed, [{ code: 'PROVIDER_RETRYABLE_FAILURE', retryable: true }])
+  assert.ok(warnings.some((entry) => Array.isArray(entry) && entry[0] === 'SMS_SEND_FAILED'))
 })
 
 test('permanent failures are not retried', () => {
@@ -73,6 +77,7 @@ test('worker environment accepts publishable Supabase key and SMS provider confi
     SMS_USERNAME: 'sms-user',
     SMS_PASSWORD: 'sms-password',
     SMS_SENDER_ID: 'AHADI',
+    NEXTSMS_AUTHORIZATION: 'Basic test',
   })
 
   assert.equal(env.SUPABASE_PUBLISHABLE_KEY, 'publishable-key')
@@ -84,6 +89,7 @@ test('worker environment no longer requires one global SMS provider credential s
   const env = parseWorkerEnv({
     SUPABASE_URL: 'https://example.supabase.co',
     SUPABASE_PUBLISHABLE_KEY: 'publishable-key',
+    NEXTSMS_AUTHORIZATION: 'Basic test',
   })
   assert.equal(env.SMS_PROVIDER, 'NEXTSMS')
   assert.equal(env.NEXTSMS_DEFAULT_SENDER_ID, 'MICHANGO')
@@ -99,4 +105,35 @@ test('worker environment accepts NEXTSMS without legacy WebBulkSMS credentials',
 
   assert.equal(env.SMS_PROVIDER, 'NEXTSMS')
   assert.equal(env.NEXTSMS_BASE_URL, 'https://messaging-service.co.tz')
+})
+
+test('worker rejects missing or double-prefixed NEXTSMS authorization', () => {
+  assert.throws(() => parseWorkerEnv({
+    SUPABASE_URL: 'https://example.supabase.co',
+    SUPABASE_PUBLISHABLE_KEY: 'publishable-key',
+  }), /NEXTSMS_AUTHORIZATION/)
+
+  assert.throws(() => parseWorkerEnv({
+    SUPABASE_URL: 'https://example.supabase.co',
+    SUPABASE_PUBLISHABLE_KEY: 'publishable-key',
+    NEXTSMS_AUTHORIZATION: 'Basic Basic abc',
+  }), /NEXTSMS_AUTHORIZATION/)
+})
+
+test('worker exposes redacted NextSMS runtime diagnostics', () => {
+  const env = parseWorkerEnv({
+    SUPABASE_URL: 'https://example.supabase.co',
+    SUPABASE_PUBLISHABLE_KEY: 'publishable-key',
+    NEXTSMS_AUTHORIZATION: 'Basic test',
+    NEXTSMS_BASE_URL: 'https://messaging-service.co.tz',
+    NEXTSMS_SINGLE_SMS_PATH: '/api/sms/v1/text/single',
+    NEXTSMS_DEFAULT_SENDER_ID: 'MICHANGO',
+    NEXTSMS_ALLOWED_SENDER_IDS: 'SHEREHE,MICHANGO,KIKAO',
+  })
+  assert.equal(getNextSmsEndpoint(env), 'https://messaging-service.co.tz/api/sms/v1/text/single')
+  assert.deepEqual(getNextSmsRuntimeDiagnostics(env), {
+    baseUrlConfigured: true,
+    authorizationConfigured: true,
+    defaultSenderId: 'MICHANGO',
+  })
 })

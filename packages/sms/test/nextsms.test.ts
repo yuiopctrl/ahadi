@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { assertSmsCharacterLimit, formatNextSmsPhone, MAX_SMS_CHARACTERS, normalizeSmsMessageText, normalizeSmsProviderName, normalizeSmsSenderId, sendNextSms, SmsProviderError, SmsProviderRegistry, smsCharacterCount } from '../src/index.js'
+import { assertSmsCharacterLimit, buildNextSmsSingleSmsUrl, formatNextSmsPhone, MAX_SMS_CHARACTERS, normalizeSmsMessageText, normalizeSmsProviderName, normalizeSmsSenderId, sendNextSms, SmsProviderError, SmsProviderRegistry, smsCharacterCount } from '../src/index.js'
 
 test('NextSMS sender ids are normalized against the confirmed allowlist', () => {
   assert.equal(normalizeSmsSenderId(' michango '), 'MICHANGO')
@@ -11,6 +11,10 @@ test('NextSMS sender ids are normalized against the confirmed allowlist', () => 
 
 test('NextSMS phone formatter uses Tanzania canonical provider format', () => {
   assert.equal(formatNextSmsPhone('+255713676401'), '255713676401')
+})
+
+test('NextSMS endpoint builder produces the confirmed provider endpoint', () => {
+  assert.equal(buildNextSmsSingleSmsUrl('https://messaging-service.co.tz/', '/api/sms/v1/text/single'), 'https://messaging-service.co.tz/api/sms/v1/text/single')
 })
 
 test('provider name normalization rejects unsupported providers instead of falling back', () => {

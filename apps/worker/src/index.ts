@@ -1,6 +1,7 @@
 import dotenv from 'dotenv'
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
-import { maskSmsPhone, SmsProviderError, SmsProviderRegistry, type SmsProviderResult } from '@ahadi/sms'
+import { buildNextSmsSingleSmsUrl, maskSmsPhone, SmsProviderError, SmsProviderRegistry, type SmsProviderResult } from '@ahadi/sms'
+import { existsSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { z } from 'zod'
 
@@ -10,13 +11,23 @@ const workerEnvFiles = [
   '../.env',
 ] as const
 
-export function loadWorkerEnvFiles(): void {
+export function loadWorkerEnvFiles(): string[] {
+  const loaded: string[] = []
   for (const relativePath of workerEnvFiles) {
-    dotenv.config({ path: fileURLToPath(new URL(relativePath, import.meta.url)), quiet: true })
+    const path = fileURLToPath(new URL(relativePath, import.meta.url))
+    if (!existsSync(path)) {
+      continue
+    }
+    dotenv.config({ path, quiet: true, override: relativePath === '../.env' })
+    loaded.push(path)
   }
+  return loaded
 }
 
-loadWorkerEnvFiles()
+export const loadedWorkerEnvFiles = loadWorkerEnvFiles()
+
+const nextSmsAllowedSenderValues = ['SHEREHE', 'MICHANGO', 'KIKAO'] as const
+const expectedNextSmsEndpoint = 'https://messaging-service.co.tz/api/sms/v1/text/single'
 
 export const workerEnvSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
@@ -37,8 +48,25 @@ export const workerEnvSchema = z.object({
   NEXTSMS_BASE_URL: z.string().url().default('https://messaging-service.co.tz'),
   NEXTSMS_SINGLE_SMS_PATH: z.string().trim().min(1).default('/api/sms/v1/text/single'),
   NEXTSMS_AUTHORIZATION: z.string().trim().min(1).optional(),
-  NEXTSMS_DEFAULT_SENDER_ID: z.enum(['MICHANGO', 'SHEREHE', 'KIKAO']).default('MICHANGO'),
+  NEXTSMS_DEFAULT_SENDER_ID: z.enum(nextSmsAllowedSenderValues).default('MICHANGO'),
   NEXTSMS_ALLOWED_SENDER_IDS: z.string().trim().min(1).default('SHEREHE,MICHANGO,KIKAO'),
+}).superRefine((value, context) => {
+  const allowed = value.NEXTSMS_ALLOWED_SENDER_IDS.split(',').map((item) => item.trim().toUpperCase()).filter(Boolean)
+  if (!allowed.length || allowed.some((senderId) => !nextSmsAllowedSenderValues.includes(senderId as typeof nextSmsAllowedSenderValues[number]))) {
+    context.addIssue({ code: 'custom', path: ['NEXTSMS_ALLOWED_SENDER_IDS'], message: 'NEXTSMS_ALLOWED_SENDER_IDS must contain only SHEREHE, MICHANGO, and KIKAO' })
+  }
+  if (!allowed.includes(value.NEXTSMS_DEFAULT_SENDER_ID)) {
+    context.addIssue({ code: 'custom', path: ['NEXTSMS_DEFAULT_SENDER_ID'], message: 'NEXTSMS_DEFAULT_SENDER_ID must be in NEXTSMS_ALLOWED_SENDER_IDS' })
+  }
+  if (!value.NEXTSMS_AUTHORIZATION?.trim()) {
+    context.addIssue({ code: 'custom', path: ['NEXTSMS_AUTHORIZATION'], message: 'NEXTSMS_AUTHORIZATION is required by the worker runtime' })
+  } else if (!/^Basic\s+(?!Basic\s).+/i.test(value.NEXTSMS_AUTHORIZATION.trim())) {
+    context.addIssue({ code: 'custom', path: ['NEXTSMS_AUTHORIZATION'], message: 'NEXTSMS_AUTHORIZATION must be the exact provider Authorization header value' })
+  }
+  const endpoint = buildNextSmsSingleSmsUrl(value.NEXTSMS_BASE_URL, value.NEXTSMS_SINGLE_SMS_PATH)
+  if (endpoint !== expectedNextSmsEndpoint) {
+    context.addIssue({ code: 'custom', path: ['NEXTSMS_SINGLE_SMS_PATH'], message: `NextSMS endpoint must be ${expectedNextSmsEndpoint}` })
+  }
 })
 
 export type WorkerEnv = z.infer<typeof workerEnvSchema>
@@ -53,6 +81,18 @@ export function parseWorkerEnv(input: NodeJS.ProcessEnv): WorkerEnv {
     )
   }
   return parsed.data
+}
+
+export function getNextSmsRuntimeDiagnostics(env: WorkerEnv) {
+  return {
+    baseUrlConfigured: Boolean(env.NEXTSMS_BASE_URL.trim()),
+    authorizationConfigured: Boolean(env.NEXTSMS_AUTHORIZATION?.trim()),
+    defaultSenderId: env.NEXTSMS_DEFAULT_SENDER_ID,
+  }
+}
+
+export function getNextSmsEndpoint(env: WorkerEnv): string {
+  return buildNextSmsSingleSmsUrl(env.NEXTSMS_BASE_URL, env.NEXTSMS_SINGLE_SMS_PATH)
 }
 
 export interface SmsOutboxJob {
@@ -110,6 +150,14 @@ export function classifySmsFailure(error: unknown): SmsFailureClassification {
     }
   }
   return { code: 'PROVIDER_RETRYABLE_FAILURE', message: safeErrorMessage(error), retryable: true }
+}
+
+function providerStatusCode(error: unknown): string | null {
+  return error instanceof SmsProviderError ? (error.providerStatusCode ?? null) : null
+}
+
+function providerHttpStatus(error: unknown): number | null {
+  return error instanceof SmsProviderError ? (error.status ?? null) : null
 }
 
 export class SupabaseSmsOutboxStore implements SmsOutboxStore {
@@ -177,6 +225,12 @@ export async function processSmsOutboxBatch(store: SmsOutboxStore, provider: Sms
         attempt: job.attempt_count,
         maskedPhone: maskSmsPhone(job.phone_e164),
       })
+      logger.info('SMS_SEND_START', {
+        outboxId: job.id,
+        provider: job.provider,
+        senderId: job.sender_id,
+        attempt: job.attempt_count,
+      })
       const result = await provider.send(job)
       await store.markSent(job.id, result.providerMessageId)
       logger.info('SMS outbox sent', {
@@ -200,6 +254,13 @@ export async function processSmsOutboxBatch(store: SmsOutboxStore, provider: Sms
         attempt: job.attempt_count,
         safeFailureCategory: classification.code,
         retryable: classification.retryable,
+      })
+      logger.warn('SMS_SEND_FAILED', {
+        outboxId: job.id,
+        provider: job.provider,
+        statusCode: providerHttpStatus(error),
+        errorCode: providerStatusCode(error) ?? classification.code,
+        safeMessage: classification.message,
       })
     }
   }
@@ -229,6 +290,7 @@ async function main() {
   const store = new SupabaseSmsOutboxStore(createSupabaseWorkerClient(env))
   const provider = new ConfiguredSmsOutboxProvider(env)
 
+  console.log('NEXTSMS_CONFIG', getNextSmsRuntimeDiagnostics(env))
   console.log(`Ahadi worker booted in ${env.NODE_ENV} mode with ${env.WORKER_POLL_INTERVAL_MS}ms poll interval`)
   setInterval(() => {
     void processSmsOutboxBatch(store, provider, env.WORKER_BATCH_SIZE).catch((error: unknown) => {

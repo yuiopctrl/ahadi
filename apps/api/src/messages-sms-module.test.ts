@@ -42,8 +42,9 @@ test('automatic pledge and payment SMS enqueue rules are server-side and idempot
   assert.match(migration, /PLEDGE_REGISTRATION:' \|\| pledge_record\.id/)
   assert.match(migration, /template_code := case when outstanding <= 0 then 'PLEDGE_COMPLETED' else 'PAYMENT_CONFIRMATION' end/)
   assert.match(migration, /sms_outbox_payment_financial_auto_unique/)
-  assert.match(app, /enqueueAndAttemptPledgeRegistrationSms/)
+  assert.match(app, /enqueuePledgeRegistrationSms/)
   assert.match(app, /rpc_enqueue_payment_confirmation_sms/)
+  assert.doesNotMatch(app, /sendAttempt/)
 })
 
 test('message settings, templates and retry routes are exposed to the web client', () => {

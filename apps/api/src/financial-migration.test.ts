@@ -89,7 +89,7 @@ test('payment confirmation SMS uses outbox tables and idempotent enqueue RPC', (
   assert.doesNotMatch(app, /record_installment_payment[\s\S]+sendAuthenticationSms/)
 })
 
-test('tenant queued SMS can be claimed and sent by the API without service-role access', () => {
+test('tenant queued SMS is queued by the API and processed by the worker', () => {
   assert.match(migrations, /rpc_claim_tenant_sms_outbox/)
   assert.match(migrations, /public\.has_tenant_permission\(p_tenant_id, 'messages\.send'\)/)
   assert.match(migrations, /o\.tenant_id = p_tenant_id/)
@@ -97,8 +97,9 @@ test('tenant queued SMS can be claimed and sent by the API without service-role 
   assert.match(migrations, /p_batch_id is null or o\.batch_id = p_batch_id/)
   assert.match(migrations, /for update of o skip locked/i)
   assert.match(migrations, /grant execute on function public\.rpc_claim_tenant_sms_outbox\(uuid, integer, uuid\[\], uuid\) to authenticated/)
-  assert.match(app, /attemptTenantQueuedSms/)
-  assert.match(app, /sendTenantQueuedSms/)
   assert.match(app, /\/api\/v1\/messages\/process-queued/)
-  assert.match(app, /sendAttempt/)
+  assert.match(app, /processing: 'WORKER'/)
+  assert.doesNotMatch(app, /attemptTenantQueuedSms/)
+  assert.doesNotMatch(app, /sendTenantQueuedSms/)
+  assert.doesNotMatch(app, /sendAttempt/)
 })
