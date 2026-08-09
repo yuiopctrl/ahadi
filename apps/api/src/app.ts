@@ -332,7 +332,17 @@ const balanceReminderSchema = z.object({
   idempotencyKey: z.string().uuid(),
 })
 
+const pledgeRequestSchema = z.object({
+  eventMemberId: z.string().uuid(),
+  idempotencyKey: z.string().uuid(),
+})
+
 const bulkBalanceReminderSchema = z.object({
+  eventMemberIds: z.array(z.string().uuid()).min(1),
+  idempotencyKey: z.string().uuid(),
+})
+
+const bulkPledgeRequestSchema = z.object({
   eventMemberIds: z.array(z.string().uuid()).min(1),
   idempotencyKey: z.string().uuid(),
 })
@@ -341,7 +351,7 @@ const templateBodySchema = z.object({
   body: z.string().trim().min(1).max(918),
 })
 
-const smsTemplateCodeSchema = z.enum(['PLEDGE_REGISTRATION', 'PAYMENT_CONFIRMATION', 'BALANCE_REMINDER', 'PLEDGE_COMPLETED'])
+const smsTemplateCodeSchema = z.enum(['PLEDGE_REQUEST', 'PLEDGE_REGISTRATION', 'PAYMENT_CONFIRMATION', 'BALANCE_REMINDER', 'PLEDGE_COMPLETED'])
 
 const smsTemplateSaveSchema = templateBodySchema.extend({
   language: z.enum(['sw', 'en']).default('sw'),
@@ -2781,6 +2791,89 @@ app.post('/api/v1/events/:eventId/reminders/balance', requireAuth, loadUserConte
       result['sendAttempt'] = await attemptTenantQueuedSms(client, tenantId, {
         batchSize: 1,
         outboxIds: [outboxId],
+        requestId: request.requestId,
+      })
+    }
+    response.status(201).json({ data: result })
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.get('/api/v1/events/:eventId/messages/no-pledge-members', requireAuth, loadUserContext, requireTenantContext, async (request, response, next) => {
+  try {
+    const tenantId = tenantIdFromRequest(request)
+    const eventId = uuidParamSchema.parse(request.params['eventId'])
+    const client = createUserSupabase(request.auth?.accessToken ?? '')
+    const { data, error } = await client.rpc('rpc_list_event_no_pledge_members', {
+      p_tenant_id: tenantId,
+      p_event_id: eventId,
+      p_cooldown_hours: env.PLEDGE_REQUEST_COOLDOWN_HOURS,
+    })
+    if (error) {
+      throwFinancialDatabaseError(error, 'NO_PLEDGE_MEMBERS_LIST_FAILED')
+    }
+    response.json({ data: jsonArray(data) })
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.post('/api/v1/events/:eventId/messages/pledge-request', requireAuth, loadUserContext, requireTenantContext, async (request, response, next) => {
+  try {
+    const tenantId = tenantIdFromRequest(request)
+    const eventId = uuidParamSchema.parse(request.params['eventId'])
+    const input = pledgeRequestSchema.parse(request.body)
+    const client = createUserSupabase(request.auth?.accessToken ?? '')
+    const { data, error } = await client.rpc('rpc_enqueue_pledge_request_sms', {
+      p_tenant_id: tenantId,
+      p_event_id: eventId,
+      p_event_member_id: input.eventMemberId,
+      p_idempotency_key: input.idempotencyKey,
+      p_cooldown_hours: env.PLEDGE_REQUEST_COOLDOWN_HOURS,
+    })
+    if (error) {
+      throwFinancialDatabaseError(error, 'PLEDGE_REQUEST_QUEUE_FAILED')
+    }
+    const result = notificationFromEnqueue(data)
+    const outboxId = queuedOutboxId(result)
+    if (result['queued'] === true && outboxId) {
+      result['sendAttempt'] = await attemptTenantQueuedSms(client, tenantId, {
+        batchSize: 1,
+        outboxIds: [outboxId],
+        requestId: request.requestId,
+      })
+    }
+    response.status(201).json({ data: result })
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.post('/api/v1/events/:eventId/messages/pledge-request/bulk', requireAuth, loadUserContext, requireTenantContext, async (request, response, next) => {
+  try {
+    const tenantId = tenantIdFromRequest(request)
+    const eventId = uuidParamSchema.parse(request.params['eventId'])
+    const input = bulkPledgeRequestSchema.parse(request.body)
+    const client = createUserSupabase(request.auth?.accessToken ?? '')
+    const { data, error } = await client.rpc('rpc_enqueue_pledge_request_bulk', {
+      p_tenant_id: tenantId,
+      p_event_id: eventId,
+      p_event_member_ids: input.eventMemberIds,
+      p_idempotency_key: input.idempotencyKey,
+      p_cooldown_hours: env.PLEDGE_REQUEST_COOLDOWN_HOURS,
+      p_max_batch_size: env.PLEDGE_REQUEST_MAX_BATCH_SIZE,
+    })
+    if (error) {
+      throwFinancialDatabaseError(error, 'PLEDGE_REQUEST_BULK_QUEUE_FAILED')
+    }
+    const result = notificationFromEnqueue(data)
+    const batchId = queuedBatchId(result)
+    const queued = Number(result['queued'])
+    if (batchId && Number.isFinite(queued) && queued > 0) {
+      result['sendAttempt'] = await attemptTenantQueuedSms(client, tenantId, {
+        batchId,
+        batchSize: Math.min(queued, 50),
         requestId: request.requestId,
       })
     }

@@ -68,6 +68,7 @@ const reportExportFormats: Record<string, Array<'CSV' | 'XLSX' | 'PDF' | 'PRINT'
 }
 const smsTemplateOptions = [
   { code: 'ALL', label: 'All messages', variables: [] },
+  { code: 'PLEDGE_REQUEST', label: 'Pledge Request', variables: ['member_name', 'event_name', 'event_date', 'pledge_deadline'] },
   { code: 'PLEDGE_REGISTRATION', label: 'Pledge Registration', variables: ['member_name', 'pledge_amount', 'event_name', 'due_date'] },
   { code: 'PAYMENT_CONFIRMATION', label: 'Payment Confirmation', variables: ['member_name', 'payment_amount', 'payment_method', 'event_name', 'balance', 'receipt_number'] },
   { code: 'BALANCE_REMINDER', label: 'Balance Reminder', variables: ['member_name', 'event_name', 'balance', 'due_date'] },
@@ -82,6 +83,8 @@ const smsPreviewValues: Record<string, string> = {
   balance: '400,000',
   receipt_number: 'RCT-00024',
   due_date: '15/08/2026',
+  event_date: '11/09/2027',
+  pledge_deadline: '01/09/2027',
 }
 
 function asString(value: unknown, fallback = '') {
@@ -498,12 +501,13 @@ function OverviewCards({ eventId, summary, payments, pledges }: { eventId: strin
         <div className="mini-stat-row">
           <span>Partial: {asNumber(summary.partiallyPaidCount)}</span>
           <span>Unpaid: {asNumber(summary.unpaidCount)}</span>
-          <span>Overdue: {asNumber(summary.overdueCount)}</span>
+          <span>No Pledge Yet: {asNumber(summary.membersWithoutPledges)} members</span>
         </div>
         <div className="card-actions">
           <Link className="primary-button inline-action" to={`/app/events/${eventId}/payments/new`}>Record Payment</Link>
           <Link to={`/app/events/${eventId}/share`}><Share2 size={16} aria-hidden /> Share List</Link>
           <Link to={`/app/events/${eventId}/outstanding`}>Send Reminders</Link>
+          {asNumber(summary.membersWithoutPledges) > 0 ? <Link to={`/app/messages?eventId=${eventId}&segment=pledge-request`}>Send Request</Link> : null}
         </div>
       </article>
       <article className="content-panel">
@@ -742,6 +746,7 @@ export function MemberDetailPage() {
   const reportTenantContext = useSessionStore().selectedTenantContext
   const permissions = new Set(reportTenantContext?.permissions ?? [])
   const [reminderOpen, setReminderOpen] = useState(false)
+  const [pledgeRequestOpen, setPledgeRequestOpen] = useState(false)
   if (activeEvent.error) return <ErrorState title="Unable to open member" message={activeEvent.error} />
   if (detail.isLoading) return <LoadingState title="Loading member" />
   if (detail.isError || !detail.data) return <ErrorState title="Unable to load member" message={errorMessage(detail.error, 'Member detail could not be loaded.')} />
@@ -771,8 +776,12 @@ export function MemberDetailPage() {
         {permissions.has('messages.send') && canSendBalanceReminder({ ...member, outstandingAmount: member.outstanding_amount, smsEnabled: member.sms_enabled, phone: member.phone_e164, fullName: member.full_name, pledgedAmount: member.pledged_amount, totalPaid: member.total_allocated, dueDate }) ? (
           <button className="primary-button inline-action" type="button" onClick={() => setReminderOpen(true)}>Send Reminder</button>
         ) : null}
+        {permissions.has('messages.send') && !member.pledge_id ? (
+          <button className="primary-button inline-action" type="button" onClick={() => setPledgeRequestOpen(true)}>Send Pledge Request</button>
+        ) : null}
       </section>
       {reminderOpen ? <BalanceReminderSheet tenantId={tenantId ?? ''} eventId={eventId} member={{ ...member, eventMemberId, fullName: member.full_name, phone: member.phone_e164, pledgedAmount: member.pledged_amount, totalPaid: member.total_allocated, outstandingAmount: member.outstanding_amount, dueDate, messagePreview: '' }} onClose={() => setReminderOpen(false)} onSent={() => { setReminderOpen(false); void detail.refetch() }} /> : null}
+      {pledgeRequestOpen ? <PledgeRequestSheet tenantId={tenantId ?? ''} eventId={eventId} eventMemberId={eventMemberId} eventName={activeEvent.event?.name ?? 'Event'} onClose={() => setPledgeRequestOpen(false)} onSent={() => { setPledgeRequestOpen(false); void detail.refetch() }} /> : null}
       <div className="finance-card-list">
         {detail.data.payments.map((payment) => <PaymentCard key={asString(payment.payment_id)} payment={payment} eventId={eventId} />)}
         {!detail.data.payments.length ? <EmptyState title="No payments for this member yet." message="Record a payment to generate the first receipt." /> : null}
@@ -947,6 +956,43 @@ function BalanceReminderSheet({ tenantId, eventId, member, onClose, onSent }: { 
       <div className="sheet-actions">
         <button type="button" onClick={onClose}>Cancel</button>
         <button className="primary-button" type="button" disabled={mutation.isPending} onClick={() => mutation.mutate()}>{mutation.isPending ? 'Queueing...' : 'Send Reminder'}</button>
+      </div>
+    </section>
+  )
+}
+
+function PledgeRequestSheet({ tenantId, eventId, eventMemberId, eventName, onClose, onSent }: { tenantId: string; eventId: string; eventMemberId: string; eventName: string; onClose: () => void; onSent: () => void }) {
+  const [idempotencyKey] = useState(() => crypto.randomUUID())
+  const members = useQuery({ queryKey: ['no-pledge-members', tenantId, eventId, eventMemberId], queryFn: async () => (await api.eventNoPledgeMembers(tenantId, eventId)).data, enabled: Boolean(tenantId && eventId && eventMemberId) })
+  const settings = useQuery({ queryKey: ['sms-settings', tenantId], queryFn: async () => (await api.smsSettings(tenantId)).data, enabled: Boolean(tenantId) })
+  const member = (members.data ?? []).find((row) => asString(row.eventMemberId) === eventMemberId) ?? null
+  const eligibility = member ? pledgeRequestEligibility(member) : { label: 'Has Pledge', tone: 'neutral' as const }
+  const mutation = useMutation({
+    mutationFn: () => api.sendPledgeRequest(tenantId, eventId, { eventMemberId, idempotencyKey }),
+    onSuccess: onSent,
+  })
+  if (members.isLoading) return <LoadingState title="Loading pledge request preview" />
+  if (members.isError) return <ErrorState title="Unable to prepare pledge request" message={errorMessage(members.error, 'Pledge request preview could not be loaded.')} />
+  if (!member) return <ErrorState title="Pledge request unavailable" message="This member already has a pledge or is no longer active in the event." />
+  return (
+    <section className="mobile-sheet form-grid">
+      <div className="panel-header">
+        <div>
+          <h2>Send Pledge Request</h2>
+          <p>{asString(member.fullName, 'Member')} · {asString(member.maskedPhone, maskPhone(member.phone))}</p>
+        </div>
+        <StatusBadge tone={eligibility.tone}>{eligibility.label}</StatusBadge>
+      </div>
+      <ReviewLine label="Event" value={eventName} />
+      <ReviewLine label="Sender ID" value={asString(settings.data?.senderId, 'MICHANGO')} />
+      <article className="content-panel">
+        <p>{asString(member.messagePreview, 'Preview will be rendered again by the server before queueing.')}</p>
+      </article>
+      {mutation.data?.data?.queued === false ? <p className="field-error">{asString(mutation.data.data.reason, 'Pledge request was not queued.')}</p> : null}
+      {mutation.error ? <p className="field-error">{errorMessage(mutation.error, 'Pledge request could not be queued.')}</p> : null}
+      <div className="sheet-actions">
+        <button type="button" onClick={onClose}>Cancel</button>
+        <button className="primary-button" type="button" disabled={Boolean(member.ineligibleReason) || mutation.isPending} onClick={() => mutation.mutate()}>{mutation.isPending ? 'Queueing...' : 'Send'}</button>
       </div>
     </section>
   )
@@ -1275,14 +1321,17 @@ export function SmsHistoryPage() {
   const eventOptions = session.selectedTenantContext?.events ?? []
   const permissions = new Set(session.selectedTenantContext?.permissions ?? [])
   const queryClient = useQueryClient()
+  const [searchParams] = useSearchParams()
   const canManageTemplates = permissions.has('messages.manage_templates')
   const canManageSettings = permissions.has('messages.manage_settings')
+  const canSendMessages = permissions.has('messages.send')
   const [status, setStatus] = useState('ALL')
   const [type, setType] = useState('ALL')
-  const [eventId, setEventId] = useState('ALL')
+  const [eventId, setEventId] = useState(searchParams.get('eventId') ?? 'ALL')
   const [query, setQuery] = useState('')
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
+  const [pledgeRequestOpen, setPledgeRequestOpen] = useState(searchParams.get('segment') === 'pledge-request')
   const messages = useQuery({ queryKey: ['sms-history', tenantId], queryFn: async () => (await api.messages(tenantId ?? '')).data, enabled: Boolean(tenantId) })
   const settings = useQuery({ queryKey: ['sms-settings', tenantId], queryFn: async () => (await api.smsSettings(tenantId ?? '')).data, enabled: Boolean(tenantId && canManageSettings) })
   const templates = useQuery({ queryKey: ['sms-templates', tenantId], queryFn: async () => (await api.smsTemplates(tenantId ?? '')).data, enabled: Boolean(tenantId && canManageTemplates) })
@@ -1306,6 +1355,8 @@ export function SmsHistoryPage() {
   const queuedCount = rows.filter((message) => ['QUEUED', 'PROCESSING'].includes(asString(message.status))).length
   const deliveryRate = rows.length ? Math.round((sentCount / rows.length) * 100) : 0
   const activeEvent = eventOptions[0] ?? null
+  const pledgeRequestEventId = eventId !== 'ALL' ? eventId : activeEvent?.id
+  const pledgeRequestEvent = eventOptions.find((event) => event.id === pledgeRequestEventId) ?? activeEvent ?? null
 
   if (!tenantId) return <ErrorState title="Unable to load SMS history" message="Select a tenant first." />
   if (messages.isLoading) return <LoadingState title="Loading messages" message="Fetching SMS confirmation history." />
@@ -1316,7 +1367,7 @@ export function SmsHistoryPage() {
       <PageHeader
         title="Messages"
         description="SMS delivery history and balance reminder controls, plus sender settings and business message templates for this tenant."
-        action={<div className="inline-actions">{permissions.has('messages.send') ? <button type="button" disabled={processQueued.isPending || queuedCount === 0} onClick={() => processQueued.mutate()}><Send size={18} aria-hidden /> {processQueued.isPending ? 'Sending...' : 'Send queued'}</button> : null}{activeEvent ? <Link className="desktop-primary-button" to={`/app/events/${activeEvent.id}/outstanding`}><Clock3 size={18} aria-hidden /> Reminders</Link> : null}</div>}
+        action={<div className="inline-actions">{canSendMessages ? <button type="button" disabled={processQueued.isPending || queuedCount === 0} onClick={() => processQueued.mutate()}><Send size={18} aria-hidden /> {processQueued.isPending ? 'Sending...' : 'Send queued'}</button> : null}{activeEvent ? <Link className="desktop-primary-button" to={`/app/events/${activeEvent.id}/outstanding`}><Clock3 size={18} aria-hidden /> Reminders</Link> : null}</div>}
       />
       <section className="messages-hero">
         <div>
@@ -1338,6 +1389,18 @@ export function SmsHistoryPage() {
       </section>
       {processQueued.data ? <p className="message-send-result">Processed {displayValue(processQueued.data.data.claimed, '0')} queued messages · Sent {displayValue(processQueued.data.data.sent, '0')} · Failed {displayValue(processQueued.data.data.failed, '0')}</p> : null}
       {processQueued.error ? <p className="field-error">Unable to process queued messages: {errorMessage(processQueued.error, 'Send attempt failed.')}</p> : null}
+      {pledgeRequestEventId ? (
+        <section className="content-panel pledge-request-summary">
+          <div className="panel-header">
+            <div>
+              <h2>Members Without Pledge</h2>
+              <p>{pledgeRequestEvent?.name ?? 'Selected event'} · request pledges without mixing them into outstanding balances.</p>
+            </div>
+            {canSendMessages ? <button className="primary-button inline-action" type="button" onClick={() => setPledgeRequestOpen((current) => !current)}>{pledgeRequestOpen ? 'Hide Selection' : 'Send Pledge Request'}</button> : null}
+          </div>
+          {pledgeRequestOpen && canSendMessages ? <PledgeRequestSelection tenantId={tenantId} eventId={pledgeRequestEventId} eventName={pledgeRequestEvent?.name ?? 'Event'} onQueued={() => { void messages.refetch(); void queryClient.invalidateQueries({ queryKey: ['no-pledge-members', tenantId, pledgeRequestEventId] }) }} /> : null}
+        </section>
+      ) : null}
       <div className={(canManageTemplates || canManageSettings) ? 'messages-layout messages-layout-with-template' : 'messages-layout'}>
         <section className="messages-history-panel">
           <div className="messages-filter-panel">
@@ -1363,7 +1426,7 @@ export function SmsHistoryPage() {
             </div>
           </div>
           <div className="messages-list">
-            {filtered.map((message) => <MessageHistoryCard key={asString(message.id)} message={message} tenantId={tenantId} canResend={permissions.has('messages.send')} onResent={() => void messages.refetch()} />)}
+            {filtered.map((message) => <MessageHistoryCard key={asString(message.id)} message={message} tenantId={tenantId} canResend={canSendMessages} onResent={() => void messages.refetch()} />)}
             {!rows.length ? <EmptyState title="No SMS messages yet." message="Payment confirmations will appear here after payments are recorded." /> : null}
             {rows.length > 0 && !filtered.length ? <EmptyState title="No messages match these filters." message="Change the status, event, or search text." /> : null}
           </div>
@@ -1384,11 +1447,117 @@ function messageCardClass(status: unknown) {
   return `message-card message-card-${normalized}`
 }
 
+function pledgeRequestEligibility(row: Row) {
+  const reason = asString(row.ineligibleReason)
+  if (!reason) return { label: 'Ready', tone: 'success' as const }
+  if (reason === 'NO_PHONE') return { label: 'No Phone', tone: 'danger' as const }
+  if (reason === 'SMS_DISABLED') return { label: 'SMS Disabled', tone: 'warning' as const }
+  if (reason === 'RECENTLY_SENT') return { label: 'Recently Sent', tone: 'warning' as const }
+  if (reason === 'HAS_PLEDGE') return { label: 'Has Pledge', tone: 'neutral' as const }
+  return { label: reason.replaceAll('_', ' '), tone: 'neutral' as const }
+}
+
+function PledgeRequestSelection({ tenantId, eventId, eventName, onQueued }: { tenantId: string; eventId: string; eventName: string; onQueued: () => void }) {
+  const [query, setQuery] = useState('')
+  const [category, setCategory] = useState('ALL')
+  const [selected, setSelected] = useState<string[]>([])
+  const [previewOpen, setPreviewOpen] = useState(false)
+  const [idempotencyKey, resetIdempotencyKey] = useState(() => crypto.randomUUID())
+  const members = useQuery({ queryKey: ['no-pledge-members', tenantId, eventId], queryFn: async () => (await api.eventNoPledgeMembers(tenantId, eventId)).data, enabled: Boolean(tenantId && eventId) })
+  const rows = members.data ?? []
+  const categories = Array.from(new Set(rows.map((row) => asString(row.category, 'No category')))).sort()
+  const filtered = rows.filter((row) => {
+    const queryMatches = `${row.fullName ?? ''} ${row.memberCode ?? ''} ${row.phone ?? ''}`.toLowerCase().includes(query.toLowerCase())
+    const categoryMatches = category === 'ALL' || asString(row.category, 'No category') === category
+    return queryMatches && categoryMatches
+  })
+  const eligibleVisible = filtered.filter((row) => !asString(row.ineligibleReason))
+  const selectedRows = rows.filter((row) => selected.includes(asString(row.eventMemberId)))
+  const eligibleSelected = selectedRows.filter((row) => !asString(row.ineligibleReason))
+  const skipped = {
+    noPhone: selectedRows.filter((row) => asString(row.ineligibleReason) === 'NO_PHONE').length,
+    smsDisabled: selectedRows.filter((row) => asString(row.ineligibleReason) === 'SMS_DISABLED').length,
+    recentlySent: selectedRows.filter((row) => asString(row.ineligibleReason) === 'RECENTLY_SENT').length,
+    hasPledge: selectedRows.filter((row) => asString(row.ineligibleReason) === 'HAS_PLEDGE').length,
+  }
+  const mutation = useMutation({
+    mutationFn: () => api.sendBulkPledgeRequests(tenantId, eventId, { eventMemberIds: eligibleSelected.map((row) => asString(row.eventMemberId)), idempotencyKey }),
+    onSuccess: () => {
+      resetIdempotencyKey(crypto.randomUUID())
+      setSelected([])
+      setPreviewOpen(false)
+      onQueued()
+      void members.refetch()
+    },
+  })
+  const toggle = (eventMemberId: string) => setSelected((current) => current.includes(eventMemberId) ? current.filter((id) => id !== eventMemberId) : [...current, eventMemberId])
+  const selectAllVisible = () => setSelected((current) => Array.from(new Set([...current, ...eligibleVisible.map((row) => asString(row.eventMemberId)).filter(Boolean)])))
+
+  if (members.isLoading) return <LoadingState title="Loading no-pledge members" />
+  if (members.isError) return <ErrorState title="Unable to load no-pledge members" message={errorMessage(members.error, 'Members without pledges could not be loaded.')} />
+
+  return (
+    <div className="pledge-request-panel">
+      <div className="messages-filter-grid">
+        <label>Search<input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Name, phone or member code" /></label>
+        <label>Category<select value={category} onChange={(event) => setCategory(event.target.value)}><option value="ALL">All categories</option>{categories.map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
+      </div>
+      <div className="mini-stat-row">
+        <span>{rows.length} without pledge</span>
+        <span>{eligibleVisible.length} ready visible</span>
+        <span>{selected.length} selected</span>
+      </div>
+      <div className="inline-actions">
+        <button type="button" onClick={selectAllVisible} disabled={!eligibleVisible.length}>Select All Visible</button>
+        <button type="button" onClick={() => setSelected([])} disabled={!selected.length}>Clear</button>
+        <button className="primary-button" type="button" onClick={() => setPreviewOpen(true)} disabled={!eligibleSelected.length}>Send Pledge Request ({eligibleSelected.length})</button>
+      </div>
+      <div className="finance-card-list">
+        {filtered.map((row) => {
+          const eventMemberId = asString(row.eventMemberId)
+          const eligibility = pledgeRequestEligibility(row)
+          const eligible = !asString(row.ineligibleReason)
+          return (
+            <article className="finance-card pledge-request-card" key={eventMemberId}>
+              <label className="checkbox-line">
+                <input type="checkbox" checked={selected.includes(eventMemberId)} disabled={!eligible} onChange={() => toggle(eventMemberId)} />
+                <span><strong>{asString(row.fullName, 'Member')}</strong><small>{asString(row.maskedPhone, maskPhone(row.phone))} · {asString(row.category, 'No category')}</small></span>
+              </label>
+              <div className="card-title-row">
+                <span>Last Request: {asDateTime(row.lastPledgeRequestAt)}</span>
+                <StatusBadge tone={eligibility.tone}>{eligibility.label}</StatusBadge>
+              </div>
+            </article>
+          )
+        })}
+        {!rows.length ? <EmptyState title="No members without pledges." message="Everyone in this event already has an active pledge." /> : null}
+        {rows.length > 0 && !filtered.length ? <EmptyState title="No members match these filters." message="Try another name or category." /> : null}
+      </div>
+      {previewOpen ? <section className="mobile-sheet form-grid">
+        <h2>Review Pledge Requests</h2>
+        <ReviewLine label="Event" value={eventName} />
+        <ReviewLine label="Selected" value={String(selectedRows.length)} />
+        <ReviewLine label="Eligible" value={String(eligibleSelected.length)} />
+        <ReviewLine label="No Phone" value={String(skipped.noPhone)} />
+        <ReviewLine label="SMS Disabled" value={String(skipped.smsDisabled)} />
+        <ReviewLine label="Recently Sent" value={String(skipped.recentlySent)} />
+        <ReviewLine label="Has Pledge" value={String(skipped.hasPledge)} />
+        <ReviewLine label="Estimated SMS" value={String(eligibleSelected.length)} />
+        <div className="finance-card-list">{eligibleSelected.slice(0, 3).map((row) => <article className="content-panel" key={asString(row.eventMemberId)}><p>{asString(row.messagePreview)}</p></article>)}</div>
+        {mutation.data ? <p className="privacy-note">Queued: {asString(mutation.data.data.queued)} · Allowed: {asString(mutation.data.data.allowedBySmsBalance, 'unlimited')} · Batch {asString(mutation.data.data.batchId)}</p> : null}
+        {mutation.error ? <p className="field-error">{errorMessage(mutation.error, 'Pledge requests could not be queued.')}</p> : null}
+        <div className="sheet-actions"><button type="button" onClick={() => setPreviewOpen(false)}>Cancel</button><button className="primary-button" type="button" disabled={!eligibleSelected.length || mutation.isPending} onClick={() => mutation.mutate()}>{mutation.isPending ? 'Queueing...' : `Queue ${eligibleSelected.length} Messages`}</button></div>
+      </section> : null}
+    </div>
+  )
+}
+
 function MessageHistoryCard({ message, tenantId, canResend, onResent }: { message: Row; tenantId: string; canResend: boolean; onResent: () => void }) {
   const status = asString(message.status, 'QUEUED')
   const type = asString(message.message_type, asString(message.template_code, 'Message'))
   const preview = asString(message.body ?? message.message_body ?? message.rendered_body ?? message.messagePreview, '')
   const failed = status === 'FAILED'
+  const cancelled = status === 'CANCELLED'
   return (
     <article className={messageCardClass(status)}>
       <div className="message-card-icon">
@@ -1413,7 +1582,7 @@ function MessageHistoryCard({ message, tenantId, canResend, onResent }: { messag
           <span><small>Attempts</small>{String(asNumber(message.attempt_count))}</span>
         </div>
         {preview ? <p className="message-preview">{preview}</p> : null}
-        {failed ? <div className="message-error-callout"><strong>{asString(message.last_error_code, 'Delivery failed')}</strong><span>{asString(message.last_error_message, 'SMS delivery failed.')}</span></div> : null}
+        {failed || cancelled ? <div className="message-error-callout"><strong>{cancelled ? 'Cancelled' : asString(message.last_error_code, 'Delivery failed')}</strong><span>{cancelled ? asString(message.last_error_message, 'Member has already pledged') : asString(message.last_error_message, 'SMS delivery failed.')}</span></div> : null}
         {failed && canResend ? <RetrySmsButton tenantId={tenantId} outboxId={asString(message.id)} onDone={onResent} /> : null}
       </div>
     </article>

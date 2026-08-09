@@ -1502,6 +1502,41 @@ th {
   font-weight: 800;
 }
 
+.pledge-request-summary,
+.pledge-request-panel {
+  display: grid;
+  gap: 12px;
+}
+
+.pledge-request-card {
+  gap: 10px;
+}
+
+.checkbox-line {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 10px;
+}
+
+.checkbox-line input {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  accent-color: var(--color-primary);
+}
+
+.checkbox-line span {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.checkbox-line small {
+  color: var(--color-muted);
+  overflow-wrap: anywhere;
+}
+
 .message-card {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);

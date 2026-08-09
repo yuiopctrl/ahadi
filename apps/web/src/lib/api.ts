@@ -176,6 +176,12 @@ export const api = {
     apiFetch<{ data: Record<string, unknown> }>(`/events/${eventId}/reminders/balance`, { tenantId, method: 'POST', body: JSON.stringify(payload) }),
   sendBulkBalanceReminders: (tenantId: string, eventId: string, payload: Record<string, unknown>) =>
     apiFetch<{ data: Record<string, unknown> }>(`/events/${eventId}/reminders/balance/bulk`, { tenantId, method: 'POST', body: JSON.stringify(payload) }),
+  eventNoPledgeMembers: (tenantId: string, eventId: string) =>
+    apiFetch<{ data: Record<string, unknown>[] }>(`/events/${eventId}/messages/no-pledge-members`, { tenantId }),
+  sendPledgeRequest: (tenantId: string, eventId: string, payload: Record<string, unknown>) =>
+    apiFetch<{ data: Record<string, unknown> }>(`/events/${eventId}/messages/pledge-request`, { tenantId, method: 'POST', body: JSON.stringify(payload) }),
+  sendBulkPledgeRequests: (tenantId: string, eventId: string, payload: Record<string, unknown>) =>
+    apiFetch<{ data: Record<string, unknown> }>(`/events/${eventId}/messages/pledge-request/bulk`, { tenantId, method: 'POST', body: JSON.stringify(payload) }),
   upsertPledge: (tenantId: string, eventId: string, payload: Record<string, unknown>, pledgeId?: string) =>
     apiFetch<{ data: Record<string, unknown> }>(pledgeId ? `/events/${eventId}/pledges/${pledgeId}` : `/events/${eventId}/pledges`, {
       tenantId,
