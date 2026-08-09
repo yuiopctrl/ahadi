@@ -3,6 +3,7 @@ import { env } from './env.js'
 
 const server = app.listen(env.PORT, () => {
   console.log(`Ahadi API listening on :${env.PORT}`)
+  console.info(`API_STARTED pid=${process.pid} port=${env.PORT} env=${env.NODE_ENV}`)
 })
 
 function shutdown(signal: NodeJS.Signals) {

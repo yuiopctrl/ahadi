@@ -14,6 +14,7 @@ const errorStatus: Record<ApiErrorCode, number> = {
   PIN_LOCKED: 423,
   TENANT_ACCESS_DENIED: 403,
   PLATFORM_ACCESS_DENIED: 403,
+  PERMISSION_DENIED: 403,
   ONBOARDING_ALREADY_COMPLETED: 409,
   REGISTRATION_PAUSED: 503,
   INVITATION_REQUIRED: 403,
@@ -41,6 +42,9 @@ const errorStatus: Record<ApiErrorCode, number> = {
   EVENT_NOT_ACTIVE: 409,
   EVENT_ACCESS_DENIED: 403,
   EVENT_LIMIT_REACHED: 409,
+  INVALID_EVENT_TYPE: 400,
+  INVALID_EVENT_DATE: 400,
+  INVALID_TARGET_AMOUNT: 400,
   RECEIPT_NOT_FOUND: 404,
   SUBSCRIPTION_READ_ONLY: 402,
   SUBSCRIPTION_BLOCKED: 402,
@@ -69,6 +73,20 @@ const errorStatus: Record<ApiErrorCode, number> = {
   MEMBER_STATEMENT_NOT_FOUND: 404,
   INVALID_EXPORT_FILTER: 400,
   EXPORT_PERMISSION_DENIED: 403,
+  PAYMENT_GATEWAY_DISABLED: 403,
+  PAYMENT_PROVIDER_UNAVAILABLE: 503,
+  PAYMENT_INTENT_NOT_FOUND: 404,
+  PAYMENT_INTENT_EXPIRED: 409,
+  PAYMENT_INTENT_ALREADY_COMPLETED: 409,
+  INVOICE_NOT_PAYABLE: 409,
+  PAYMENT_AMOUNT_MISMATCH: 409,
+  PAYMENT_CURRENCY_MISMATCH: 409,
+  PAYMENT_WEBHOOK_INVALID: 401,
+  PAYMENT_WEBHOOK_DUPLICATE: 409,
+  PAYMENT_TRANSACTION_UNKNOWN: 404,
+  PAYMENT_ALREADY_PROCESSED: 409,
+  PAYMENT_REVERSAL_ALREADY_PROCESSED: 409,
+  PAYMENT_RECONCILIATION_REQUIRED: 409,
   INTERNAL_ERROR: 500,
 }
 
@@ -120,6 +138,21 @@ export function mapUnknownError(error: unknown): AppError {
   const matchedCode = Object.keys(errorStatus).find((code) => message.includes(code)) as ApiErrorCode | undefined
   if (matchedCode) {
     return new AppError(matchedCode)
+  }
+  const providerCode = getStringProperty(error, 'code')
+  if (providerCode === '42501') {
+    return new AppError('PERMISSION_DENIED')
+  }
+  if (providerCode === '23514') {
+    if (message.includes('EVENT_TYPE')) {
+      return new AppError('INVALID_EVENT_TYPE')
+    }
+    if (message.includes('EVENT_DATE') || message.includes('PLEDGE_DEADLINE')) {
+      return new AppError('INVALID_EVENT_DATE')
+    }
+    if (message.includes('TARGET_AMOUNT')) {
+      return new AppError('INVALID_TARGET_AMOUNT')
+    }
   }
   return new AppError('INTERNAL_ERROR', 'Unexpected application error')
 }

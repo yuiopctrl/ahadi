@@ -26,6 +26,13 @@ export const apiEnvSchema = z.object({
   BALANCE_REMINDER_DUE_SOON_DAYS: z.coerce.number().int().nonnegative().max(60).default(7),
   BALANCE_REMINDER_MAX_BATCH_SIZE: z.coerce.number().int().positive().max(100).default(100),
   WHATSAPP_SHARE_SAFE_CHAR_LIMIT: z.coerce.number().int().positive().max(20000).default(3500),
+  GATEWAY_PROVIDER: z.enum(['TEST', 'NMB']).default('TEST'),
+  GATEWAY_ENVIRONMENT: z.enum(['SANDBOX', 'PRODUCTION']).default('SANDBOX'),
+  TEST_GATEWAY_WEBHOOK_SECRET: z.string().trim().min(8).default('dev-test-gateway-secret'),
+  NMB_BASE_URL: z.string().url().optional(),
+  NMB_CLIENT_ID: z.string().trim().optional(),
+  NMB_CLIENT_SECRET: z.string().trim().optional(),
+  NMB_WEBHOOK_SECRET: z.string().trim().optional(),
 })
 
 export type ApiEnv = z.infer<typeof apiEnvSchema>

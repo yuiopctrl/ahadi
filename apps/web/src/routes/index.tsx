@@ -3,8 +3,8 @@ import { AuthLayout } from '../layouts/AuthLayout'
 import { PlatformAppLayout } from '../layouts/PlatformAppLayout'
 import { TenantAppLayout } from '../layouts/TenantAppLayout'
 import { AuthPage } from '../pages/auth'
-import { PlatformBetaPage, PlatformErrorsPage, PlatformFeaturesPage, PlatformFeedbackPage, PlatformPage, PlatformSupportPage, PlatformTenantDetailPage } from '../pages/platform'
-import { EventDetailPage, MemberDetailPage, OutstandingPage, PaymentEntryPage, ReceiptPage, ReportsPage, ShareListPage, SmsHistoryPage, TenantDashboardPage, TenantHelpPage, TenantListPage, TenantSettingsPage, TenantUsersPage } from '../pages/tenant'
+import { PlatformBetaPage, PlatformBillingGatewaysPage, PlatformBillingReconciliationPage, PlatformErrorsPage, PlatformFeaturesPage, PlatformFeedbackPage, PlatformPage, PlatformSupportPage, PlatformTenantDetailPage } from '../pages/platform'
+import { EventDetailPage, MemberDetailPage, OutstandingPage, PaymentEntryPage, ReceiptPage, ReportsPage, ShareListPage, SmsHistoryPage, TenantBillingInvoicePage, TenantBillingPage, TenantDashboardPage, TenantHelpPage, TenantListPage, TenantSettingsPage, TenantUsersPage } from '../pages/tenant'
 import { AuthenticatedRoute, OnboardingRoute, PinUnlockedRoute, PlatformOwnerRoute, PublicRoute, TenantRoute } from './guards'
 
 export const router = createBrowserRouter([
@@ -73,6 +73,8 @@ export const router = createBrowserRouter([
                   { path: 'users', element: <TenantUsersPage /> },
                   { path: 'help', element: <TenantHelpPage /> },
                   { path: 'settings', element: <TenantSettingsPage /> },
+                  { path: 'settings/billing', element: <TenantBillingPage /> },
+                  { path: 'settings/billing/invoices/:invoiceId', element: <TenantBillingInvoicePage /> },
                 ],
               },
             ],
@@ -93,6 +95,8 @@ export const router = createBrowserRouter([
                   { path: 'features', element: <PlatformFeaturesPage /> },
                   { path: 'plans', element: <PlatformPage title="Packages & Subscriptions" /> },
                   { path: 'subscriptions', element: <PlatformPage title="Subscriptions" /> },
+                  { path: 'billing/gateways', element: <PlatformBillingGatewaysPage /> },
+                  { path: 'billing/reconciliation', element: <PlatformBillingReconciliationPage /> },
                   { path: 'sms', element: <PlatformPage title="SMS" /> },
                   { path: 'system/errors', element: <PlatformErrorsPage /> },
                   { path: 'audit', element: <PlatformPage title="Audit Logs" /> },

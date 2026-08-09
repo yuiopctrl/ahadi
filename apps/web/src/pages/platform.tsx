@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { AlertTriangle, Building2, CheckCircle2, Flag, HeartHandshake, MessageSquareText, Package, ShieldCheck } from 'lucide-react'
+import { Activity, AlertTriangle, Building2, CheckCircle2, CreditCard, Flag, HeartHandshake, MessageSquareText, Package, ShieldCheck } from 'lucide-react'
 import { Link, useParams } from 'react-router-dom'
 import { useState } from 'react'
 import { EmptyState, ErrorState, LoadingState, PageContainer, PageHeader, StatCard, StatusBadge } from '../components/ui'
@@ -407,6 +407,54 @@ function PlansTable({ plans }: { plans: PlatformPlanRow[] }) {
         </table>
       </div>
     </article>
+  )
+}
+
+export function PlatformBillingGatewaysPage() {
+  const gateways = useQuery({ queryKey: ['platform-billing-gateways'], queryFn: async () => (await api.platformBillingGateways()).data })
+
+  if (gateways.isLoading) return <PageContainer><LoadingState title="Loading gateways" message="Reading non-secret provider configuration." /></PageContainer>
+  if (gateways.isError || !gateways.data) return <PageContainer><ErrorState title="Unable to load gateways" message="Check platform gateway permissions." /></PageContainer>
+
+  const data = gateways.data
+  const adapters = asRows(data.adapters)
+  const databaseCapabilities = asRows(data.databaseCapabilities)
+  const enabled = databaseCapabilities.filter((row) => row.enabled === true)
+
+  return (
+    <PageContainer>
+      <PageHeader title="Payment Gateways" description="Safe subscription billing gateway status. Secrets and provider credentials are never shown here." />
+      <section className="stats-grid">
+        <StatCard label="Configured" value={asString(data.configuredProvider, 'TEST')} meta={asString(data.environment, 'SANDBOX')} icon={CreditCard} />
+        <StatCard label="Enabled" value={String(enabled.length)} meta={`${databaseCapabilities.length} configured providers`} icon={CheckCircle2} tone={enabled.length ? 'success' : 'warning'} />
+        <StatCard label="Adapters" value={String(adapters.length)} meta="Server-side only" icon={Activity} />
+      </section>
+      <SimpleTable rows={databaseCapabilities} columns={['provider', 'enabled', 'environment', 'supportedMethods', 'referenceMode', 'webhookStatus', 'lastSuccessfulTransactionAt', 'lastErrorCode']} />
+      <SimpleTable rows={adapters} columns={['provider', 'enabled', 'environment', 'supportedMethods', 'referenceMode', 'webhookStatus', 'health']} />
+      {databaseCapabilities.some((row) => asString(row.provider) === 'NMB' && row.enabled !== true) ? <p className="privacy-note">NMB is disabled until the production contract, endpoints and webhook signature specification are supplied.</p> : null}
+    </PageContainer>
+  )
+}
+
+export function PlatformBillingReconciliationPage() {
+  const reconciliation = useQuery({ queryKey: ['platform-billing-reconciliation'], queryFn: async () => (await api.platformBillingReconciliation()).data })
+
+  if (reconciliation.isLoading) return <PageContainer><LoadingState title="Loading reconciliation" message="Comparing gateway transactions, subscription payments and invoice balances." /></PageContainer>
+  if (reconciliation.isError) return <PageContainer><ErrorState title="Unable to load reconciliation" message="Check platform reconciliation permissions." /></PageContainer>
+
+  const rows = reconciliation.data ?? []
+  const requiresReview = rows.filter((row) => asString(row.reconciliation_status ?? row.reconciliationStatus) === 'REQUIRES_REVIEW' || asString(row.reconciliation_status ?? row.reconciliationStatus) === 'MISMATCH')
+
+  return (
+    <PageContainer>
+      <PageHeader title="Reconciliation" description="Read-only diagnostics for subscription gateway transactions and billing financial effects." />
+      <section className="stats-grid">
+        <StatCard label="Rows" value={String(rows.length)} meta="Gateway diagnostics" icon={CreditCard} />
+        <StatCard label="Review" value={String(requiresReview.length)} meta="Needs platform billing attention" icon={AlertTriangle} tone={requiresReview.length ? 'warning' : 'success'} />
+        <StatCard label="Mode" value="Read-only" meta="No automatic repairs" icon={ShieldCheck} />
+      </section>
+      <SimpleTable rows={rows} columns={['provider', 'provider_transaction_id', 'invoice_number', 'tenant_name', 'amount', 'currency', 'transaction_status', 'payment_status', 'invoice_status', 'reconciliation_status', 'reason', 'paid_at']} />
+    </PageContainer>
   )
 }
 

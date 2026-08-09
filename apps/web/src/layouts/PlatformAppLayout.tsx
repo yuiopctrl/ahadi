@@ -1,7 +1,9 @@
 import {
+  Activity,
   Building2,
   Flag,
   ClipboardList,
+  CreditCard,
   Gauge,
   HeartHandshake,
   MessageSquareText,
@@ -23,6 +25,8 @@ const platformNav = [
   { to: '/platform/features', label: 'Features', icon: SlidersHorizontal },
   { to: '/platform/plans', label: 'Packages', icon: Package },
   { to: '/platform/subscriptions', label: 'Subscriptions', icon: Receipt },
+  { to: '/platform/billing/gateways', label: 'Gateways', icon: CreditCard },
+  { to: '/platform/billing/reconciliation', label: 'Reconciliation', icon: Activity },
   { to: '/platform/sms', label: 'SMS', icon: MessageSquareText },
   { to: '/platform/system/errors', label: 'Errors', icon: ShieldAlert },
   { to: '/platform/audit', label: 'Audit Logs', icon: ClipboardList },

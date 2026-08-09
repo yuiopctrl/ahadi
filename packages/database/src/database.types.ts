@@ -1883,6 +1883,19 @@ export type Database = {
         }
         Returns: Json
       }
+      rpc_create_event_v2: {
+        Args: {
+          p_custom_event_type?: string
+          p_event_date?: string
+          p_event_type: string
+          p_name: string
+          p_pledge_deadline?: string
+          p_target_amount?: number
+          p_tenant_id: string
+          p_venue?: string
+        }
+        Returns: Json
+      }
       rpc_create_member_and_attach_to_event: {
         Args: {
           p_alternative_phone?: string

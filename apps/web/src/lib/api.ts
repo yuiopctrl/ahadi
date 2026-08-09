@@ -119,6 +119,8 @@ export const api = {
   startSupportSession: (tenantId: string, payload: Record<string, unknown>) =>
     apiFetch<{ data: Record<string, unknown> }>(`/platform/tenants/${tenantId}/support-session`, { method: 'POST', body: JSON.stringify(payload) }),
   platformPlans: () => apiFetch<{ data: unknown[] }>('/platform/plans'),
+  platformBillingGateways: () => apiFetch<{ data: Record<string, unknown> }>('/platform/billing/gateways'),
+  platformBillingReconciliation: () => apiFetch<{ data: Record<string, unknown>[] }>('/platform/billing/reconciliation'),
   platformBeta: () => apiFetch<{ data: Record<string, unknown> }>('/platform/beta'),
   updateRolloutSettings: (payload: Record<string, unknown>) =>
     apiFetch<{ data: Record<string, unknown> }>('/platform/beta/settings', { method: 'PUT', body: JSON.stringify(payload) }),
@@ -138,6 +140,11 @@ export const api = {
   platformErrors: () => apiFetch<{ data: Record<string, unknown>[] }>('/platform/system/errors'),
   tenantUsers: (tenantId: string) => apiFetch<{ data: Record<string, unknown>[] }>('/users', { tenantId }),
   settingsSummary: (tenantId: string) => apiFetch<{ data: Record<string, unknown> }>('/settings-summary', { tenantId }),
+  billingSummary: (tenantId: string) => apiFetch<{ data: Record<string, unknown> }>('/billing/summary', { tenantId }),
+  billingInvoice: (tenantId: string, invoiceId: string) => apiFetch<{ data: Record<string, unknown> }>(`/billing/invoices/${invoiceId}`, { tenantId }),
+  createSubscriptionPaymentIntent: (tenantId: string, invoiceId: string, payload: Record<string, unknown>) =>
+    apiFetch<{ data: Record<string, unknown> }>(`/billing/invoices/${invoiceId}/payment-intents`, { tenantId, method: 'POST', body: JSON.stringify(payload) }),
+  subscriptionPaymentIntent: (tenantId: string, intentId: string) => apiFetch<{ data: Record<string, unknown> }>(`/billing/payment-intents/${intentId}`, { tenantId }),
   createEvent: (tenantId: string, payload: Record<string, unknown>) =>
     apiFetch<{ data: Record<string, unknown> }>('/events', { tenantId, method: 'POST', body: JSON.stringify(payload) }),
   eventFinancialSummary: (tenantId: string, eventId: string) => apiFetch<{ data: Record<string, unknown> }>(`/events/${eventId}/financial-summary`, { tenantId }),

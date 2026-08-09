@@ -1651,6 +1651,162 @@ export function TenantSettingsPage() {
   )
 }
 
+function rows(value: unknown): Row[] {
+  return Array.isArray(value) ? value.map(jsonRecord) : []
+}
+
+function invoicePayable(invoice: Row) {
+  return !['PAID', 'VOID'].includes(asString(invoice.status)) && asNumber(invoice.amount_due ?? invoice.amountDue) > 0
+}
+
+export function TenantBillingPage() {
+  const session = useSessionStore()
+  const tenantId = session.selectedTenantId
+  const billing = useQuery({ queryKey: ['tenant-billing-summary', tenantId], queryFn: async () => (await api.billingSummary(tenantId ?? '')).data, enabled: Boolean(tenantId) })
+
+  if (!tenantId) return <ErrorState title="Unable to load billing" message="Select a tenant first." />
+  if (billing.isLoading) return <LoadingState title="Loading billing" message="Fetching subscription invoices and gateway status." />
+  if (billing.isError || !billing.data) return <ErrorState title="Unable to load billing" message={errorMessage(billing.error, 'Billing could not be loaded.')} />
+
+  const subscription = jsonRecord(billing.data.subscription)
+  const invoices = rows(billing.data.invoices)
+  const payments = rows(billing.data.payments)
+  const pendingIntents = rows(billing.data.pendingIntents)
+  const payableInvoices = invoices.filter(invoicePayable)
+
+  return (
+    <PageContainer>
+      <PageHeader title="Billing" description="Ahadi subscription invoices, verified payments and pending gateway attempts." action={<Link to="/app/settings">Settings</Link>} />
+      <section className="stats-grid">
+        <StatCard label="Package" value={asString(subscription.planName, 'Not set')} meta={asString(subscription.status, 'No status')} icon={FileText} />
+        <StatCard label="Open Balance" value={moneyText(payableInvoices.reduce((sum, invoice) => sum + asNumber(invoice.amount_due ?? invoice.amountDue), 0))} meta={`${payableInvoices.length} payable invoices`} icon={CreditCard} tone={payableInvoices.length ? 'warning' : 'success'} />
+        <StatCard label="Verified Payments" value={String(payments.length)} meta={`${pendingIntents.length} pending attempts`} icon={CheckCircle2} />
+      </section>
+      <section className="finance-card-list">
+        {invoices.map((invoice) => (
+          <article className="finance-card" key={asString(invoice.id)}>
+            <div className="card-title-row">
+              <div><strong>{asString(invoice.invoice_number ?? invoice.invoiceNumber, 'Invoice')}</strong><span>Due {asDate(invoice.due_date ?? invoice.dueDate)} · {asString(invoice.purpose, 'MANUAL')}</span></div>
+              <StatusBadge tone={statusTone(invoice.status)}>{asString(invoice.status, 'ISSUED')}</StatusBadge>
+            </div>
+            <div className="amount-triplet">
+              <span><small>Total</small>{moneyText(invoice.total_amount ?? invoice.totalAmount)}</span>
+              <span><small>Paid</small>{moneyText(invoice.amount_paid ?? invoice.amountPaid)}</span>
+              <span><small>Balance</small>{moneyText(invoice.amount_due ?? invoice.amountDue)}</span>
+            </div>
+            <div className="card-actions">
+              <Link to={`/app/settings/billing/invoices/${asString(invoice.id)}`}>{invoicePayable(invoice) ? 'Pay Now' : 'View Invoice'}</Link>
+            </div>
+          </article>
+        ))}
+        {!invoices.length ? <EmptyState title="No subscription invoices yet" message="Invoices will appear here when a plan renewal or conversion is issued." /> : null}
+      </section>
+    </PageContainer>
+  )
+}
+
+export function TenantBillingInvoicePage() {
+  const session = useSessionStore()
+  const tenantId = session.selectedTenantId
+  const { invoiceId } = useParams()
+  const queryClient = useQueryClient()
+  const [provider, setProvider] = useState('TEST')
+  const [paymentMethod, setPaymentMethod] = useState('MOBILE_MONEY')
+  const [activeIntentId, setActiveIntentId] = useState('')
+  const [paymentIntentIdempotencyKey, resetPaymentIntentIdempotencyKey] = useState(() => crypto.randomUUID())
+  const invoice = useQuery({ queryKey: ['tenant-billing-invoice', tenantId, invoiceId], queryFn: async () => (await api.billingInvoice(tenantId ?? '', invoiceId ?? '')).data, enabled: Boolean(tenantId && invoiceId) })
+  const billing = useQuery({ queryKey: ['tenant-billing-summary', tenantId], queryFn: async () => (await api.billingSummary(tenantId ?? '')).data, enabled: Boolean(tenantId) })
+  const intent = useQuery({
+    queryKey: ['subscription-payment-intent', tenantId, activeIntentId],
+    queryFn: async () => (await api.subscriptionPaymentIntent(tenantId ?? '', activeIntentId)).data,
+    enabled: Boolean(tenantId && activeIntentId),
+    refetchInterval: (query) => ['PENDING', 'PROCESSING', 'CREATED'].includes(asString(query.state.data?.status)) ? 7000 : false,
+  })
+  const createIntent = useMutation({
+    mutationFn: async () => api.createSubscriptionPaymentIntent(tenantId ?? '', invoiceId ?? '', {
+      provider,
+      paymentMethod,
+      idempotencyKey: paymentIntentIdempotencyKey,
+      returnUrl: window.location.href,
+    }),
+    onSuccess: (result) => {
+      const id = asString(result.data.id)
+      setActiveIntentId(id)
+      void queryClient.invalidateQueries({ queryKey: ['tenant-billing-summary', tenantId] })
+      void queryClient.invalidateQueries({ queryKey: ['tenant-billing-invoice', tenantId, invoiceId] })
+      resetPaymentIntentIdempotencyKey(crypto.randomUUID())
+    },
+  })
+
+  if (!tenantId || !invoiceId) return <ErrorState title="Unable to load invoice" message="Select a tenant invoice first." />
+  if (invoice.isLoading || billing.isLoading) return <LoadingState title="Loading invoice" message="Fetching invoice balance and payment gateway options." />
+  if (invoice.isError || !invoice.data) return <ErrorState title="Unable to load invoice" message={errorMessage(invoice.error, 'Invoice could not be loaded.')} />
+
+  const data = invoice.data
+  const gateways = rows(billing.data?.gateways).filter((gateway) => gateway.enabled === true)
+  const existingPending = rows(billing.data?.pendingIntents).find((item) => asString(item.invoice_id ?? item.invoiceId) === invoiceId)
+  const activeIntent = intent.data ?? (activeIntentId ? null : existingPending ?? null)
+  const items = rows(data.subscription_invoice_items)
+  const payable = invoicePayable(data)
+
+  return (
+    <PageContainer>
+      <PageHeader title={asString(data.invoice_number ?? data.invoiceNumber, 'Invoice')} description="Subscription invoice payment is confirmed only after a verified gateway callback." action={<Link to="/app/settings/billing"><ArrowLeft size={16} aria-hidden /> Billing</Link>} />
+      <section className="stats-grid">
+        <StatCard label="Total" value={moneyText(data.total_amount ?? data.totalAmount)} icon={FileText} />
+        <StatCard label="Paid" value={moneyText(data.amount_paid ?? data.amountPaid)} icon={CheckCircle2} tone="success" />
+        <StatCard label="Balance" value={moneyText(data.amount_due ?? data.amountDue)} icon={CreditCard} tone={payable ? 'warning' : 'success'} />
+        <StatCard label="Due Date" value={asDate(data.due_date ?? data.dueDate)} meta={asString(data.purpose, 'MANUAL')} icon={CalendarDays} />
+      </section>
+      <section className="form-layout">
+        <article className="content-panel">
+          <div className="panel-header"><div><h2>Invoice</h2><p>{asString(data.currency, 'TZS')} · {asString(data.status, 'ISSUED')}</p></div><StatusBadge tone={statusTone(data.status)}>{asString(data.status, 'ISSUED')}</StatusBadge></div>
+          {items.length ? items.map((item) => <ReviewLine key={asString(item.id, asString(item.description))} label={asString(item.description, 'Line item')} value={moneyText(item.total_amount ?? item.totalAmount)} />) : <ReviewLine label="Invoice amount" value={moneyText(data.total_amount ?? data.totalAmount)} />}
+          <ReviewLine label="Issued" value={asDate(data.issued_at ?? data.issuedAt)} />
+          <ReviewLine label="Paid at" value={data.paid_at ? asDateTime(data.paid_at) : 'Not paid'} />
+        </article>
+        <article className="content-panel">
+          <div className="panel-header"><div><h2>Pay Invoice</h2><p>{payable ? `Pay ${moneyText(data.amount_due ?? data.amountDue)}` : 'No balance is due.'}</p></div></div>
+          {payable && !activeIntent ? (
+            <div className="support-form">
+              <label>Gateway<select value={provider} onChange={(event) => setProvider(event.target.value)}>{gateways.map((gateway) => <option key={asString(gateway.provider)} value={asString(gateway.provider)}>{asString(gateway.provider)} · {asString(gateway.referenceMode)}</option>)}</select></label>
+              <label>Payment method<select value={paymentMethod} onChange={(event) => setPaymentMethod(event.target.value)}>{['MOBILE_MONEY', 'CONTROL_NUMBER'].map((method) => <option key={method} value={method}>{method.replace('_', ' ')}</option>)}</select></label>
+              {createIntent.error ? <p className="field-error">{errorMessage(createIntent.error, 'Payment attempt could not be created.')}</p> : null}
+              <button type="button" disabled={!gateways.length || createIntent.isPending} onClick={() => createIntent.mutate()}>{createIntent.isPending ? 'Creating...' : 'Pay Now'}</button>
+              {!gateways.length ? <p className="privacy-note">No subscription payment gateway is currently enabled.</p> : null}
+            </div>
+          ) : null}
+          {activeIntent ? <PaymentIntentPanel intent={jsonRecord(activeIntent)} refresh={() => void intent.refetch()} loading={intent.isFetching} /> : null}
+          {!payable ? <p className="success-note">This invoice has no payable balance.</p> : null}
+        </article>
+      </section>
+    </PageContainer>
+  )
+}
+
+function PaymentIntentPanel({ intent, refresh, loading }: { intent: Row; refresh: () => void; loading: boolean }) {
+  const status = asString(intent.status, 'PENDING')
+  const controlNumber = asString(intent.controlNumber ?? intent.control_number)
+  const checkoutUrl = asString(intent.checkoutUrl ?? intent.checkout_url)
+  return (
+    <div className="payment-instruction-card">
+      <div className="card-title-row">
+        <div><strong>{status === 'SUCCEEDED' ? 'Payment Received' : 'Waiting for Payment'}</strong><span>{asString(intent.provider)} · {moneyText(intent.amount ?? intent.requested_amount)}</span></div>
+        <StatusBadge tone={statusTone(status)}>{status}</StatusBadge>
+      </div>
+      {controlNumber ? <ReviewLine label="Control number" value={controlNumber} /> : null}
+      {asString(intent.paymentInstructions) ? <p className="privacy-note">{asString(intent.paymentInstructions)}</p> : null}
+      {checkoutUrl ? <a className="primary-button inline-action" href={checkoutUrl} rel="noreferrer">Open Checkout</a> : null}
+      <ReviewLine label="Invoice status" value={asString(intent.invoiceStatus, 'ISSUED')} />
+      <ReviewLine label="Expires" value={asDateTime(intent.expiresAt ?? intent.expires_at)} />
+      <div className="sheet-actions">
+        {controlNumber ? <button type="button" onClick={() => void copyPlainText(controlNumber)}><Copy size={16} aria-hidden /> Copy Number</button> : null}
+        <button type="button" disabled={loading || ['SUCCEEDED', 'FAILED', 'EXPIRED', 'CANCELLED'].includes(status)} onClick={refresh}>{loading ? 'Checking...' : 'Check Status'}</button>
+      </div>
+    </div>
+  )
+}
+
 function SettingsPanel({ title, rows }: { title: string; rows: Array<[string, unknown]> }) {
   return (
     <article className="content-panel">

@@ -3,7 +3,7 @@ import express from 'express'
 import rateLimit from 'express-rate-limit'
 import helmet from 'helmet'
 import morgan from 'morgan'
-import { randomBytes } from 'node:crypto'
+import { createHash, randomBytes } from 'node:crypto'
 import { z, ZodError } from 'zod'
 import type { ApiErrorCode } from '@ahadi/types'
 import {
@@ -18,6 +18,8 @@ import { logOtpDiagnostic, maskPhoneForLog } from './diagnostics.js'
 import { env } from './env.js'
 import { AppError, errorHandler } from './errors.js'
 import { sendSmsHookHandler } from './modules/auth/hooks/send-sms-hook.controller.js'
+import { getBillingGateway, listBillingGatewayCapabilities } from './modules/billing/gateways/gateway.registry.js'
+import { confirmParsedGatewayPayment, confirmParsedGatewayReversal, createSubscriptionPaymentIntent } from './modules/billing/gateways/gateway.service.js'
 import { classifyOnboardingDatabaseError, getSafeOnboardingDatabaseErrorDetails } from './onboarding-errors.js'
 import { classifyPinSetupDatabaseError, classifyPinSetupValidationError, getSafePinDatabaseErrorDetails } from './pin-errors.js'
 import {
@@ -108,6 +110,22 @@ const sendSmsHookLimiter = rateLimit({
   },
 })
 
+const paymentIntentLimiter = rateLimit({
+  windowMs: 60_000,
+  limit: 12,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: (request, response) => {
+    response.status(429).json({
+      error: {
+        code: 'RATE_LIMITED',
+        message: 'Too many payment attempts. Try again shortly.',
+        requestId: request.requestId,
+      },
+    })
+  },
+})
+
 function getProviderStatus(error: unknown): number | null {
   if (typeof error === 'object' && error !== null && 'status' in error && typeof error.status === 'number') {
     return error.status
@@ -190,6 +208,47 @@ function logValidationError(requestId: string, operation: string, error: ZodErro
   })
 }
 
+function healthPayload() {
+  return {
+    ok: true,
+    status: 'ok',
+    service: 'ahadi-api',
+    ...(env.NODE_ENV === 'development'
+      ? {
+          pid: process.pid,
+          uptimeSeconds: Math.floor(process.uptime()),
+          environment: env.NODE_ENV,
+        }
+      : {}),
+  }
+}
+
+function requestTraceMiddleware(request: express.Request, response: express.Response, next: express.NextFunction) {
+  if (env.NODE_ENV !== 'development') {
+    next()
+    return
+  }
+  const start = performance.now()
+  const path = request.originalUrl.split('?')[0] ?? request.originalUrl
+  console.info('HTTP_REQUEST_STARTED', {
+    requestId: request.requestId,
+    pid: process.pid,
+    method: request.method,
+    path,
+  })
+  response.on('finish', () => {
+    console.info('HTTP_REQUEST_COMPLETED', {
+      requestId: request.requestId,
+      pid: process.pid,
+      method: request.method,
+      path,
+      status: response.statusCode,
+      durationMs: Math.round(performance.now() - start),
+    })
+  })
+  next()
+}
+
 const uuidParamSchema = z.string().uuid()
 const optionalTextSchema = z.string().trim().max(500).optional().nullable()
 const optionalShortTextSchema = z.string().trim().max(160).optional().nullable()
@@ -259,6 +318,13 @@ const createEventSchema = z.object({
   if (value.eventType === 'OTHER' && !value.customEventType) {
     context.addIssue({ code: 'custom', path: ['customEventType'], message: 'Custom event type is required' })
   }
+})
+
+const createSubscriptionPaymentIntentSchema = z.object({
+  provider: z.enum(['TEST', 'NMB']).default('TEST'),
+  paymentMethod: z.enum(['MOBILE_MONEY', 'CONTROL_NUMBER']).default('MOBILE_MONEY'),
+  idempotencyKey: z.string().uuid(),
+  returnUrl: z.string().url().optional().nullable(),
 })
 
 const balanceReminderSchema = z.object({
@@ -445,6 +511,7 @@ const knownDatabaseCodes: ApiErrorCode[] = [
   'SESSION_REQUIRED',
   'TENANT_ACCESS_DENIED',
   'PLATFORM_ACCESS_DENIED',
+  'PERMISSION_DENIED',
   'BALANCE_REMINDER_NOT_ELIGIBLE',
   'NO_OUTSTANDING_BALANCE',
   'MEMBER_PHONE_MISSING',
@@ -486,10 +553,27 @@ const knownDatabaseCodes: ApiErrorCode[] = [
   'EVENT_NOT_ACTIVE',
   'EVENT_ACCESS_DENIED',
   'EVENT_LIMIT_REACHED',
+  'INVALID_EVENT_TYPE',
+  'INVALID_EVENT_DATE',
+  'INVALID_TARGET_AMOUNT',
   'RECEIPT_NOT_FOUND',
   'SUBSCRIPTION_INACTIVE',
   'SUBSCRIPTION_READ_ONLY',
   'SUBSCRIPTION_BLOCKED',
+  'PAYMENT_GATEWAY_DISABLED',
+  'PAYMENT_PROVIDER_UNAVAILABLE',
+  'PAYMENT_INTENT_NOT_FOUND',
+  'PAYMENT_INTENT_EXPIRED',
+  'PAYMENT_INTENT_ALREADY_COMPLETED',
+  'INVOICE_NOT_PAYABLE',
+  'PAYMENT_AMOUNT_MISMATCH',
+  'PAYMENT_CURRENCY_MISMATCH',
+  'PAYMENT_WEBHOOK_INVALID',
+  'PAYMENT_WEBHOOK_DUPLICATE',
+  'PAYMENT_TRANSACTION_UNKNOWN',
+  'PAYMENT_ALREADY_PROCESSED',
+  'PAYMENT_REVERSAL_ALREADY_PROCESSED',
+  'PAYMENT_RECONCILIATION_REQUIRED',
 ]
 
 const developmentWebOrigins = new Set([
@@ -530,11 +614,12 @@ function safeDatabaseMessage(error: unknown): string {
     .slice(0, 220)
 }
 
-function logDatabaseError(requestId: string, operation: string, error: unknown) {
+function logDatabaseError(requestId: string, operation: string, error: unknown, context: Record<string, unknown> = {}) {
   const code = typeof error === 'object' && error !== null && 'code' in error && typeof error.code === 'string' ? error.code : undefined
   console.error('Database operation failed', {
     requestId,
     operation,
+    ...context,
     ...(code ? { providerCode: code } : {}),
     safeMessage: safeDatabaseMessage(error),
   })
@@ -565,6 +650,42 @@ function jsonRecord(data: unknown): Record<string, unknown> {
   return typeof data === 'object' && data !== null && !Array.isArray(data) ? data as Record<string, unknown> : {}
 }
 
+function errorCode(error: unknown): string | null {
+  return typeof error === 'object' && error !== null && 'code' in error && typeof error.code === 'string' ? error.code : null
+}
+
+function isMissingBillingFoundationError(error: unknown): boolean {
+  const code = errorCode(error)
+  const message = databaseMessage(error).toLowerCase()
+  return (
+    code === '42P01' ||
+    code === 'PGRST200' ||
+    code === 'PGRST202' ||
+    code === 'PGRST205' ||
+    message.includes('subscription_invoices') ||
+    message.includes('subscription_invoice_items') ||
+    message.includes('subscription_payments') ||
+    message.includes('subscription_payment_intents') ||
+    message.includes('subscription_gateway_settings')
+  )
+}
+
+async function optionalBillingRows(
+  request: express.Request,
+  operation: string,
+  query: PromiseLike<{ data: unknown; error: unknown }>,
+): Promise<Record<string, unknown>[]> {
+  const { data, error } = await query
+  if (!error) {
+    return jsonArray(data)
+  }
+  logDatabaseError(request.requestId, operation, error)
+  if (isMissingBillingFoundationError(error)) {
+    return []
+  }
+  throwFinancialDatabaseError(error, operation.toUpperCase())
+}
+
 function stringField(row: Record<string, unknown>, key: string, fallback = ''): string {
   const value = row[key]
   return typeof value === 'string' ? value : fallback
@@ -590,9 +711,214 @@ function availableEventSlots(value: unknown): number | null {
   return null
 }
 
+function eventSlotNumber(usage: Record<string, unknown>, keys: string[]): number | null {
+  for (const key of keys) {
+    if (usage[key] !== undefined && usage[key] !== null) {
+      return numberField(usage, key)
+    }
+  }
+  return null
+}
+
+function eventSlotSummary(value: unknown) {
+  const usage = jsonRecord(value)
+  return {
+    usedEventSlots: eventSlotNumber(usage, ['used', 'usedEventSlots', 'used_event_slots']),
+    maxEventSlots: eventSlotNumber(usage, ['limit', 'maxEventSlots', 'max_event_slots']),
+    availableEventSlots: eventSlotNumber(usage, ['available', 'availableEventSlots', 'available_event_slots']),
+    currentPlanLimit: eventSlotNumber(usage, ['planCurrentMaxActiveEvents']),
+    snapshotLimit: eventSlotNumber(usage, ['subscriptionSnapshotMaxActiveEvents']),
+    effectiveLimit: eventSlotNumber(usage, ['effectiveMaxActiveEvents', 'limit', 'maxEventSlots', 'max_event_slots']),
+  }
+}
+
+type CreateEventInput = z.infer<typeof createEventSchema>
+
+function nullableTrimmed(value: string | null | undefined): string | null {
+  const trimmed = value?.trim() ?? ''
+  return trimmed ? trimmed : null
+}
+
+function normalizeCreateEventInput(input: CreateEventInput) {
+  return {
+    name: input.name.trim(),
+    eventType: input.eventType,
+    customEventType: input.eventType === 'OTHER' ? nullableTrimmed(input.customEventType) : null,
+    eventDate: input.eventDate ?? null,
+    pledgeDeadline: input.pledgeDeadline ?? null,
+    targetAmount: input.targetAmount ?? null,
+    venue: nullableTrimmed(input.venue),
+  }
+}
+
+function logEventCreateStage(request: express.Request, stage: string, details: Record<string, unknown> = {}) {
+  if (env.NODE_ENV !== 'development') {
+    return
+  }
+  console.info('Event create diagnostic', {
+    requestId: request.requestId,
+    stage,
+    tenantId: request.tenantContext?.tenant.id,
+    userId: request.auth?.user.id,
+    tenantAccessState: request.tenantContext?.accessState,
+    subscriptionStatus: request.tenantContext?.subscription?.status ?? null,
+    ...details,
+  })
+}
+
 function shouldRetryLegacyCreateEvent(error: unknown): boolean {
   const message = databaseMessage(error).toLowerCase()
-  return message.includes('rpc_create_event') && (message.includes('p_custom_event_type') || message.includes('schema cache') || message.includes('pgrst202'))
+  return message.includes('rpc_create_event') && (message.includes('p_custom_event_type') || message.includes('schema cache') || message.includes('pgrst202') || message.includes('pgrst203'))
+}
+
+function shouldRetryV2CreateEvent(error: unknown): boolean {
+  const message = databaseMessage(error).toLowerCase()
+  return message.includes('rpc_create_event_v2') && (message.includes('schema cache') || message.includes('pgrst202') || message.includes('could not find'))
+}
+
+function shouldUseDirectEventCreateFallback(error: unknown): boolean {
+  const message = databaseMessage(error).toLowerCase()
+  return message.includes('42702') && message.includes('event_id') && message.includes('ambiguous')
+}
+
+async function createEventWithDirectFallback(
+  client: ReturnType<typeof createUserSupabase>,
+  request: express.Request,
+  tenantId: string,
+  input: ReturnType<typeof normalizeCreateEventInput>,
+  slotSummary: ReturnType<typeof eventSlotSummary> | null,
+) {
+  const userId = request.auth?.user.id
+  if (!userId) {
+    throw new AppError('SESSION_REQUIRED')
+  }
+  logEventCreateStage(request, 'EVENT_CREATE_DIRECT_FALLBACK_START', slotSummary ?? {})
+  const codeResult = await client.rpc('next_event_code', { p_tenant_id: tenantId })
+  if (codeResult.error) {
+    logDatabaseError(request.requestId, 'event-create-direct-code', codeResult.error, {
+      tenantId,
+      userId,
+      stage: 'EVENT_CREATE_DIRECT_CODE_FAILED',
+      ...(slotSummary ?? {}),
+    })
+    throwFinancialDatabaseError(codeResult.error, 'EVENT_CREATE_FAILED')
+  }
+  const eventCode = typeof codeResult.data === 'string' && codeResult.data.trim() ? codeResult.data : null
+  if (!eventCode) {
+    throw new AppError('INTERNAL_ERROR', 'Event code generation failed', 500, 'EVENT_CREATE_FAILED')
+  }
+
+  const insertResult = await client
+    .from('events')
+    .insert({
+      tenant_id: tenantId,
+      code: eventCode,
+      name: input.name,
+      event_type: input.eventType,
+      custom_event_type: input.customEventType,
+      event_date: input.eventDate,
+      pledge_deadline: input.pledgeDeadline,
+      target_amount: input.targetAmount,
+      venue: input.venue,
+      status: 'ACTIVE',
+      created_by: userId,
+    })
+    .select('id, code, name, event_type, custom_event_type, event_date, pledge_deadline, target_amount, venue, status')
+    .single()
+  if (insertResult.error) {
+    logDatabaseError(request.requestId, 'event-create-direct-insert', insertResult.error, {
+      tenantId,
+      userId,
+      stage: 'EVENT_CREATE_DIRECT_INSERT_FAILED',
+      ...(slotSummary ?? {}),
+    })
+    throwFinancialDatabaseError(insertResult.error, 'EVENT_CREATE_FAILED')
+  }
+
+  const row = jsonRecord(insertResult.data)
+  const createdEventId = stringField(row, 'id')
+  if (!createdEventId) {
+    throw new AppError('INTERNAL_ERROR', 'Event insert did not return an event id', 500, 'EVENT_CREATE_FAILED')
+  }
+
+  const tenantUserResult = await client
+    .from('tenant_users')
+    .select('id')
+    .eq('tenant_id', tenantId)
+    .eq('user_id', userId)
+    .eq('status', 'ACTIVE')
+    .maybeSingle()
+  const tenantUserId = tenantUserResult.error ? null : stringField(jsonRecord(tenantUserResult.data), 'id')
+  if (tenantUserResult.error) {
+    logDatabaseError(request.requestId, 'event-create-direct-tenant-user', tenantUserResult.error, {
+      tenantId,
+      userId,
+      eventId: createdEventId,
+      stage: 'EVENT_CREATE_DIRECT_ASSIGNMENT_SKIPPED',
+    })
+  }
+  if (tenantUserId) {
+    const assignmentResult = await client
+      .from('event_user_assignments')
+      .upsert({
+        tenant_id: tenantId,
+        event_id: createdEventId,
+        tenant_user_id: tenantUserId,
+        access_level: 'MANAGE',
+        assigned_by: userId,
+      }, { onConflict: 'event_id,tenant_user_id' })
+    if (assignmentResult.error) {
+      logDatabaseError(request.requestId, 'event-create-direct-assignment', assignmentResult.error, {
+        tenantId,
+        userId,
+        eventId: createdEventId,
+        stage: 'EVENT_CREATE_DIRECT_ASSIGNMENT_FAILED',
+      })
+    } else {
+      logEventCreateStage(request, 'EVENT_CREATE_ASSIGNMENT_SUCCESS', { eventId: createdEventId })
+    }
+  }
+
+  const auditResult = await client.rpc('write_audit_log', {
+    p_tenant_id: tenantId,
+    p_action: 'EVENT_CREATED',
+    p_entity_type: 'event',
+    p_entity_id: createdEventId,
+    p_event_id: createdEventId,
+    p_old_values: null,
+    p_new_values: { event_code: eventCode, eventSlotsBefore: slotSummary },
+    p_reason: null,
+  })
+  if (auditResult.error) {
+    logDatabaseError(request.requestId, 'event-create-direct-audit', auditResult.error, {
+      tenantId,
+      userId,
+      eventId: createdEventId,
+      stage: 'EVENT_CREATE_DIRECT_AUDIT_FAILED',
+    })
+  } else {
+    logEventCreateStage(request, 'EVENT_CREATE_AUDIT_SUCCESS', { eventId: createdEventId })
+  }
+
+  const slotsAfter = await client.rpc('event_slot_usage', { p_tenant_id: tenantId })
+  const eventSlotsAfter = slotsAfter.error ? null : eventSlotSummary(slotsAfter.data)
+  return {
+    id: createdEventId,
+    event_id: createdEventId,
+    eventId: createdEventId,
+    code: eventCode,
+    event_code: eventCode,
+    name: stringField(row, 'name', input.name),
+    eventType: stringField(row, 'event_type', input.eventType),
+    customEventType: row['custom_event_type'] ?? null,
+    eventDate: row['event_date'] ?? null,
+    pledgeDeadline: row['pledge_deadline'] ?? null,
+    targetAmount: row['target_amount'] ?? null,
+    venue: row['venue'] ?? null,
+    status: stringField(row, 'status', 'ACTIVE'),
+    eventSlotsBefore: slotSummary,
+    eventSlotsAfter,
+  }
 }
 
 function dateField(row: Record<string, unknown>, key: string): string {
@@ -1064,7 +1390,30 @@ async function handleReportExport(request: express.Request, response: express.Re
 
 app.use(helmet())
 app.use(requestIdMiddleware)
+app.use(requestTraceMiddleware)
 app.post('/auth/hooks/send-sms', sendSmsHookLimiter, express.raw({ type: 'application/json', limit: '64kb' }), sendSmsHookHandler)
+app.post('/api/v1/webhooks/billing/test', express.raw({ type: 'application/json', limit: '128kb' }), async (request, response, next) => {
+  try {
+    const gateway = getBillingGateway('TEST')
+    const rawBody = Buffer.isBuffer(request.body) ? request.body : Buffer.from('')
+    const signature = request.header('X-Ahadi-Test-Signature') ?? null
+    const signatureValid = await gateway.verifyWebhook({ rawBody, signature })
+    const payloadHash = createHash('sha256').update(rawBody).digest('hex')
+    if (!signatureValid) {
+      console.warn('Billing webhook rejected', { requestId: request.requestId, provider: 'TEST', payloadHash })
+      throw new AppError('PAYMENT_WEBHOOK_INVALID')
+    }
+    const parsed = await gateway.parseWebhook(rawBody)
+    const result = jsonRecord(await (parsed.status === 'REVERSED' ? confirmParsedGatewayReversal(supabasePublic, parsed) : confirmParsedGatewayPayment(supabasePublic, parsed)))
+    const resultCode = typeof result['code'] === 'string' ? result['code'] : null
+    if (resultCode && knownDatabaseCodes.includes(resultCode as ApiErrorCode)) {
+      throw new AppError(resultCode as ApiErrorCode)
+    }
+    response.json({ ok: true, data: result })
+  } catch (error) {
+    next(error)
+  }
+})
 app.use(
   cors({
     origin: corsOrigin,
@@ -1087,7 +1436,11 @@ app.use(
 )
 
 app.get('/health', (_request, response) => {
-  response.json({ status: 'ok', service: 'ahadi-api' })
+  response.json(healthPayload())
+})
+
+app.get('/api/v1/health', (_request, response) => {
+  response.json(healthPayload())
 })
 
 if (env.NODE_ENV === 'development') {
@@ -1351,6 +1704,152 @@ app.get('/api/v1/tenant-context', requireAuth, loadUserContext, requireTenantCon
   response.json({ data: request.tenantContext })
 })
 
+app.get('/api/v1/billing/summary', requireAuth, loadUserContext, requireTenantContext, async (request, response, next) => {
+  try {
+    const tenantId = tenantIdFromRequest(request)
+    const client = createUserSupabase(request.auth?.accessToken ?? '')
+    const [invoices, payments, pendingIntents, gatewaySettings] = await Promise.all([
+      optionalBillingRows(request, 'subscription-billing-invoices-list', client.from('subscription_invoices').select('*').eq('tenant_id', tenantId).order('created_at', { ascending: false })),
+      optionalBillingRows(request, 'subscription-billing-payments-list', client.from('subscription_payments').select('*').eq('tenant_id', tenantId).order('created_at', { ascending: false })),
+      optionalBillingRows(
+        request,
+        'subscription-billing-payment-intents-list',
+        client.from('subscription_payment_intents').select('*').eq('tenant_id', tenantId).in('status', ['CREATED', 'PENDING', 'PROCESSING']).order('created_at', { ascending: false }),
+      ),
+      optionalBillingRows(request, 'subscription-gateway-settings-list', client.from('subscription_gateway_settings').select('*').order('provider', { ascending: true })),
+    ])
+    response.json({
+      data: {
+        subscription: request.tenantContext?.subscription ?? null,
+        invoices,
+        payments,
+        pendingIntents,
+        gateways: gatewaySettings.length ? gatewaySettings : listBillingGatewayCapabilities(),
+      },
+    })
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.get('/api/v1/billing/invoices/:invoiceId', requireAuth, loadUserContext, requireTenantContext, async (request, response, next) => {
+  try {
+    const tenantId = tenantIdFromRequest(request)
+    const invoiceId = uuidParamSchema.parse(request.params['invoiceId'])
+    const client = createUserSupabase(request.auth?.accessToken ?? '')
+    const { data, error } = await client
+      .from('subscription_invoices')
+      .select('*')
+      .eq('tenant_id', tenantId)
+      .eq('id', invoiceId)
+      .maybeSingle()
+    if (error) {
+      logDatabaseError(request.requestId, 'subscription-invoice-read', error, { tenantId, invoiceId })
+      if (isMissingBillingFoundationError(error)) {
+        throw new AppError('INVOICE_NOT_PAYABLE', 'Subscription billing tables are not available')
+      }
+      throwFinancialDatabaseError(error, 'SUBSCRIPTION_INVOICE_READ_FAILED')
+    }
+    const invoice = jsonRecord(data)
+    if (!Object.keys(invoice).length) {
+      throw new AppError('INVOICE_NOT_PAYABLE', 'Subscription invoice was not found')
+    }
+    const items = await optionalBillingRows(
+      request,
+      'subscription-invoice-items-list',
+      client.from('subscription_invoice_items').select('*').eq('tenant_id', tenantId).eq('invoice_id', invoiceId).order('created_at', { ascending: true }),
+    )
+    response.json({ data: { ...invoice, subscription_invoice_items: items } })
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.post('/api/v1/billing/invoices/:invoiceId/payment-intents', paymentIntentLimiter, requireAuth, loadUserContext, requireTenantContext, async (request, response, next) => {
+  try {
+    const tenantId = tenantIdFromRequest(request)
+    const permissions = new Set(request.tenantContext?.permissions ?? [])
+    if (!request.tenantContext?.membership?.isOwner && !permissions.has('tenant.subscription.manage')) {
+      throw new AppError('PERMISSION_DENIED', 'Only tenant owners can initiate subscription payments')
+    }
+    const invoiceId = uuidParamSchema.parse(request.params['invoiceId'])
+    const input = createSubscriptionPaymentIntentSchema.parse(request.body ?? {})
+    const client = createUserSupabase(request.auth?.accessToken ?? '')
+    const profile = request.auth?.context?.profile
+    const result = await createSubscriptionPaymentIntent(client, {
+      tenantId,
+      invoiceId,
+      provider: input.provider,
+      paymentMethod: input.paymentMethod,
+      customerName: profile?.fullName || request.tenantContext?.tenant.name || 'Ahadi tenant',
+      customerPhone: profile?.phoneE164 || request.tenantContext?.tenant.phoneE164 || '',
+      customerEmail: profile?.email || request.tenantContext?.tenant.email || null,
+      returnUrl: input.returnUrl ?? null,
+      idempotencyKey: input.idempotencyKey,
+    })
+    response.status(201).json({ data: jsonRecord(result) })
+  } catch (error) {
+    if (isMissingBillingFoundationError(error)) {
+      next(new AppError('PAYMENT_PROVIDER_UNAVAILABLE', 'Subscription billing migration is not available'))
+      return
+    }
+    next(error)
+  }
+})
+
+app.get('/api/v1/billing/payment-intents/:intentId', paymentIntentLimiter, requireAuth, loadUserContext, requireTenantContext, async (request, response, next) => {
+  try {
+    const tenantId = tenantIdFromRequest(request)
+    const intentId = uuidParamSchema.parse(request.params['intentId'])
+    const client = createUserSupabase(request.auth?.accessToken ?? '')
+    const { data, error } = await client
+      .from('subscription_payment_intents')
+      .select('*')
+      .eq('tenant_id', tenantId)
+      .eq('id', intentId)
+      .maybeSingle()
+    if (error) {
+      logDatabaseError(request.requestId, 'subscription-payment-intent-read', error, { tenantId, intentId })
+      if (isMissingBillingFoundationError(error)) {
+        throw new AppError('PAYMENT_INTENT_NOT_FOUND')
+      }
+      throwFinancialDatabaseError(error, 'PAYMENT_INTENT_READ_FAILED')
+    }
+    const intent = jsonRecord(data)
+    if (!Object.keys(intent).length) {
+      throw new AppError('PAYMENT_INTENT_NOT_FOUND')
+    }
+    const invoiceId = stringField(intent, 'invoice_id')
+    const invoiceRows = invoiceId
+      ? await optionalBillingRows(request, 'subscription-payment-intent-invoice-read', client.from('subscription_invoices').select('id, invoice_number, status').eq('tenant_id', tenantId).eq('id', invoiceId).limit(1))
+      : []
+    const invoice = invoiceRows[0] ?? {}
+    const expiresAt = typeof intent['expires_at'] === 'string' ? intent['expires_at'] : null
+    const computedStatus = ['PENDING', 'PROCESSING'].includes(stringField(intent, 'status')) && expiresAt && new Date(expiresAt).getTime() < Date.now()
+      ? 'EXPIRED'
+      : stringField(intent, 'status', 'PENDING')
+    response.json({
+      data: {
+        ...intent,
+        tenantId: intent['tenant_id'],
+        invoiceId: intent['invoice_id'],
+        invoiceNumber: invoice['invoice_number'],
+        status: computedStatus,
+        amount: intent['requested_amount'],
+        currency: intent['currency'],
+        checkoutUrl: intent['checkout_url'],
+        controlNumber: intent['control_number'],
+        paymentInstructions: jsonRecord(intent['metadata'])['paymentInstructions'] ?? null,
+        expiresAt: intent['expires_at'],
+        lastCheckedAt: new Date().toISOString(),
+        invoiceStatus: invoice['status'] ?? null,
+      },
+    })
+  } catch (error) {
+    next(error)
+  }
+})
+
 app.get('/api/v1/features', requireAuth, loadUserContext, requireTenantContext, async (request, response, next) => {
   try {
     const tenantId = tenantIdFromRequest(request)
@@ -1452,47 +1951,133 @@ app.post('/api/v1/errors/report', requireAuth, loadUserContext, async (request, 
 app.post('/api/v1/events', requireAuth, loadUserContext, requireTenantContext, async (request, response, next) => {
   try {
     const tenantId = tenantIdFromRequest(request)
+    logEventCreateStage(request, 'EVENT_CREATE_START')
+    logEventCreateStage(request, 'EVENT_CREATE_AUTH_OK')
+    logEventCreateStage(request, 'EVENT_CREATE_TENANT_OK')
+    const permissions = new Set(request.tenantContext?.permissions ?? [])
+    if (!permissions.has('events.create') && !request.tenantContext?.membership?.isOwner) {
+      throw new AppError('PERMISSION_DENIED', 'Missing permission: events.create')
+    }
+    logEventCreateStage(request, 'EVENT_CREATE_PERMISSION_OK')
     if (request.tenantContext?.accessState === 'READ_ONLY') {
       throw new AppError('SUBSCRIPTION_READ_ONLY', 'Subscription is read-only')
     }
-    const input = createEventSchema.parse(request.body)
+    logEventCreateStage(request, 'EVENT_CREATE_SUBSCRIPTION_OK')
+    const parsedInput = createEventSchema.safeParse(request.body)
+    if (!parsedInput.success) {
+      logValidationError(request.requestId, 'event-create', parsedInput.error)
+      throw parsedInput.error
+    }
+    const input = normalizeCreateEventInput(parsedInput.data)
+    logEventCreateStage(request, 'EVENT_CREATE_VALIDATION_OK', {
+      eventType: input.eventType,
+      optionalFieldsNull: {
+        customEventType: input.customEventType === null,
+        eventDate: input.eventDate === null,
+        pledgeDeadline: input.pledgeDeadline === null,
+        targetAmount: input.targetAmount === null,
+        venue: input.venue === null,
+      },
+    })
     const client = createUserSupabase(request.auth?.accessToken ?? '')
     const slotCheck = await client.rpc('event_slot_usage', { p_tenant_id: tenantId })
+    let slotSummary: ReturnType<typeof eventSlotSummary> | null = null
     if (slotCheck.error) {
-      logDatabaseError(request.requestId, 'event-slot-usage-precheck', slotCheck.error)
+      logDatabaseError(request.requestId, 'event-slot-usage-precheck', slotCheck.error, {
+        tenantId,
+        userId: request.auth?.user.id,
+        stage: 'EVENT_CREATE_SLOT_CHECK_FAILED',
+      })
     } else {
-      const available = availableEventSlots(slotCheck.data)
+      slotSummary = eventSlotSummary(slotCheck.data)
+      logEventCreateStage(request, 'EVENT_CREATE_SLOT_CHECK_OK', slotSummary)
+      const available = slotSummary.availableEventSlots ?? availableEventSlots(slotCheck.data)
       if (available !== null && available <= 0) {
         throw new AppError('EVENT_LIMIT_REACHED', 'Your current package has no available active event slots')
       }
     }
-    let { data, error } = await client.rpc('rpc_create_event', {
+    const rpcInput = {
       p_tenant_id: tenantId,
       p_name: input.name,
       p_event_type: input.eventType,
-      p_custom_event_type: input.customEventType || null,
-      p_event_date: input.eventDate || null,
-      p_venue: input.venue || null,
-      p_target_amount: input.targetAmount || null,
-      p_pledge_deadline: input.pledgeDeadline || null,
+      p_custom_event_type: input.customEventType,
+      p_event_date: input.eventDate,
+      p_venue: input.venue,
+      p_target_amount: input.targetAmount,
+      p_pledge_deadline: input.pledgeDeadline,
+    }
+    logEventCreateStage(request, 'EVENT_CREATE_DB_START', {
+      eventType: input.eventType,
+      hasCustomEventType: Boolean(input.customEventType),
+      hasEventDate: Boolean(input.eventDate),
+      hasPledgeDeadline: Boolean(input.pledgeDeadline),
+      hasTargetAmount: input.targetAmount !== null,
+      hasVenue: Boolean(input.venue),
+      ...(slotSummary ?? {}),
     })
+    let { data, error } = await client.rpc('rpc_create_event_v2', rpcInput)
+    if (error && shouldRetryV2CreateEvent(error)) {
+      logDatabaseError(request.requestId, 'event-create-v2-schema-cache', error, {
+        tenantId,
+        userId: request.auth?.user.id,
+        stage: 'EVENT_CREATE_DB_START',
+      })
+      const current = await client.rpc('rpc_create_event', rpcInput)
+      data = current.data
+      error = current.error
+    }
+    if (error && shouldUseDirectEventCreateFallback(error)) {
+      logDatabaseError(request.requestId, 'event-create-v2-ambiguous-column', error, {
+        tenantId,
+        userId: request.auth?.user.id,
+        stage: 'EVENT_CREATE_DB_FAILED_WITH_KNOWN_RPC_AMBIGUITY',
+        ...(slotSummary ?? {}),
+      })
+      data = await createEventWithDirectFallback(client, request, tenantId, input, slotSummary)
+      error = null
+    }
     if (error && shouldRetryLegacyCreateEvent(error)) {
       const legacy = await client.rpc('rpc_create_event', {
         p_tenant_id: tenantId,
         p_name: input.name,
         p_event_type: input.eventType,
-        p_event_date: input.eventDate || null,
-        p_venue: input.venue || null,
-        p_target_amount: input.targetAmount || null,
-        p_pledge_deadline: input.pledgeDeadline || null,
+        p_event_date: input.eventDate,
+        p_venue: input.venue,
+        p_target_amount: input.targetAmount,
+        p_pledge_deadline: input.pledgeDeadline,
       })
       data = legacy.data
       error = legacy.error
     }
+    if (error && shouldUseDirectEventCreateFallback(error)) {
+      logDatabaseError(request.requestId, 'event-create-legacy-ambiguous-column', error, {
+        tenantId,
+        userId: request.auth?.user.id,
+        stage: 'EVENT_CREATE_DB_FAILED_WITH_KNOWN_RPC_AMBIGUITY',
+        ...(slotSummary ?? {}),
+      })
+      data = await createEventWithDirectFallback(client, request, tenantId, input, slotSummary)
+      error = null
+    }
     if (error) {
-      logDatabaseError(request.requestId, 'event-create', error)
+      logDatabaseError(request.requestId, 'event-create', error, {
+        tenantId,
+        userId: request.auth?.user.id,
+        stage: 'EVENT_CREATE_FAILED',
+        ...(slotSummary ?? {}),
+      })
       throwFinancialDatabaseError(error, 'EVENT_CREATE_FAILED')
     }
+    logEventCreateStage(request, 'EVENT_CREATE_DB_SUCCESS', {
+      eventId: stringField(jsonRecord(data), 'eventId', stringField(jsonRecord(data), 'id')),
+      eventCode: stringField(jsonRecord(data), 'code', stringField(jsonRecord(data), 'event_code')),
+    })
+    logEventCreateStage(request, 'EVENT_CREATE_ASSIGNMENT_SUCCESS')
+    logEventCreateStage(request, 'EVENT_CREATE_AUDIT_SUCCESS')
+    logEventCreateStage(request, 'EVENT_CREATE_COMPLETE', {
+      eventId: stringField(jsonRecord(data), 'eventId', stringField(jsonRecord(data), 'id')),
+      eventCode: stringField(jsonRecord(data), 'code', stringField(jsonRecord(data), 'event_code')),
+    })
     response.status(201).json({ data: jsonRecord(data) })
   } catch (error) {
     next(error)
@@ -1580,6 +2165,40 @@ app.get('/api/v1/platform/plans', requireAuth, loadUserContext, requirePlatformP
     const { data, error } = await client.rpc('rpc_list_platform_plans')
     if (error) {
       throwFinancialDatabaseError(error, 'PLATFORM_PLANS_FAILED')
+    }
+    response.json({ data: jsonArray(data) })
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.get('/api/v1/platform/billing/gateways', requireAuth, loadUserContext, requirePlatformPermission('platform.gateway.view'), async (request, response, next) => {
+  try {
+    const client = createUserSupabase(request.auth?.accessToken ?? '')
+    const { data, error } = await client.rpc('rpc_get_platform_gateway_settings')
+    if (error) {
+      throwFinancialDatabaseError(error, 'PLATFORM_GATEWAYS_FAILED')
+    }
+    const databaseCapabilities = Array.isArray(data) ? data : []
+    response.json({
+      data: {
+        configuredProvider: env.GATEWAY_PROVIDER,
+        environment: env.GATEWAY_ENVIRONMENT,
+        adapters: listBillingGatewayCapabilities(),
+        databaseCapabilities,
+      },
+    })
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.get('/api/v1/platform/billing/reconciliation', requireAuth, loadUserContext, requirePlatformPermission('platform.reconciliation.view'), async (request, response, next) => {
+  try {
+    const client = createUserSupabase(request.auth?.accessToken ?? '')
+    const { data, error } = await client.rpc('rpc_get_platform_gateway_reconciliation')
+    if (error) {
+      throwFinancialDatabaseError(error, 'PLATFORM_RECONCILIATION_FAILED')
     }
     response.json({ data: jsonArray(data) })
   } catch (error) {
