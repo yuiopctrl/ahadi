@@ -2138,9 +2138,43 @@ th {
   outline: none;
 }
 
+.share-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.share-summary-grid article {
+  min-width: 0;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.86);
+  padding: 12px;
+  box-shadow: var(--shadow-card);
+}
+
+.share-summary-grid span {
+  display: block;
+  color: var(--color-muted);
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.share-summary-grid strong {
+  display: block;
+  margin-top: 6px;
+  color: var(--color-text);
+  font-size: 20px;
+  line-height: 1.1;
+  overflow-wrap: anywhere;
+}
+
 .share-layout {
   display: grid;
   gap: 16px;
+  align-items: start;
 }
 
 .share-controls {
@@ -2149,54 +2183,184 @@ th {
   min-width: 0;
 }
 
+.share-builder-card,
 .share-preview-panel {
-  position: sticky;
-  top: 20px;
-  align-self: start;
   min-width: 0;
   border: 1px solid var(--color-border);
   border-radius: 8px;
   background: white;
+  box-shadow: var(--shadow-card);
+}
+
+.share-builder-card {
+  display: grid;
+  gap: 14px;
   padding: 14px;
 }
 
-.radio-card-grid,
-.settings-grid {
+.share-preview-panel {
   display: grid;
   gap: 14px;
+  padding: 14px;
 }
 
-.radio-card {
+.share-section-heading,
+.share-preview-header {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.share-section-heading h2,
+.share-preview-header h2 {
+  margin: 0;
+  color: var(--color-text);
+  font-size: 17px;
+  line-height: 1.2;
+}
+
+.share-section-heading p,
+.share-preview-header p {
+  margin: 4px 0 0;
+  color: var(--color-muted);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.share-format-grid {
   display: grid;
-  min-height: 72px;
-  gap: 4px;
+  gap: 10px;
+}
+
+.share-format-option {
+  display: grid;
+  min-height: 84px;
+  gap: 5px;
+  align-content: start;
   border: 1px solid var(--color-border);
   border-radius: 8px;
-  background: white;
+  background: #fff;
   color: var(--color-text);
   padding: 12px;
   text-align: left;
 }
 
-.radio-card.active {
+.share-format-option.active {
   border-color: var(--color-primary);
   background: var(--color-primary-soft);
+  box-shadow: inset 0 0 0 1px rgba(143, 29, 44, 0.16);
 }
 
-.radio-card span {
+.share-format-option strong {
+  font-size: 14px;
+  line-height: 1.2;
+}
+
+.share-format-option span {
   color: var(--color-muted);
   font-size: 13px;
+  line-height: 1.35;
+}
+
+.share-filter-grid {
+  display: grid;
+  gap: 10px;
+}
+
+.share-filter-grid label,
+.share-text-grid label {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  color: var(--color-muted);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.share-filter-grid input,
+.share-filter-grid select,
+.share-text-grid textarea {
+  width: 100%;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: white;
+  color: var(--color-text);
+  font: inherit;
+}
+
+.share-filter-grid input,
+.share-filter-grid select {
+  min-height: 44px;
+  padding: 0 12px;
+}
+
+.share-filter-grid input:focus,
+.share-filter-grid select:focus,
+.share-text-grid textarea:focus {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(143, 29, 44, 0.12);
+  outline: none;
+}
+
+.share-toggle-grid,
+.share-text-grid {
+  display: grid;
+  gap: 10px;
+}
+
+.share-toggle-row {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  min-width: 0;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--color-text);
+  padding: 11px 12px;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
+.share-toggle-row input {
+  width: 18px;
+  height: 18px;
+  margin-top: 1px;
+  flex: 0 0 auto;
+  accent-color: var(--color-primary);
+}
+
+.share-toggle-row span {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.share-toggle-row small {
+  color: var(--color-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.share-text-grid textarea {
+  min-height: 90px;
+  resize: vertical;
+  padding: 10px 12px;
+  line-height: 1.45;
 }
 
 .whatsapp-preview {
   width: 100%;
-  max-height: 520px;
+  max-height: 560px;
   overflow: auto;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-  border: 1px solid var(--color-border);
+  border: 1px solid #cfe3d8;
   border-radius: 8px;
-  background: #f8fbf9;
+  background: linear-gradient(180deg, #f9fffb, #f4fbf7);
   color: var(--color-text);
   padding: 14px;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
@@ -2209,14 +2373,14 @@ th {
 }
 
 .share-actions {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: 1fr;
   gap: 8px;
 }
 
 .share-actions button {
   display: inline-flex;
-  min-height: 42px;
+  min-height: 44px;
   align-items: center;
   justify-content: center;
   gap: 8px;
@@ -2225,6 +2389,22 @@ th {
   background: white;
   color: var(--color-primary);
   padding: 0 12px;
+  font-weight: 800;
+  text-align: center;
+}
+
+.share-actions .primary-button {
+  background: var(--color-primary);
+  color: white;
+}
+
+.share-copy-result {
+  margin: 0;
+  border-radius: 8px;
+  background: var(--color-success-soft);
+  color: var(--color-success);
+  padding: 10px 12px;
+  font-size: 13px;
   font-weight: 800;
 }
 
@@ -2251,17 +2431,38 @@ th {
     grid-column: span 2;
   }
 
+  .share-summary-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .share-format-grid,
+  .share-toggle-grid,
+  .share-text-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .share-filter-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .share-filter-grid label:last-child {
+    grid-column: 1 / -1;
+  }
+
+  .share-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1100px) {
   .share-layout {
-    grid-template-columns: minmax(0, 1fr) minmax(320px, 0.8fr);
-    align-items: start;
+    grid-template-columns: minmax(0, 1.04fr) minmax(360px, 0.96fr);
   }
 
-  .radio-card-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .settings-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+  .share-preview-panel {
+    position: sticky;
+    top: 20px;
+    align-self: start;
   }
 }
 

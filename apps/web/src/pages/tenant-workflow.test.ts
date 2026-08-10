@@ -119,6 +119,8 @@ test('share list page fetches by tenant and event and exposes explicit states', 
   assert.match(apiClient, /whatsappSharePreview: \(tenantId: string, eventId: string, payload/)
   assert.match(tenantPage, /queryKey: \['whatsapp-share-preview', tenantId, eventId, previewPayload\]/)
   assert.match(tenantPage, /enabled: canQuery && !settings\.isLoading/)
+  assert.match(tenantPage, /Include registered members without pledges/)
+  assert.doesNotMatch(tenantPage, /disabled=\{effectiveFormat !== 'PRIVACY'\}/)
   assert.match(tenantPage, /Unable to load the share list\./)
   assert.match(tenantPage, /No pledge records are available for this list\./)
   assert.match(tenantPage, /Copy List/)

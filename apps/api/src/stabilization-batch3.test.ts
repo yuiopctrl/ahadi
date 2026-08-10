@@ -6,6 +6,8 @@ const migration = readFileSync(new URL('../../../supabase/migrations/026_share_a
 const repairMigration = readFileSync(new URL('../../../supabase/migrations/034_repair_event_create_rpc_overload.sql', import.meta.url), 'utf8')
 const v2Migration = readFileSync(new URL('../../../supabase/migrations/035_event_create_v2_non_overloaded_rpc.sql', import.meta.url), 'utf8')
 const v2AmbiguityFixMigration = readFileSync(new URL('../../../supabase/migrations/036_fix_event_create_v2_ambiguous_columns.sql', import.meta.url), 'utf8')
+const shareNoPledgeMigration = readFileSync(new URL('../../../supabase/migrations/048_whatsapp_share_include_no_pledge_members.sql', import.meta.url), 'utf8')
+const shareNoPledgeLabelMigration = readFileSync(new URL('../../../supabase/migrations/050_replace_whatsapp_no_pledge_label.sql', import.meta.url), 'utf8')
 const app = readFileSync(new URL('./app.ts', import.meta.url), 'utf8')
 
 test('share preview access uses event financial access and active pledged members', () => {
@@ -16,6 +18,14 @@ test('share preview access uses event financial access and active pledged member
   assert.match(migration, /em\.status = 'ACTIVE'/)
   assert.match(migration, /p\.id is not null/)
   assert.doesNotMatch(migration, /phone_e164 is not null[\s\S]+normalized_format = 'DETAILED'/)
+})
+
+test('share preview can include event members without pledges in any list format', () => {
+  assert.match(shareNoPledgeMigration, /rpc_generate_event_whatsapp_share_preview/)
+  assert.match(shareNoPledgeMigration, /p\.id is not null or coalesce\(p_include_without_pledges, false\)/)
+  assert.match(shareNoPledgeMigration, /replace\(/)
+  assert.match(shareNoPledgeMigration, /🙏🏿/)
+  assert.match(shareNoPledgeLabelMigration, /replace\(function_sql, 'Hakuna ahadi', '🙏🏿'\)/)
 })
 
 test('event usage uses draft and active slots with snapshot entitlement diagnostics', () => {

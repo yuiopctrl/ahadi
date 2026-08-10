@@ -1516,6 +1516,15 @@ export function ShareListPage() {
   const currentPart = parts[safeSelectedPart] ?? parts[0] ?? null
   const categories = Array.isArray(data.categories) ? data.categories.map(jsonRecord) : []
   const shareAvailable = typeof navigator.share === 'function'
+  const selectedFormat = whatsappFormats.find((item) => item.value === effectiveFormat) ?? whatsappFormats[0]
+  const optionCount = [
+    effectiveIncludeSummary,
+    effectiveIncludeEventDate,
+    effectiveIncludeEventPaymentInstructions,
+    effectiveIncludeMobileMoneyInstructions,
+    effectiveIncludeBankInstructions,
+    includeWithoutPledges,
+  ].filter(Boolean).length
 
   async function copyText(value: string, label = 'List copied') {
     await copyPlainText(value)
@@ -1538,19 +1547,38 @@ export function ShareListPage() {
 
   return (
     <PageContainer>
-      <PageHeader title="Share List" description="Generate WhatsApp-ready contributor lists from current event balances." action={<Link to={`/app/events/${eventId}`}><ArrowLeft size={18} aria-hidden /> Back</Link>} />
+      <PageHeader title="Share List" description={activeEvent.event?.name ? `${activeEvent.event.name} WhatsApp list` : 'WhatsApp-ready event list'} action={<Link to={`/app/events/${eventId}`}><ArrowLeft size={18} aria-hidden /> Back</Link>} />
+      <section className="share-summary-grid">
+        <article>
+          <span>Format</span>
+          <strong>{selectedFormat?.label ?? effectiveFormat}</strong>
+        </article>
+        <article>
+          <span>Members</span>
+          <strong>{asNumber(data.memberCount)}</strong>
+        </article>
+        <article>
+          <span>Characters</span>
+          <strong>{asNumber(data.textLength)}</strong>
+        </article>
+        <article>
+          <span>Parts</span>
+          <strong>{Math.max(parts.length, text ? 1 : 0)}</strong>
+        </article>
+      </section>
       <section className="share-layout">
         <div className="share-controls">
-          <article className="content-panel">
-            <div className="panel-header">
+          <article className="share-builder-card">
+            <div className="share-section-heading">
               <div>
                 <h2>List Format</h2>
-                <p>{canFinancial ? 'Choose a public or committee-facing format.' : 'Your role can generate Privacy-Friendly lists only.'}</p>
+                <p>{canFinancial ? 'Financial and privacy formats are available.' : 'Privacy-friendly format only.'}</p>
               </div>
+              <StatusBadge tone={canFinancial ? 'success' : 'neutral'}>{canFinancial ? 'Financial' : 'Privacy'}</StatusBadge>
             </div>
-            <div className="radio-card-grid">
+            <div className="share-format-grid">
               {whatsappFormats.filter((item) => canFinancial || !isFinancialWhatsappFormat(item.value)).map((item) => (
-                <button className={effectiveFormat === item.value ? 'radio-card active' : 'radio-card'} type="button" key={item.value} onClick={() => {
+                <button className={effectiveFormat === item.value ? 'share-format-option active' : 'share-format-option'} type="button" key={item.value} onClick={() => {
                   setFormat(item.value)
                   if (item.value === 'PRIVACY') setIncludeSummary(false)
                 }}>
@@ -1560,28 +1588,40 @@ export function ShareListPage() {
               ))}
             </div>
           </article>
-          <article className="content-panel">
-            <div className="panel-header"><h2>Filters</h2></div>
-            <section className="filter-bar">
+          <article className="share-builder-card">
+            <div className="share-section-heading">
+              <div>
+                <h2>Filters</h2>
+                <p>{statusFilter === 'ALL' ? 'All statuses' : statusFilter.replaceAll('_', ' ')}</p>
+              </div>
+            </div>
+            <section className="share-filter-grid">
               <label>Status<select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>{whatsappStatuses.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
               <label>Category<select value={categoryId} onChange={(event) => setCategoryId(event.target.value)}><option value="">All categories</option>{categories.map((category) => <option key={asString(category.id)} value={asString(category.id)}>{asString(category.name)}</option>)}</select></label>
               <label>Sort<select value={effectiveSort} onChange={(event) => setSort(event.target.value)}>{whatsappSorts.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
               <label>Phone<select value={phoneFilter} onChange={(event) => setPhoneFilter(event.target.value)}><option value="ALL">All</option><option value="WITH_PHONE">Members with Phone</option><option value="WITHOUT_PHONE">Members without Phone</option></select></label>
               <label>Search<input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Member or code" /></label>
             </section>
-            <label className="checkbox-row"><input type="checkbox" checked={includeWithoutPledges} onChange={(event) => setIncludeWithoutPledges(event.target.checked)} disabled={effectiveFormat !== 'PRIVACY'} /> Include registered members without pledges</label>
+            <label className="share-toggle-row"><input type="checkbox" checked={includeWithoutPledges} onChange={(event) => setIncludeWithoutPledges(event.target.checked)} /> <span><strong>Include registered members without pledges</strong><small>Marks members without pledges using 🙏🏿.</small></span></label>
           </article>
-          <article className="content-panel">
-            <div className="panel-header"><h2>Options</h2></div>
-            <div className="settings-grid">
-              <label className="checkbox-row"><input type="checkbox" checked={effectiveIncludeSummary} onChange={(event) => setIncludeSummary(event.target.checked)} disabled={effectiveFormat === 'PRIVACY' && !canFinancial} /> Include Summary</label>
-              <label className="checkbox-row"><input type="checkbox" checked={effectiveIncludeEventDate} onChange={(event) => setIncludeEventDate(event.target.checked)} /> Include Event Date</label>
-              <label className="checkbox-row"><input type="checkbox" checked={effectiveIncludeEventPaymentInstructions} onChange={(event) => setIncludeEventPaymentInstructions(event.target.checked)} /> Include Event Payment Instructions</label>
-              <label className="checkbox-row"><input type="checkbox" checked={effectiveIncludeMobileMoneyInstructions} onChange={(event) => setIncludeMobileMoneyInstructions(event.target.checked)} /> Include Mobile Money</label>
-              <label className="checkbox-row"><input type="checkbox" checked={effectiveIncludeBankInstructions} onChange={(event) => setIncludeBankInstructions(event.target.checked)} /> Include Bank Instructions</label>
+          <article className="share-builder-card">
+            <div className="share-section-heading">
+              <div>
+                <h2>Options</h2>
+                <p>{optionCount} enabled</p>
+              </div>
             </div>
-            <label>Header Text<textarea value={effectiveHeaderText} onChange={(event) => setHeaderText(event.target.value)} rows={3} placeholder={asString(settings.data?.defaultHeaderText)} /></label>
-            <label>Footer Text<textarea value={effectiveFooterText} onChange={(event) => setFooterText(event.target.value)} rows={3} placeholder="Karibuni sana kwa michango na ahadi." /></label>
+            <div className="share-toggle-grid">
+              <label className="share-toggle-row"><input type="checkbox" checked={effectiveIncludeSummary} onChange={(event) => setIncludeSummary(event.target.checked)} disabled={effectiveFormat === 'PRIVACY' && !canFinancial} /> <span>Summary</span></label>
+              <label className="share-toggle-row"><input type="checkbox" checked={effectiveIncludeEventDate} onChange={(event) => setIncludeEventDate(event.target.checked)} /> <span>Event Date</span></label>
+              <label className="share-toggle-row"><input type="checkbox" checked={effectiveIncludeEventPaymentInstructions} onChange={(event) => setIncludeEventPaymentInstructions(event.target.checked)} /> <span>Event Payment Instructions</span></label>
+              <label className="share-toggle-row"><input type="checkbox" checked={effectiveIncludeMobileMoneyInstructions} onChange={(event) => setIncludeMobileMoneyInstructions(event.target.checked)} /> <span>Mobile Money</span></label>
+              <label className="share-toggle-row"><input type="checkbox" checked={effectiveIncludeBankInstructions} onChange={(event) => setIncludeBankInstructions(event.target.checked)} /> <span>Bank Instructions</span></label>
+            </div>
+            <div className="share-text-grid">
+              <label>Header Text<textarea value={effectiveHeaderText} onChange={(event) => setHeaderText(event.target.value)} rows={3} placeholder={asString(settings.data?.defaultHeaderText)} /></label>
+              <label>Footer Text<textarea value={effectiveFooterText} onChange={(event) => setFooterText(event.target.value)} rows={3} placeholder="Karibuni sana kwa michango na ahadi." /></label>
+            </div>
             {saveSettings.error ? <p className="field-error">{errorMessage(saveSettings.error, 'Share settings could not be saved.')}</p> : null}
             <div className="sheet-actions">
               <button type="button" onClick={() => { setHeaderText(''); setFooterText('') }}>Reset to Default</button>
@@ -1590,7 +1630,7 @@ export function ShareListPage() {
           </article>
         </div>
         <aside className="share-preview-panel">
-          <div className="panel-header">
+          <div className="share-preview-header">
             <div>
               <h2>Live Preview</h2>
               <p>{asNumber(data.memberCount)} contributors · {asNumber(data.textLength)} characters</p>
@@ -1614,7 +1654,7 @@ export function ShareListPage() {
               <pre className="whatsapp-preview compact">{asString(currentPart?.text)}</pre>
             </section>
           ) : null}
-          {copyMessage ? <p className="privacy-note">{copyMessage}</p> : null}
+          {copyMessage ? <p className="share-copy-result">{copyMessage}</p> : null}
           <div className="share-actions">
             <button className="primary-button" type="button" disabled={!text} onClick={() => void copyText(text)}>
               <Copy size={18} aria-hidden /> Copy List

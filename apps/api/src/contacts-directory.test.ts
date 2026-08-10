@@ -26,3 +26,12 @@ test('contacts directory migration preserves tenant contacts separate from event
   assert.match(contactsMigration, /rpc_get_contact_detail/)
   assert.match(contactsMigration, /em\.member_id = p_member_id/)
 })
+
+test('member and contact names are stored in title case by the member integrity trigger', () => {
+  const titleCaseMigration = migration('049_member_name_title_case.sql')
+
+  assert.match(titleCaseMigration, /create or replace function public\.title_case_person_name/)
+  assert.match(titleCaseMigration, /initcap\(lower\(regexp_replace\(btrim\(coalesce\(p_name, ''\)\), '\\s\+', ' ', 'g'\)\)\)/)
+  assert.match(titleCaseMigration, /new\.full_name := public\.title_case_person_name\(new\.full_name\)/)
+  assert.match(titleCaseMigration, /update public\.members[\s\S]+set full_name = public\.title_case_person_name\(full_name\)/)
+})
