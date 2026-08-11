@@ -190,6 +190,10 @@ function canSendCompletedPledgeSms(row: Row) {
   return asNumber(row.outstandingAmount ?? row.outstanding_amount) <= 0 && Boolean(row.smsEnabled ?? row.sms_enabled) && Boolean(asString(row.phone ?? row.phone_e164, '')) && (!reason || reason === 'RECENTLY_SENT')
 }
 
+function hasActivePledge(row: Row) {
+  return Boolean(asString(row.pledge_id ?? row.pledgeId, '')) && asString(row.pledge_status ?? row.pledgeStatus, '') !== 'CANCELLED'
+}
+
 function jsonRecord(value: unknown): Row {
   return typeof value === 'object' && value !== null && !Array.isArray(value) ? value as Row : {}
 }
@@ -241,7 +245,8 @@ function useActiveEventContext(routeEventId: string | undefined) {
   const tenantId = session.selectedTenantId
   const tenantContext = session.selectedTenantContext
   const fallbackEvent = tenantContext?.events[0] ?? null
-  const eventId = routeEventId ?? fallbackEvent?.id ?? ''
+  const selectedEvent = session.selectedEventId ? tenantContext?.events.find((candidate) => candidate.id === session.selectedEventId) ?? null : null
+  const eventId = routeEventId ?? selectedEvent?.id ?? fallbackEvent?.id ?? ''
   const event = eventId ? tenantContext?.events.find((candidate) => candidate.id === eventId) ?? null : null
   const permissions = new Set(tenantContext?.permissions ?? session.userContext?.tenantMemberships.find((membership) => membership.tenantId === tenantId)?.permissions ?? [])
   const error = !tenantId
@@ -277,7 +282,8 @@ function invalidateEvent(queryClient: ReturnType<typeof useQueryClient>, tenantI
 export function TenantDashboardPage() {
   const session = useSessionStore()
   const tenantId = session.selectedTenantId
-  const event = session.selectedTenantContext?.events[0] ?? null
+  const events = session.selectedTenantContext?.events ?? []
+  const event = session.selectedEventId ? events.find((candidate) => candidate.id === session.selectedEventId) ?? events[0] ?? null : events[0] ?? null
 
   if (!tenantId || !event) {
     return (
@@ -296,7 +302,8 @@ export function TenantListPage({ title, kind }: { title: string; kind: 'events' 
   const queryClient = useQueryClient()
   const tenantId = session.selectedTenantId
   const tenantContext = session.selectedTenantContext
-  const event = session.selectedTenantContext?.events[0] ?? null
+  const events = session.selectedTenantContext?.events ?? []
+  const event = session.selectedEventId ? events.find((candidate) => candidate.id === session.selectedEventId) ?? events[0] ?? null : events[0] ?? null
   const eventLink = event ? `/app/events/${event.id}` : '/app'
   const [showEventForm, setShowEventForm] = useState(false)
 
@@ -361,7 +368,6 @@ export function TenantListPage({ title, kind }: { title: string; kind: 'events' 
           emptyTitle="No events yet"
           emptyMessage={canCreate ? 'Create your first event to begin collecting pledges.' : blockedMessage || 'No accessible events are available.'}
         />
-        {canCreate ? <button className="mobile-sticky-button" type="button" onClick={() => setShowEventForm(true)}>Create Event</button> : null}
       </PageContainer>
     )
   }
@@ -683,6 +689,16 @@ export function EventDetailPage({ section = 'overview' }: { section?: EventSecti
   const summary = summaryQuery.data ?? {}
   const totalAllocated = asNumber(summary.totalAllocated ?? summary.totalAllocatedToPledges)
   const collectionPercent = asNumber(summary.totalPledged) > 0 ? Math.round((totalAllocated / asNumber(summary.totalPledged)) * 100) : 0
+  const sectionTitle = section === 'overview' ? 'Dashboard' : section.charAt(0).toUpperCase() + section.slice(1)
+  const sectionDescription = section === 'overview'
+    ? 'Collection progress, recent payments and pledge deadlines for the active event.'
+    : section === 'members'
+      ? 'Manage the contacts attached to this event and review pledge progress.'
+      : section === 'pledges'
+        ? 'Create and monitor pledge commitments, due dates and balances.'
+        : section === 'payments'
+          ? 'Record collections, review receipts and monitor payment activity.'
+          : 'Event workspace.'
 
   if (activeEvent.loading || summaryQuery.isLoading) {
     return <LoadingState title="Loading event" message="Fetching pledge and payment totals." />
@@ -700,8 +716,8 @@ export function EventDetailPage({ section = 'overview' }: { section?: EventSecti
   return (
     <PageContainer>
       <PageHeader
-        title={event?.name ?? 'Event Overview'}
-        description={eventStatus === 'ACTIVE' ? (event?.eventDate ? `Event date ${asDate(event.eventDate)}` : 'Member pledges, installment collections and receipts.') : `Event status is ${eventStatus ?? 'unknown'}. Payments require an ACTIVE event.`}
+        title={sectionTitle}
+        description={eventStatus === 'ACTIVE' ? sectionDescription : `Event status is ${eventStatus ?? 'unknown'}. Payments require an ACTIVE event.`}
         action={
           activeEvent.canCollect && eventStatus === 'ACTIVE' ? <Link className="desktop-primary-button" to={`/app/events/${eventId}/payments/new`}>
             <Plus size={18} aria-hidden />
@@ -799,9 +815,8 @@ function OverviewCards({ eventId, summary, payments, pledges }: { eventId: strin
 
 function MembersPanel({ tenantId, eventId, members, refresh, initialSearch, canCreate }: { tenantId: string; eventId: string; members: Row[]; refresh: () => void; initialSearch: string; canCreate: boolean }) {
   const [query, setQuery] = useState(initialSearch)
-  const [showPicker, setShowPicker] = useState(false)
-  const [showForm, setShowForm] = useState(false)
-  const contacts = useQuery({ queryKey: ['contacts', tenantId], queryFn: async () => (await api.contacts(tenantId)).data, enabled: Boolean(tenantId && showForm) })
+  const [memberEntryMode, setMemberEntryMode] = useState<'existing' | 'new' | null>(null)
+  const contacts = useQuery({ queryKey: ['contacts', tenantId], queryFn: async () => (await api.contacts(tenantId)).data, enabled: Boolean(tenantId && memberEntryMode === 'new') })
   const filtered = members.filter((member) => `${member.full_name ?? ''} ${member.phone_e164 ?? ''} ${member.member_code ?? ''}`.toLowerCase().includes(query.toLowerCase()))
   const columns: Array<DataTableColumn<Row>> = [
     { key: 'name', header: 'Name', render: (member) => <Link to={`/app/events/${eventId}/members/${asString(member.event_member_id)}`}><strong>{titleCaseMemberName(member.full_name, '')}</strong><small>{asString(member.member_code)}</small></Link>, sortValue: (member) => titleCaseMemberName(member.full_name, '') },
@@ -812,17 +827,33 @@ function MembersPanel({ tenantId, eventId, members, refresh, initialSearch, canC
     { key: 'outstanding', header: 'Outstanding', render: (member) => <span>{moneyText(member.outstanding_amount)}</span>, sortValue: (member) => asNumber(member.outstanding_amount), align: 'right' },
     { key: 'status', header: 'Status', render: (member) => <StatusBadge tone={statusTone(member.pledge_status)}>{asString(member.pledge_status, 'No Pledge')}</StatusBadge>, sortValue: (member) => asString(member.pledge_status) },
     { key: 'sms', header: 'SMS', render: (member) => <StatusBadge tone={member.sms_enabled === false ? 'warning' : 'success'}>{member.sms_enabled === false ? 'Disabled' : 'Enabled'}</StatusBadge>, sortValue: (member) => member.sms_enabled === false ? 'disabled' : 'enabled' },
-    { key: 'actions', header: 'Actions', render: (member) => <div className="inline-actions"><Link to={`/app/events/${eventId}/payments/new?eventMemberId=${asString(member.event_member_id)}&pledgeId=${asString(member.pledge_id)}`}>Pay</Link><Link to={`/app/events/${eventId}/members/${asString(member.event_member_id)}`}>View</Link></div>, align: 'right' },
+    { key: 'actions', header: 'Actions', render: (member) => {
+      const eventMemberId = asString(member.event_member_id)
+      return <div className="inline-actions">{hasActivePledge(member) ? <Link to={`/app/events/${eventId}/payments/new?eventMemberId=${eventMemberId}&pledgeId=${asString(member.pledge_id)}`}>Pay</Link> : <Link to={`/app/events/${eventId}/pledges`}>Create Pledge</Link>}<Link to={`/app/events/${eventId}/members/${eventMemberId}`}>View</Link></div>
+    }, align: 'right' },
   ]
 
   return (
     <section className="finance-section">
-      <div className="toolbar-row">
-        {canCreate ? <button className="desktop-primary-button" type="button" onClick={() => setShowPicker((current) => !current)}><Users size={18} aria-hidden /> Add Members</button> : null}
-        {canCreate ? <button type="button" onClick={() => setShowForm((current) => !current)}><Plus size={18} aria-hidden /> Add New Contact</button> : null}
-      </div>
-      {showPicker ? <EventContactPicker tenantId={tenantId} eventId={eventId} onDone={() => { setShowPicker(false); refresh() }} /> : null}
-      {showForm ? <ContactForm tenantId={tenantId} contacts={contacts.data ?? []} eventId={eventId} onDone={() => { setShowForm(false); refresh() }} /> : null}
+      {canCreate ? (
+        <section className="member-action-panel">
+          <div>
+            <strong>Build Event Member List</strong>
+            <span>Add existing tenant contacts or create a new contact and attach them to this event.</span>
+          </div>
+          <button className="desktop-primary-button" type="button" onClick={() => setMemberEntryMode((current) => current ? null : 'existing')}><Users size={18} aria-hidden /> {memberEntryMode ? 'Close' : 'Add Members'}</button>
+        </section>
+      ) : null}
+      {memberEntryMode ? (
+        <section className="member-entry-panel">
+          <div className="segmented-control">
+            <button className={memberEntryMode === 'existing' ? 'active' : ''} type="button" onClick={() => setMemberEntryMode('existing')}><Users size={16} aria-hidden /> Existing Contacts</button>
+            <button className={memberEntryMode === 'new' ? 'active' : ''} type="button" onClick={() => setMemberEntryMode('new')}><Plus size={16} aria-hidden /> New Contact</button>
+          </div>
+          {memberEntryMode === 'existing' ? <EventContactPicker tenantId={tenantId} eventId={eventId} onDone={() => { setMemberEntryMode(null); refresh() }} /> : null}
+          {memberEntryMode === 'new' ? <ContactForm tenantId={tenantId} contacts={contacts.data ?? []} eventId={eventId} onDone={() => { setMemberEntryMode(null); refresh() }} /> : null}
+        </section>
+      ) : null}
       <DataTable
         title="Event Members"
         rows={filtered.map((member, index) => ({ ...member, sequenceNumber: index + 1 })) as Row[]}
@@ -835,7 +866,6 @@ function MembersPanel({ tenantId, eventId, members, refresh, initialSearch, canC
         emptyMessage={canCreate ? 'Use Add Members to select contacts for this event.' : 'You do not have permission to add members.'}
         mobileRender={(member) => <MemberCard member={member} eventId={eventId} />}
       />
-      {canCreate ? <button className="mobile-sticky-button" type="button" onClick={() => setShowPicker(true)}>Add Members</button> : null}
     </section>
   )
 }
@@ -911,7 +941,7 @@ function MemberCard({ member, eventId }: { member: Row; eventId: string }) {
       </div>
       {member.pledge_id ? <p className="privacy-note">Due {asDate(dueDate)} · {member.has_custom_due_date ? 'custom' : 'event default'}</p> : null}
       <div className="card-actions">
-        <Link to={`/app/events/${eventId}/payments/new?eventMemberId=${asString(member.event_member_id)}&pledgeId=${asString(member.pledge_id)}`}>Record Payment</Link>
+        {hasActivePledge(member) ? <Link to={`/app/events/${eventId}/payments/new?eventMemberId=${asString(member.event_member_id)}&pledgeId=${asString(member.pledge_id)}`}>Record Payment</Link> : <Link to={`/app/events/${eventId}/pledges`}>Create Pledge</Link>}
         <Link to={`/app/events/${eventId}/members/${asString(member.event_member_id)}`}>Details</Link>
       </div>
     </article>
@@ -1086,12 +1116,25 @@ export function MemberDetailPage() {
   const activeEvent = useActiveEventContext(eventId)
   const tenantId = activeEvent.tenantId
   const queryClient = useQueryClient()
+  const navigate = useNavigate()
   const detail = useQuery({ queryKey: ['member-detail', tenantId, eventId, eventMemberId], queryFn: async () => (await api.eventMemberDetail(tenantId ?? '', eventId, eventMemberId)).data, enabled: Boolean(tenantId && eventId && eventMemberId && !activeEvent.error) })
   const reportTenantContext = useSessionStore().selectedTenantContext
   const permissions = new Set(reportTenantContext?.permissions ?? [])
   const [reminderOpen, setReminderOpen] = useState(false)
   const [pledgeRequestOpen, setPledgeRequestOpen] = useState(false)
   const [editing, setEditing] = useState(false)
+  const [removeOpen, setRemoveOpen] = useState(false)
+  const [removeReason, setRemoveReason] = useState('Member removed from event')
+  const removeMember = useMutation({
+    mutationFn: () => api.removeEventMember(tenantId ?? '', eventId, eventMemberId, { reason: removeReason }),
+    onSuccess: () => {
+      if (tenantId) {
+        invalidateEvent(queryClient, tenantId, eventId)
+        void queryClient.invalidateQueries({ queryKey: ['member-detail', tenantId, eventId, eventMemberId] })
+      }
+      navigate(`/app/events/${eventId}/members`, { replace: true })
+    },
+  })
   if (activeEvent.error) return <ErrorState title="Unable to open member" message={activeEvent.error} />
   if (detail.isLoading) return <LoadingState title="Loading member" />
   if (detail.isError || !detail.data) return <ErrorState title="Unable to load member" message={errorMessage(detail.error, 'Member detail could not be loaded.')} />
@@ -1104,9 +1147,14 @@ export function MemberDetailPage() {
       void queryClient.invalidateQueries({ queryKey: ['member-detail', tenantId, eventId, eventMemberId] })
     }
   }
+  const canRemoveMember = permissions.has('members.assign_event')
   return (
     <PageContainer>
-      <PageHeader title={titleCaseMemberName(member.full_name)} description={`${asString(member.phone_e164, 'No phone')} · ${asString(member.category, 'No category')}`} action={<Link className="desktop-primary-button" to={`/app/events/${eventId}/payments/new?eventMemberId=${eventMemberId}&pledgeId=${asString(member.pledge_id)}`}>Record Payment</Link>} />
+      <PageHeader
+        title={titleCaseMemberName(member.full_name)}
+        description={`${asString(member.phone_e164, 'No phone')} · ${asString(member.category, 'No category')}`}
+        action={hasActivePledge(member) ? <Link className="desktop-primary-button" to={`/app/events/${eventId}/payments/new?eventMemberId=${eventMemberId}&pledgeId=${asString(member.pledge_id)}`}>Record Payment</Link> : <Link className="desktop-primary-button" to={`/app/events/${eventId}/pledges`}>Create Pledge</Link>}
+      />
       <section className="stats-grid">
         <StatCard label="Pledged" value={moneyText(member.pledged_amount)} icon={FileText} />
         <StatCard label="Paid" value={moneyText(member.total_allocated)} icon={CheckCircle2} tone="success" />
@@ -1121,8 +1169,23 @@ export function MemberDetailPage() {
           <div className="inline-actions">
             <StatusBadge tone={statusTone(member.event_member_status)}>{asString(member.event_member_status, 'ACTIVE')}</StatusBadge>
             {canUpdateMember ? <button type="button" onClick={() => setEditing((current) => !current)}><Pencil size={18} aria-hidden /> {editing ? 'Close' : 'Edit'}</button> : null}
+            {canRemoveMember ? <button type="button" onClick={() => setRemoveOpen((current) => !current)}>{removeOpen ? 'Cancel Remove' : 'Remove from Event'}</button> : null}
           </div>
         </div>
+        {removeOpen ? (
+          <section className="danger-action-panel">
+            <div>
+              <strong>Remove member and roll back event finances</strong>
+              <span>This reverses confirmed payments, cancels active pledges and removes this member from the event. Tenant contact details remain available in Contacts.</span>
+            </div>
+            <label>Reason<textarea rows={3} value={removeReason} onChange={(event) => setRemoveReason(event.target.value)} /></label>
+            {removeMember.error ? <p className="field-error">{errorMessage(removeMember.error, 'Member could not be removed from event.')}</p> : null}
+            <div className="sheet-actions">
+              <button type="button" onClick={() => setRemoveOpen(false)}>Keep Member</button>
+              <button className="button-danger" type="button" disabled={removeMember.isPending || !removeReason.trim()} onClick={() => removeMember.mutate()}>{removeMember.isPending ? 'Removing...' : 'Remove and Roll Back'}</button>
+            </div>
+          </section>
+        ) : null}
         {editing ? (
           <MemberEditForm
             key={asString(member.member_id)}
@@ -1241,8 +1304,9 @@ export function PaymentEntryPage() {
     notes: '',
   })
   const memberRows = members.data ?? []
-  const filteredMembers = memberRows.filter((member) => `${member.full_name ?? ''} ${member.phone_e164 ?? ''} ${member.member_code ?? ''}`.toLowerCase().includes(memberSearch.toLowerCase()))
-  const selectedMember = memberRows.find((member) => member.event_member_id === form.eventMemberId)
+  const payableMembers = memberRows.filter(hasActivePledge)
+  const filteredMembers = payableMembers.filter((member) => `${member.full_name ?? ''} ${member.phone_e164 ?? ''} ${member.member_code ?? ''}`.toLowerCase().includes(memberSearch.toLowerCase()))
+  const selectedMember = payableMembers.find((member) => member.event_member_id === form.eventMemberId && asString(member.pledge_id) === form.pledgeId)
   const outstanding = asNumber(selectedMember?.outstanding_amount)
   const paymentAmount = asNumber(form.amount)
   const mutation = useMutation({
@@ -1285,7 +1349,8 @@ export function PaymentEntryPage() {
               ))}
             </div>
             {!memberRows.length ? <EmptyState title="No members have been added to this event yet." message="Add a member before recording a payment." /> : null}
-            {memberRows.length > 0 && !filteredMembers.length ? <EmptyState title="No members match your search." message="Try a different name, phone number or member code." /> : null}
+            {memberRows.length > 0 && !payableMembers.length ? <EmptyState title="No active pledges available." message="Create a pledge for a member before recording payment." /> : null}
+            {payableMembers.length > 0 && !filteredMembers.length ? <EmptyState title="No pledged members match your search." message="Try a different name, phone number or member code." /> : null}
           </>
         ) : null}
         {selectedMember ? <div className="review-stack">
@@ -1310,7 +1375,7 @@ export function PaymentEntryPage() {
         <Input label="Provider name optional" value={form.providerName} onChange={(providerName) => setForm((current) => ({ ...current, providerName }))} />
         <Input label="Notes optional" value={form.notes} onChange={(notes) => setForm((current) => ({ ...current, notes }))} />
         {mutation.error ? <p className="field-error">{mutation.error.message}</p> : null}
-        <button className="primary-button" type="submit" disabled={mutation.isPending || !form.eventMemberId || !form.amount || !tenantId}>{mutation.isPending ? 'Recording...' : 'Confirm and Generate Receipt'}</button>
+        <button className="primary-button" type="submit" disabled={mutation.isPending || !selectedMember || !form.pledgeId || !form.amount || !tenantId}>{mutation.isPending ? 'Recording...' : 'Confirm and Generate Receipt'}</button>
       </form>
     </PageContainer>
   )
@@ -1807,19 +1872,31 @@ export function SmsHistoryPage() {
   const eventOptions = session.selectedTenantContext?.events ?? []
   const permissions = new Set(session.selectedTenantContext?.permissions ?? [])
   const queryClient = useQueryClient()
-  const [searchParams] = useSearchParams()
+  const [searchParams, setSearchParams] = useSearchParams()
   const canManageTemplates = permissions.has('messages.manage_templates')
   const canManageSettings = permissions.has('messages.manage_settings')
   const canSendMessages = permissions.has('messages.send')
+  const requestedEventId = searchParams.get('eventId')
+  const preferredMessageEventId = requestedEventId ?? session.selectedEventId
+  const eventId = preferredMessageEventId && eventOptions.some((event) => event.id === preferredMessageEventId) ? preferredMessageEventId : 'ALL'
   const [status, setStatus] = useState('ALL')
   const [type, setType] = useState('ALL')
-  const [eventId, setEventId] = useState(searchParams.get('eventId') ?? 'ALL')
   const [query, setQuery] = useState('')
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
   const [pledgeRequestOpen, setPledgeRequestOpen] = useState(searchParams.get('segment') === 'pledge-request')
   const [balanceReminderOpen, setBalanceReminderOpen] = useState(searchParams.get('segment') === 'balance-reminder' || searchParams.get('segment') === 'reminders')
   const [completedPledgeOpen, setCompletedPledgeOpen] = useState(searchParams.get('segment') === 'completed-pledges' || searchParams.get('segment') === 'pledge-completed')
+  function handleMessageEventFilter(value: string) {
+    const nextParams = new URLSearchParams(searchParams)
+    if (value !== 'ALL') {
+      session.selectEvent(value)
+      nextParams.set('eventId', value)
+    } else {
+      nextParams.delete('eventId')
+    }
+    setSearchParams(nextParams, { replace: true })
+  }
   const messages = useQuery({ queryKey: ['sms-history', tenantId], queryFn: async () => (await api.messages(tenantId ?? '')).data, enabled: Boolean(tenantId) })
   const settings = useQuery({ queryKey: ['sms-settings', tenantId], queryFn: async () => (await api.smsSettings(tenantId ?? '')).data, enabled: Boolean(tenantId && canManageSettings) })
   const templates = useQuery({ queryKey: ['sms-templates', tenantId], queryFn: async () => (await api.smsTemplates(tenantId ?? '')).data, enabled: Boolean(tenantId && canManageTemplates) })
@@ -1844,7 +1921,7 @@ export function SmsHistoryPage() {
   const failedCount = rows.filter((message) => asString(message.status) === 'FAILED').length
   const queuedCount = rows.filter((message) => ['QUEUED', 'PROCESSING'].includes(asString(message.status))).length
   const deliveryRate = rows.length ? Math.round((sentCount / rows.length) * 100) : 0
-  const activeEvent = eventOptions[0] ?? null
+  const activeEvent = session.selectedEventId ? eventOptions.find((event) => event.id === session.selectedEventId) ?? eventOptions[0] ?? null : eventOptions[0] ?? null
   const messageActionEventId = eventId !== 'ALL' ? eventId : activeEvent?.id
   const messageActionEvent = eventOptions.find((event) => event.id === messageActionEventId) ?? activeEvent ?? null
 
@@ -1938,7 +2015,7 @@ export function SmsHistoryPage() {
             <div className="messages-filter-grid">
               <label>Type<select value={type} onChange={(event) => setType(event.target.value)}>{smsTemplateOptions.map((option) => <option key={option.code} value={option.code}>{option.label}</option>)}</select></label>
               <label>Status<select value={status} onChange={(event) => setStatus(event.target.value)}>{['ALL', 'QUEUED', 'PROCESSING', 'SENT', 'DELIVERED', 'FAILED', 'CANCELLED'].map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
-              <label>Event<select value={eventId} onChange={(event) => setEventId(event.target.value)}><option value="ALL">All events</option>{eventOptions.map((event) => <option key={event.id} value={event.id}>{event.name}</option>)}</select></label>
+              <label>Event<select value={eventId} onChange={(event) => handleMessageEventFilter(event.target.value)}><option value="ALL">All events</option>{eventOptions.map((event) => <option key={event.id} value={event.id}>{event.name}</option>)}</select></label>
               <label>From<input type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} /></label>
               <label>To<input type="date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} /></label>
             </div>
@@ -2885,14 +2962,22 @@ function SettingsPanel({ title, rows }: { title: string; rows: Array<[string, un
 
 export function ReportsPage() {
   const session = useSessionStore()
+  const navigate = useNavigate()
   const params = useParams()
   const routeReportType = asString(params.reportType)
   const events = session.selectedTenantContext?.events ?? []
-  const event = params.eventId ? events.find((candidate) => candidate.id === params.eventId) ?? null : events[0] ?? null
+  const selectedSessionEvent = session.selectedEventId ? events.find((candidate) => candidate.id === session.selectedEventId) ?? null : null
+  const event = params.eventId ? events.find((candidate) => candidate.id === params.eventId) ?? null : selectedSessionEvent ?? events[0] ?? null
   const tenantId = session.selectedTenantId
-  const [selectedEventId, setSelectedEventId] = useState(event?.id ?? '')
-  const activeEventId = params.eventId ?? selectedEventId
+  const activeEventId = params.eventId ?? selectedSessionEvent?.id ?? event?.id ?? ''
   const activeEvent = events.find((candidate) => candidate.id === activeEventId) ?? event
+
+  function handleReportEventChange(eventId: string) {
+    session.selectEvent(eventId)
+    if (params.eventId) {
+      navigate(`/app/events/${eventId}/reports`)
+    }
+  }
 
   if (!tenantId || !activeEvent) return <ErrorState title="Unable to load reports" message="Open a tenant with an accessible event first." />
   if (routeReportType) {
@@ -2904,7 +2989,7 @@ export function ReportsPage() {
       <PageHeader title="Reports" description={`Server-calculated reports for ${activeEvent.name}.`} />
       {events.length > 1 ? (
         <section className="filter-bar">
-          <label>Event<select value={activeEvent.id} onChange={(event) => setSelectedEventId(event.target.value)}>{events.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+          <label>Event<select value={activeEvent.id} onChange={(event) => handleReportEventChange(event.target.value)}>{events.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
         </section>
       ) : null}
       <section className="cards-list">

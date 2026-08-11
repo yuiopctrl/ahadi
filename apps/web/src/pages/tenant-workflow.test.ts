@@ -4,6 +4,8 @@ import test from 'node:test'
 
 const tenantPage = readFileSync(new URL('./tenant.tsx', import.meta.url), 'utf8')
 const navigation = readFileSync(new URL('../navigation.tsx', import.meta.url), 'utf8')
+const tenantLayout = readFileSync(new URL('../layouts/TenantAppLayout.tsx', import.meta.url), 'utf8')
+const sessionStore = readFileSync(new URL('../stores/session-store.tsx', import.meta.url), 'utf8')
 const styles = readFileSync(new URL('../index.css', import.meta.url), 'utf8')
 const apiClient = readFileSync(new URL('../lib/api.ts', import.meta.url), 'utf8')
 const routes = readFileSync(new URL('../routes/index.tsx', import.meta.url), 'utf8')
@@ -13,6 +15,30 @@ const guards = readFileSync(new URL('../routes/guards.tsx', import.meta.url), 'u
 test('tenant workflow does not depend on hardcoded demo event ids', () => {
   assert.doesNotMatch(navigation, /event_001/)
   assert.ok(navigation.includes("event ? `/app/events/${event.id}`"))
+})
+
+test('tenant layout navigation follows the route event instead of the tenant default', () => {
+  assert.match(tenantLayout, /useMatch\('\/app\/events\/:eventId\/\*'\)/)
+  assert.match(tenantLayout, /const routeEventId = eventRouteMatch\?\.params\.eventId/)
+  assert.match(tenantLayout, /const event = routeEvent \?\? storedEvent \?\? fallbackEvent/)
+  assert.match(tenantLayout, /<DesktopSidebar tenant=\{tenant\} event=\{event\}/)
+  assert.match(tenantLayout, /<MobileBottomNav event=\{event\}/)
+  assert.match(tenantLayout, /onEventChange=\{handleEventChange\}/)
+  assert.match(tenantLayout, /<EventSnapshotBar event=\{event\} \/>/)
+  assert.doesNotMatch(tenantLayout, /Switch active event/)
+  assert.doesNotMatch(tenantLayout, /<MobileTopBar[^\\n]+onEventChange/)
+  assert.match(navigation, /export function MobileTopBar\(\{ tenant, event, showPlatformLink = false \}/)
+  assert.match(navigation, /<EventContextDisplay event=\{event\} \/>/)
+  assert.match(sessionStore, /selectedEventStorageKey\(tenantId: string\)/)
+  assert.match(sessionStore, /selectedEventId: string \| null/)
+  assert.match(sessionStore, /selectEvent: \(eventId: string \| null\) => void/)
+  assert.match(navigation, /\{ to: event \? eventBase : '\/app', label: 'Dashboard'/)
+  assert.match(navigation, /\{ to: event \? eventBase : '\/app', label: 'Home'/)
+  assert.match(navigation, /\{ to: event \? `\$\{eventBase\}\/payments` : '\/app\/payments', label: 'Payments'/)
+  assert.match(navigation, /\{ to: event \? `\$\{eventBase\}\/reports` : '\/app\/reports', label: 'Reports'/)
+  assert.match(navigation, /\{ to: event \? `\/app\/messages\?eventId=\$\{event\.id\}` : '\/app\/messages', label: 'Messages'/)
+  assert.match(tenantPage, /session\.selectedEventId \? tenantContext\?\.events\.find/)
+  assert.match(tenantPage, /const activeEvent = session\.selectedEventId \? eventOptions\.find/)
 })
 
 test('mobile more opens an overflow menu instead of linking directly to settings', () => {
@@ -81,7 +107,18 @@ test('record payment flow uses route event context and stable idempotency per at
   assert.match(tenantPage, /useActiveEventContext\(eventId\)/)
   assert.match(tenantPage, /const \[idempotencyKey, resetIdempotencyKey\] = useState\(\(\) => crypto\.randomUUID\(\)\)/)
   assert.match(tenantPage, /idempotencyKey, pledgeId/)
+  assert.match(tenantPage, /const payableMembers = memberRows\.filter\(hasActivePledge\)/)
+  assert.match(tenantPage, /No active pledges available\./)
+  assert.match(tenantPage, /disabled=\{mutation\.isPending \|\| !selectedMember \|\| !form\.pledgeId/)
   assert.doesNotMatch(tenantPage, /idempotencyKey: crypto\.randomUUID\(\)/)
+})
+
+test('event member removal rolls back pledge and payment state from the member detail page', () => {
+  assert.match(apiClient, /removeEventMember: \(tenantId: string, eventId: string, eventMemberId: string, payload/)
+  assert.match(tenantPage, /Remove member and roll back event finances/)
+  assert.match(tenantPage, /api\.removeEventMember\(tenantId \?\? '', eventId, eventMemberId, \{ reason: removeReason \}\)/)
+  assert.match(tenantPage, /Remove and Roll Back/)
+  assert.match(tenantPage, /hasActivePledge\(member\) \? <Link className="desktop-primary-button"[\s\S]+Record Payment[\s\S]+Create Pledge/)
 })
 
 test('API client preserves structured errors and bypasses browser cache', () => {

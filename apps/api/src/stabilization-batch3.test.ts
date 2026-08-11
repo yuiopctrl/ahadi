@@ -8,6 +8,7 @@ const v2Migration = readFileSync(new URL('../../../supabase/migrations/035_event
 const v2AmbiguityFixMigration = readFileSync(new URL('../../../supabase/migrations/036_fix_event_create_v2_ambiguous_columns.sql', import.meta.url), 'utf8')
 const shareNoPledgeMigration = readFileSync(new URL('../../../supabase/migrations/048_whatsapp_share_include_no_pledge_members.sql', import.meta.url), 'utf8')
 const shareNoPledgeLabelMigration = readFileSync(new URL('../../../supabase/migrations/050_replace_whatsapp_no_pledge_label.sql', import.meta.url), 'utf8')
+const paymentPledgeRollbackMigration = readFileSync(new URL('../../../supabase/migrations/051_require_pledge_for_payments_and_remove_member_rollback.sql', import.meta.url), 'utf8')
 const app = readFileSync(new URL('./app.ts', import.meta.url), 'utf8')
 
 test('share preview access uses event financial access and active pledged members', () => {
@@ -26,6 +27,21 @@ test('share preview can include event members without pledges in any list format
   assert.match(shareNoPledgeMigration, /replace\(/)
   assert.match(shareNoPledgeMigration, /🙏🏿/)
   assert.match(shareNoPledgeLabelMigration, /replace\(function_sql, 'Hakuna ahadi', '🙏🏿'\)/)
+})
+
+test('payments require active pledges and removing event members rolls back financial records', () => {
+  assert.match(paymentPledgeRollbackMigration, /PLEDGE_REQUIRED_FOR_PAYMENT/)
+  assert.match(paymentPledgeRollbackMigration, /select \* into pledge_record[\s\S]+from public\.pledges/)
+  assert.match(paymentPledgeRollbackMigration, /and event_member_id = p_event_member_id/)
+  assert.match(paymentPledgeRollbackMigration, /insert into public\.payment_reversals/)
+  assert.match(paymentPledgeRollbackMigration, /update public\.payments set status = 'REVERSED'/)
+  assert.match(paymentPledgeRollbackMigration, /update public\.pledges[\s\S]+set status = 'CANCELLED'/)
+  assert.match(paymentPledgeRollbackMigration, /set status = 'REMOVED'/)
+  assert.match(paymentPledgeRollbackMigration, /'reversedPayments'/)
+  assert.match(paymentPledgeRollbackMigration, /'cancelledPledges'/)
+  assert.match(app, /removeEventMemberSchema/)
+  assert.match(app, /p_reason: input\.reason \|\| null/)
+  assert.match(app, /'PLEDGE_REQUIRED_FOR_PAYMENT'/)
 })
 
 test('event usage uses draft and active slots with snapshot entitlement diagnostics', () => {

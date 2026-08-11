@@ -20,12 +20,15 @@ import { useMemo, useState } from 'react'
 import { EventContextDisplay, TenantSwitcherDisplay } from './components/ui'
 import type { EventSummary, TenantMembershipContext } from '@ahadi/types'
 
-const mobileNav = [
-  { to: '/app', label: 'Home', icon: Home, end: true },
-  { to: '/app/events', label: 'Events', icon: CalendarDays, end: true },
-  { to: '/app/contacts', label: 'Contacts', icon: Users },
-  { to: '/app/payments', label: 'Payments', icon: CreditCard },
-]
+function mobileNav(event: EventSummary | null) {
+  const eventBase = event ? `/app/events/${event.id}` : '/app/events'
+  return [
+    { to: event ? eventBase : '/app', label: 'Home', icon: Home, end: true },
+    { to: '/app/events', label: 'Events', icon: CalendarDays, end: true },
+    { to: '/app/contacts', label: 'Contacts', icon: Users },
+    { to: event ? `${eventBase}/payments` : '/app/payments', label: 'Payments', icon: CreditCard },
+  ]
+}
 
 function overflowNav(event: EventSummary | null, showPlatformLink = false) {
   const eventBase = event ? `/app/events/${event.id}` : '/app/events'
@@ -34,7 +37,7 @@ function overflowNav(event: EventSummary | null, showPlatformLink = false) {
     { to: event ? `${eventBase}/pledges` : '/app/events', label: 'Pledges', icon: PieChart },
     { to: event ? `${eventBase}/outstanding` : '/app/events', label: 'Outstanding', icon: Clock3 },
     { to: event ? `${eventBase}/share` : '/app/events', label: 'Share List', icon: Share2 },
-    { to: '/app/messages', label: 'Messages', icon: MessageSquareText },
+    { to: event ? `/app/messages?eventId=${event.id}` : '/app/messages', label: 'Messages', icon: MessageSquareText },
     { to: event ? `${eventBase}/reports` : '/app/reports', label: 'Reports', icon: FileText },
     { to: '/app/settings/billing', label: 'Billing', icon: CreditCard },
     { to: '/app/users', label: 'Users', icon: Users },
@@ -46,7 +49,7 @@ function overflowNav(event: EventSummary | null, showPlatformLink = false) {
 function desktopNav(event: EventSummary | null) {
   const eventBase = event ? `/app/events/${event.id}` : '/app/events'
   return [
-    { to: '/app', label: 'Dashboard', icon: Gauge, end: true },
+    { to: event ? eventBase : '/app', label: 'Dashboard', icon: Gauge, end: true },
     { to: '/app/events', label: 'Events', icon: CalendarDays, end: true },
     { to: '/app/contacts', label: 'Contacts', icon: Users },
     ...(event ? [{ to: `${eventBase}/members`, label: 'Members', icon: Users }] : []),
@@ -54,8 +57,8 @@ function desktopNav(event: EventSummary | null) {
     { to: event ? `${eventBase}/outstanding` : '/app/events', label: 'Outstanding', icon: Clock3 },
     { to: event ? `${eventBase}/share` : '/app/events', label: 'Share List', icon: Share2 },
     { to: event ? `${eventBase}/payments` : '/app/payments', label: 'Payments', icon: CreditCard },
-    { to: '/app/messages', label: 'Messages', icon: MessageSquareText },
-    { to: '/app/reports', label: 'Reports', icon: PieChart },
+    { to: event ? `/app/messages?eventId=${event.id}` : '/app/messages', label: 'Messages', icon: MessageSquareText },
+    { to: event ? `${eventBase}/reports` : '/app/reports', label: 'Reports', icon: PieChart },
     { to: '/app/settings/billing', label: 'Billing', icon: CreditCard },
     { to: '/app/users', label: 'Users', icon: Users },
     { to: '/app/help', label: 'Help', icon: LifeBuoy },
@@ -63,7 +66,15 @@ function desktopNav(event: EventSummary | null) {
   ]
 }
 
-export function MobileTopBar({ tenant, event, showPlatformLink = false }: { tenant: TenantMembershipContext | null; event: EventSummary | null; showPlatformLink?: boolean }) {
+interface TenantNavProps {
+  tenant: TenantMembershipContext | null
+  event: EventSummary | null
+  events?: EventSummary[]
+  showPlatformLink?: boolean
+  onEventChange?: (eventId: string) => void
+}
+
+export function MobileTopBar({ tenant, event, showPlatformLink = false }: TenantNavProps) {
   return (
     <header className="mobile-topbar">
       <TenantSwitcherDisplay tenant={tenant} />
@@ -79,6 +90,7 @@ export function MobileTopBar({ tenant, event, showPlatformLink = false }: { tena
 
 export function MobileBottomNav({ event, showPlatformLink = false }: { event: EventSummary | null; showPlatformLink?: boolean }) {
   const [open, setOpen] = useState(false)
+  const primaryItems = useMemo(() => mobileNav(event), [event])
   const overflowItems = useMemo(() => overflowNav(event, showPlatformLink), [event, showPlatformLink])
 
   return (
@@ -101,7 +113,7 @@ export function MobileBottomNav({ event, showPlatformLink = false }: { event: Ev
         </section>
       ) : null}
       <nav className="mobile-bottom-nav" aria-label="Tenant mobile navigation">
-        {mobileNav.map(({ to, label, icon: Icon, end }) => (
+        {primaryItems.map(({ to, label, icon: Icon, end }) => (
           <NavLink key={label} to={to} end={end} onClick={() => setOpen(false)}>
             <Icon size={20} aria-hidden />
             <span>{label}</span>
@@ -116,7 +128,7 @@ export function MobileBottomNav({ event, showPlatformLink = false }: { event: Ev
   )
 }
 
-export function DesktopSidebar({ tenant, event, showPlatformLink = false }: { tenant: TenantMembershipContext | null; event: EventSummary | null; showPlatformLink?: boolean }) {
+export function DesktopSidebar({ tenant, event, events = [], showPlatformLink = false, onEventChange }: TenantNavProps) {
   return (
     <aside className="desktop-sidebar">
       <div className="sidebar-brand">
@@ -127,7 +139,7 @@ export function DesktopSidebar({ tenant, event, showPlatformLink = false }: { te
         </div>
       </div>
       <TenantSwitcherDisplay tenant={tenant} />
-      <EventContextDisplay event={event} />
+      <EventContextDisplay event={event} events={events} onEventChange={onEventChange} />
       <nav aria-label="Tenant navigation">
         {showPlatformLink ? (
           <NavLink to="/platform">
