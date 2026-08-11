@@ -25,10 +25,11 @@ test('tenant layout navigation follows the route event instead of the tenant def
   assert.match(tenantLayout, /<MobileBottomNav event=\{event\}/)
   assert.match(tenantLayout, /onEventChange=\{handleEventChange\}/)
   assert.match(tenantLayout, /<EventSnapshotBar event=\{event\} \/>/)
+  assert.doesNotMatch(tenantLayout, /<MobileActionBar/)
   assert.doesNotMatch(tenantLayout, /Switch active event/)
   assert.doesNotMatch(tenantLayout, /<MobileTopBar[^\\n]+onEventChange/)
-  assert.match(navigation, /export function MobileTopBar\(\{ tenant, event, showPlatformLink = false \}/)
-  assert.match(navigation, /<EventContextDisplay event=\{event\} \/>/)
+  assert.match(navigation, /export function MobileTopBar\(\{ tenant, showPlatformLink = false \}/)
+  assert.doesNotMatch(navigation, /<EventContextDisplay event=\{event\} \/>/)
   assert.match(sessionStore, /selectedEventStorageKey\(tenantId: string\)/)
   assert.match(sessionStore, /selectedEventId: string \| null/)
   assert.match(sessionStore, /selectEvent: \(eventId: string \| null\) => void/)
@@ -39,6 +40,14 @@ test('tenant layout navigation follows the route event instead of the tenant def
   assert.match(navigation, /\{ to: event \? `\/app\/messages\?eventId=\$\{event\.id\}` : '\/app\/messages', label: 'Messages'/)
   assert.match(tenantPage, /session\.selectedEventId \? tenantContext\?\.events\.find/)
   assert.match(tenantPage, /const activeEvent = session\.selectedEventId \? eventOptions\.find/)
+})
+
+test('mobile app chrome stays minimal and avoids global record-payment actions', () => {
+  assert.match(styles, /padding-bottom: calc\(var\(--bottom-nav-height\) \+ 18px \+ env\(safe-area-inset-bottom\)\)/)
+  assert.match(styles, /\.event-snapshot-actions \{\s+display: none;/)
+  assert.match(styles, /@media \(min-width: 640px\)[\s\S]+\.event-snapshot-actions \{\s+display: grid;/)
+  assert.doesNotMatch(styles, /padding-bottom: calc\(var\(--bottom-nav-height\) \+ 94px/)
+  assert.doesNotMatch(tenantPage, /activeEvent\.canCollect && eventStatus === 'ACTIVE' \? <Link className="desktop-primary-button" to=\{`\/app\/events\/\$\{eventId\}\/payments\/new`\}/)
 })
 
 test('mobile more opens an overflow menu instead of linking directly to settings', () => {

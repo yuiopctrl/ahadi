@@ -718,12 +718,6 @@ export function EventDetailPage({ section = 'overview' }: { section?: EventSecti
       <PageHeader
         title={sectionTitle}
         description={eventStatus === 'ACTIVE' ? sectionDescription : `Event status is ${eventStatus ?? 'unknown'}. Payments require an ACTIVE event.`}
-        action={
-          activeEvent.canCollect && eventStatus === 'ACTIVE' ? <Link className="desktop-primary-button" to={`/app/events/${eventId}/payments/new`}>
-            <Plus size={18} aria-hidden />
-            Record Payment
-          </Link> : null
-        }
       />
       <section className="stats-grid">
         <StatCard label="Total Pledged" value={moneyText(summary.totalPledged)} meta={`${asNumber(summary.membersWithPledges)} pledge members`} icon={Users} />

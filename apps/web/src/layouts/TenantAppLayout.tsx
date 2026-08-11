@@ -2,7 +2,6 @@ import { useEffect } from 'react'
 import { CalendarDays, CheckCircle2, Clock3, Target } from 'lucide-react'
 import { Link, Outlet, useLocation, useMatch, useNavigate } from 'react-router-dom'
 import { MobileBottomNav, MobileTopBar, DesktopSidebar } from '../navigation'
-import { MobileActionBar } from '../components/ui'
 import { useSessionStore } from '../stores/session-store'
 import { hasActivePlatformAccess } from '../routes/access'
 import type { EventSummary } from '@ahadi/types'
@@ -83,7 +82,6 @@ export function TenantAppLayout() {
         <EventSnapshotBar event={event} />
         <Outlet />
       </div>
-      <MobileActionBar />
       <MobileBottomNav event={event} showPlatformLink={hasActivePlatformAccess(session.userContext)} />
     </div>
   )

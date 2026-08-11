@@ -450,8 +450,8 @@ a {
   z-index: 20;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  gap: 8px;
-  padding: max(10px, env(safe-area-inset-top)) 14px 10px;
+  gap: 10px;
+  padding: max(8px, env(safe-area-inset-top)) 12px 8px;
   border-bottom: 1px solid var(--color-border);
   background: rgba(247, 245, 242, 0.94);
   backdrop-filter: blur(12px);
@@ -569,7 +569,7 @@ a {
 
 .tenant-switcher {
   display: grid;
-  min-height: 46px;
+  min-height: 42px;
   width: 100%;
   grid-template-columns: 1fr auto;
   align-items: center;
@@ -590,6 +590,9 @@ a {
 
 .tenant-switcher small {
   grid-column: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .event-context {
@@ -649,14 +652,14 @@ a {
 .event-snapshot-bar {
   display: grid;
   width: min(100%, 1180px);
-  gap: 12px;
-  margin: 14px auto 0;
+  gap: 10px;
+  margin: 10px auto 0;
   border: 1px solid rgba(23, 32, 51, 0.08);
   border-radius: 8px;
   background:
     linear-gradient(135deg, rgba(143, 29, 44, 0.07), rgba(255, 255, 255, 0) 42%),
     white;
-  padding: 14px;
+  padding: 12px;
   box-shadow: var(--shadow-card);
 }
 
@@ -679,7 +682,7 @@ a {
 .event-snapshot-main strong {
   min-width: 0;
   color: var(--color-text);
-  font-size: 20px;
+  font-size: 18px;
   font-weight: 900;
   line-height: 1.15;
   overflow-wrap: anywhere;
@@ -730,7 +733,7 @@ a {
 }
 
 .event-snapshot-actions {
-  display: grid;
+  display: none;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
 }
@@ -757,13 +760,13 @@ a {
 }
 
 .tenant-content-shell {
-  padding-bottom: calc(var(--bottom-nav-height) + 94px + env(safe-area-inset-bottom));
+  padding-bottom: calc(var(--bottom-nav-height) + 18px + env(safe-area-inset-bottom));
 }
 
 .page-container {
   width: min(100%, 1180px);
   margin: 0 auto;
-  padding: 18px 14px 28px;
+  padding: 14px 12px 24px;
 }
 
 .page-container-narrow {
@@ -1171,7 +1174,7 @@ a {
   grid-template-columns: repeat(5, 1fr);
   border-top: 1px solid var(--color-border);
   background: rgba(255, 255, 255, 0.98);
-  padding: 6px 6px max(6px, env(safe-area-inset-bottom));
+  padding: 5px 6px max(5px, env(safe-area-inset-bottom));
   box-shadow: 0 -10px 34px rgba(23, 32, 51, 0.08);
 }
 
@@ -1179,7 +1182,7 @@ a {
 .mobile-bottom-nav button {
   display: grid;
   min-width: 0;
-  min-height: 60px;
+  min-height: 54px;
   place-items: center;
   border: 0;
   border-radius: 8px;
@@ -2811,6 +2814,10 @@ th {
 
   .event-snapshot-metrics {
     grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .event-snapshot-actions {
+    display: grid;
   }
 
   .filter-bar {
