@@ -104,6 +104,15 @@ test('platform-only user without tenant membership keeps platform destination', 
   assert.equal(resolveAuthenticatedDestination({ context: support, requestedContext: 'default' }), '/platform')
 })
 
+test('active platform role wins even when boolean platform flag is stale', () => {
+  const owner = activePlatformRole('PLATFORM_OWNER')
+  owner.isPlatformUser = false
+  assert.equal(hasActivePlatformRole(owner), true)
+  assert.equal(hasActivePlatformAccess(owner), true)
+  assert.equal(resolveAuthenticatedDestination({ context: owner, requestedContext: 'default' }), '/platform')
+  assert.equal(getPlatformRouteDenialReason(owner), null)
+})
+
 test('tenant context still sends unfinished tenant users to onboarding', () => {
   const tenantOnly = context({ onboardingCompleted: false, tenantMemberships: [tenantMembership()] })
   assert.equal(resolveAuthenticatedDestination({ context: tenantOnly, requestedPath: '/app/events' }), '/onboarding')
@@ -119,7 +128,7 @@ test('platform route guard depends on platform status and permissions, not tenan
   const platformOnly = activePlatformOwner({ tenantMemberships: [] })
   assert.equal(getPlatformRouteDenialReason(platformOnly), null)
   assert.equal(getPlatformRouteDenialReason(activePlatformOwner({ platformPermissions: [] })), 'platform_permission_missing')
-  assert.equal(getPlatformRouteDenialReason(activePlatformOwner({ isPlatformUser: false, platformStatus: 'SUSPENDED' })), 'platform_user_not_found')
+  assert.equal(getPlatformRouteDenialReason(activePlatformOwner({ isPlatformUser: false, platformStatus: 'SUSPENDED' })), 'platform_user_not_active')
   assert.equal(getPlatformRouteDenialReason(activePlatformOwner({ platformStatus: 'SUSPENDED', platformPermissions: ['platform.dashboard.view'] })), 'platform_user_not_active')
 })
 

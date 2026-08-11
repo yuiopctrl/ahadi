@@ -5,11 +5,15 @@ import App from './App.tsx'
 
 if (import.meta.env.DEV && 'serviceWorker' in navigator) {
   navigator.serviceWorker.getRegistrations().then((registrations) => {
+    const hadController = Boolean(navigator.serviceWorker.controller)
     for (const registration of registrations) {
       registration.unregister()
     }
+    if (hadController) {
+      window.location.reload()
+    }
   })
-  caches.keys().then((keys) => {
+  if ('caches' in window) caches.keys().then((keys) => {
     for (const key of keys) {
       caches.delete(key)
     }

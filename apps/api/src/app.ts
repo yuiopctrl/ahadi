@@ -654,6 +654,10 @@ const developmentWebOrigins = new Set([
   'http://localhost:5174',
   'http://127.0.0.1:5174',
 ])
+const productionWebOrigins = new Set([
+  env.WEB_URL,
+  'https://ahadi.yuiop.work',
+])
 
 const corsOrigin: cors.CorsOptions['origin'] =
   env.NODE_ENV === 'development'
@@ -664,7 +668,13 @@ const corsOrigin: cors.CorsOptions['origin'] =
         }
         callback(new Error('CORS_ORIGIN_DENIED'))
       }
-    : env.WEB_URL
+    : (origin, callback) => {
+        if (!origin || productionWebOrigins.has(origin)) {
+          callback(null, origin ?? true)
+          return
+        }
+        callback(new Error('CORS_ORIGIN_DENIED'))
+      }
 
 function databaseMessage(error: unknown): string {
   if (error instanceof Error) {

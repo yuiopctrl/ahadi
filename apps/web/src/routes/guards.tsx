@@ -47,13 +47,18 @@ export function AuthenticatedRoute() {
 
 export function PinUnlockedRoute() {
   const session = useSessionStore()
+  const location = useLocation()
   if (session.isLoading) {
     return <FullScreenLoading />
   }
   if (!session.session) {
     return <Navigate to="/login" replace />
   }
-  return session.lockState.isLocked ? <Navigate to="/setup-pin" replace /> : <Outlet />
+  if (session.lockState.isLocked) {
+    const postAuthDestination = location.pathname.startsWith('/platform') ? location.pathname : null
+    return <Navigate to="/setup-pin" replace state={postAuthDestination ? { postAuthDestination } : undefined} />
+  }
+  return <Outlet />
 }
 
 export function TenantRoute() {

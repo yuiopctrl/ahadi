@@ -20,11 +20,11 @@ export interface PlatformAccessDiagnostic {
 }
 
 export function hasActivePlatformAccess(context: UserContext | null, permission = requiredPlatformDashboardPermission): boolean {
-  return Boolean(context?.isPlatformUser && context.platformStatus === 'ACTIVE' && context.platformPermissions.includes(permission))
+  return Boolean(hasActivePlatformRole(context) && context?.platformPermissions.includes(permission))
 }
 
 export function hasActivePlatformRole(context: UserContext | null): boolean {
-  return Boolean(context?.isPlatformUser && context.platformStatus === 'ACTIVE' && context.platformRole && activePlatformRoles.has(context.platformRole))
+  return Boolean(context?.platformStatus === 'ACTIVE' && context.platformRole && activePlatformRoles.has(context.platformRole))
 }
 
 function tenantDestination(context: UserContext | null): string {
@@ -87,7 +87,7 @@ export function getPostAuthDestination(context: UserContext | null, preferredDes
 }
 
 export function getPlatformRouteDenialReason(context: UserContext | null, permission = requiredPlatformDashboardPermission): string | null {
-  if (!context?.isPlatformUser) {
+  if (!context?.platformRole && !context?.isPlatformUser) {
     return 'platform_user_not_found'
   }
   if (context.platformStatus !== 'ACTIVE') {
