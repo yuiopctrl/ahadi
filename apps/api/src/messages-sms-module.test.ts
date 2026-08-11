@@ -11,12 +11,14 @@ const migration = [
   readFileSync(new URL('../../../supabase/migrations/043_sms_template_variable_normalization.sql', import.meta.url), 'utf8'),
   readFileSync(new URL('../../../supabase/migrations/045_balance_reminder_provider_repair.sql', import.meta.url), 'utf8'),
   readFileSync(new URL('../../../supabase/migrations/046_completed_pledge_manual_sms.sql', import.meta.url), 'utf8'),
+  readFileSync(new URL('../../../supabase/migrations/052_pledge_request_sms_always_resend.sql', import.meta.url), 'utf8'),
 ].join('\n')
 const smsProviderSelectionMigration = readFileSync(new URL('../../../supabase/migrations/041_sms_provider_selection.sql', import.meta.url), 'utf8')
 const workerNextSmsRuntimeMigration = readFileSync(new URL('../../../supabase/migrations/042_worker_nextsms_runtime.sql', import.meta.url), 'utf8')
 const templateVariableNormalizationMigration = readFileSync(new URL('../../../supabase/migrations/043_sms_template_variable_normalization.sql', import.meta.url), 'utf8')
 const balanceReminderProviderRepairMigration = readFileSync(new URL('../../../supabase/migrations/045_balance_reminder_provider_repair.sql', import.meta.url), 'utf8')
 const completedPledgeManualSmsMigration = readFileSync(new URL('../../../supabase/migrations/046_completed_pledge_manual_sms.sql', import.meta.url), 'utf8')
+const pledgeRequestAlwaysResendMigration = readFileSync(new URL('../../../supabase/migrations/052_pledge_request_sms_always_resend.sql', import.meta.url), 'utf8')
 const app = readFileSync(new URL('./app.ts', import.meta.url), 'utf8')
 const apiClient = readFileSync(new URL('../../web/src/lib/api.ts', import.meta.url), 'utf8')
 const tenantPage = readFileSync(new URL('../../web/src/pages/tenant.tsx', import.meta.url), 'utf8')
@@ -139,6 +141,16 @@ test('balance reminder sending treats recently sent as resendable', () => {
   assert.match(app, /rpc_enqueue_balance_reminder_sms[\s\S]+p_cooldown_hours: 0/)
   assert.match(app, /rpc_enqueue_balance_reminder_bulk[\s\S]+p_cooldown_hours: 0/)
   assert.match(tenantPage, /reason === 'RECENTLY_SENT'/)
+})
+
+test('pledge request SMS can be sent again even when recently sent', () => {
+  assert.match(pledgeRequestAlwaysResendMigration, /create or replace function public\.pledge_request_ineligibility_reason/)
+  assert.doesNotMatch(pledgeRequestAlwaysResendMigration, /RECENTLY_SENT/)
+  assert.match(pledgeRequestAlwaysResendMigration, /do not block sending/)
+  assert.match(app, /rpc_list_event_no_pledge_members[\s\S]+p_cooldown_hours: 0/)
+  assert.match(app, /p_template_code: 'PLEDGE_REQUEST',\s+p_cooldown_hours: 0,/)
+  assert.match(app, /rpc_enqueue_pledge_request_sms[\s\S]+p_cooldown_hours: 0/)
+  assert.match(app, /rpc_enqueue_pledge_request_bulk[\s\S]+p_cooldown_hours: 0/)
 })
 
 test('completed pledge SMS can be manually previewed and queued again', () => {
