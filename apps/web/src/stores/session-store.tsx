@@ -20,10 +20,12 @@ interface SessionStore {
   session: Session | null
   userContext: UserContext | null
   selectedTenantId: string | null
+  selectedEventId: string | null
   selectedTenantContext: TenantContext | null
   lockState: SessionLockState
   refreshContext: () => Promise<UserContext | null>
   selectTenant: (tenantId: string) => Promise<TenantContext>
+  selectEvent: (eventId: string | null) => void
   clearTenant: () => void
   signOut: () => Promise<void>
 }
@@ -31,6 +33,15 @@ interface SessionStore {
 const SessionContext = createContext<SessionStore | null>(null)
 
 const selectedTenantStorageKey = 'ahadi:selected-tenant-id'
+
+function selectedEventStorageKey(tenantId: string) {
+  return `ahadi:selected-event-id:${tenantId}`
+}
+
+function storedEventIdForTenant(tenantId: string, context: TenantContext) {
+  const storedEventId = localStorage.getItem(selectedEventStorageKey(tenantId))
+  return context.events.some((event) => event.id === storedEventId) ? storedEventId : context.events[0]?.id ?? null
+}
 
 function createLockState(
   isLocked: boolean,
@@ -67,6 +78,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null)
   const [userContext, setUserContext] = useState<UserContext | null>(null)
   const [selectedTenantId, setSelectedTenantId] = useState<string | null>(() => localStorage.getItem(selectedTenantStorageKey))
+  const [selectedEventId, setSelectedEventId] = useState<string | null>(null)
   const [selectedTenantContext, setSelectedTenantContext] = useState<TenantContext | null>(null)
   const [isLocked, setLocked] = useState(true)
   const [lockReason, setLockReason] = useState<SessionLockState['lockReason']>('startup')
@@ -82,6 +94,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     setSession(data.session)
     if (!data.session) {
       setUserContext(null)
+      setSelectedEventId(null)
       setSelectedTenantContext(null)
       return null
     }
@@ -95,12 +108,26 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     localStorage.setItem(selectedTenantStorageKey, tenantId)
     setSelectedTenantId(tenantId)
     setSelectedTenantContext(response.data)
+    setSelectedEventId(storedEventIdForTenant(tenantId, response.data))
     return response.data
   }, [])
+
+  const selectEvent = useCallback((eventId: string | null) => {
+    setSelectedEventId(eventId)
+    if (!selectedTenantId) {
+      return
+    }
+    if (eventId) {
+      localStorage.setItem(selectedEventStorageKey(selectedTenantId), eventId)
+    } else {
+      localStorage.removeItem(selectedEventStorageKey(selectedTenantId))
+    }
+  }, [selectedTenantId])
 
   const clearTenant = useCallback(() => {
     localStorage.removeItem(selectedTenantStorageKey)
     setSelectedTenantId(null)
+    setSelectedEventId(null)
     setSelectedTenantContext(null)
   }, [])
 
@@ -151,14 +178,16 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       session,
       userContext,
       selectedTenantId,
+      selectedEventId,
       selectedTenantContext,
       lockState,
       refreshContext,
       selectTenant,
+      selectEvent,
       clearTenant,
       signOut,
     }),
-    [clearTenant, isLoading, lockState, refreshContext, selectTenant, selectedTenantContext, selectedTenantId, session, signOut, userContext],
+    [clearTenant, isLoading, lockState, refreshContext, selectEvent, selectTenant, selectedEventId, selectedTenantContext, selectedTenantId, session, signOut, userContext],
   )
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>

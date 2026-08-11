@@ -213,11 +213,28 @@ export function TenantSwitcherDisplay({ tenant }: { tenant: TenantMembershipCont
   )
 }
 
-export function EventContextDisplay({ event }: { event: EventSummary | null }) {
+export function EventContextDisplay({ event, events = [], onEventChange }: { event: EventSummary | null; events?: EventSummary[]; onEventChange?: (eventId: string) => void }) {
+  if (events.length > 1 && onEventChange) {
+    return (
+      <label className="event-context event-context-select">
+        <CheckCircle2 size={16} aria-hidden />
+        <span className="event-context-copy">
+          <small>Active Event</small>
+          <select aria-label="Active event" value={event?.id ?? ''} onChange={(changeEvent) => onEventChange(changeEvent.target.value)}>
+            {events.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+          </select>
+        </span>
+      </label>
+    )
+  }
+
   return (
     <div className="event-context">
       <CheckCircle2 size={16} aria-hidden />
-      <span>{event?.name ?? 'No active event'}</span>
+      <span className="event-context-copy">
+        <small>Active Event</small>
+        <span>{event?.name ?? 'No active event'}</span>
+      </span>
     </div>
   )
 }

@@ -294,6 +294,10 @@ const cancelPledgeSchema = z.object({
   reason: z.string().trim().min(1).max(500),
 })
 
+const removeEventMemberSchema = z.object({
+  reason: z.string().trim().min(1).max(500).optional(),
+})
+
 const recordPaymentSchema = z.object({
   eventMemberId: z.string().uuid(),
   amount: moneySchema,
@@ -610,6 +614,7 @@ const knownDatabaseCodes: ApiErrorCode[] = [
   'PLEDGE_AMOUNT_INVALID',
   'PLEDGE_BELOW_PAID_AMOUNT',
   'PLEDGE_CANCELLED',
+  'PLEDGE_REQUIRED_FOR_PAYMENT',
   'PAYMENT_NOT_FOUND',
   'PAYMENT_AMOUNT_INVALID',
   'PAYMENT_REFERENCE_DUPLICATE',
@@ -2885,8 +2890,9 @@ app.post('/api/v1/events/:eventId/members/:eventMemberId/remove', requireAuth, l
     const tenantId = tenantIdFromRequest(request)
     const eventId = uuidParamSchema.parse(request.params['eventId'])
     const eventMemberId = uuidParamSchema.parse(request.params['eventMemberId'])
+    const input = removeEventMemberSchema.parse(request.body ?? {})
     const client = createUserSupabase(request.auth?.accessToken ?? '')
-    const { data, error } = await client.rpc('rpc_remove_event_member', { p_tenant_id: tenantId, p_event_id: eventId, p_event_member_id: eventMemberId })
+    const { data, error } = await client.rpc('rpc_remove_event_member', { p_tenant_id: tenantId, p_event_id: eventId, p_event_member_id: eventMemberId, p_reason: input.reason || null })
     if (error) {
       throwFinancialDatabaseError(error, 'REMOVE_EVENT_MEMBER_FAILED')
     }

@@ -176,8 +176,8 @@ export const api = {
     apiFetch<{ data: Record<string, unknown> }>(`/members/${memberId}`, { tenantId, method: 'PATCH', body: JSON.stringify(payload) }),
   attachEventMember: (tenantId: string, eventId: string, payload: Record<string, unknown>) =>
     apiFetch<{ data: Record<string, unknown> }>(`/events/${eventId}/members/attach`, { tenantId, method: 'POST', body: JSON.stringify(payload) }),
-  removeEventMember: (tenantId: string, eventId: string, eventMemberId: string) =>
-    apiFetch<{ data: Record<string, unknown> }>(`/events/${eventId}/members/${eventMemberId}/remove`, { tenantId, method: 'POST' }),
+  removeEventMember: (tenantId: string, eventId: string, eventMemberId: string, payload: Record<string, unknown> = {}) =>
+    apiFetch<{ data: Record<string, unknown> }>(`/events/${eventId}/members/${eventMemberId}/remove`, { tenantId, method: 'POST', body: JSON.stringify(payload) }),
   eventPledges: (tenantId: string, eventId: string) => apiFetch<{ data: Record<string, unknown>[] }>(`/events/${eventId}/pledges`, { tenantId }),
   eventOutstandingMembers: (tenantId: string, eventId: string) => apiFetch<{ data: Record<string, unknown>[] }>(`/events/${eventId}/outstanding-members`, { tenantId }),
   whatsappShareSettings: (tenantId: string, eventId: string) => apiFetch<{ data: Record<string, unknown> }>(`/events/${eventId}/share/whatsapp-settings`, { tenantId }),
