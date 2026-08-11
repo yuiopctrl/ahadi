@@ -3086,7 +3086,7 @@ app.post('/api/v1/events/:eventId/messages/preview/bulk', requireAuth, loadUserC
       p_event_id: eventId,
       p_event_member_ids: input.eventMemberIds,
       p_template_code: input.templateCode,
-      p_cooldown_hours: input.templateCode === 'PLEDGE_REQUEST' ? env.PLEDGE_REQUEST_COOLDOWN_HOURS : 0,
+      p_cooldown_hours: 0,
     })
     if (error) {
       throwFinancialDatabaseError(error, 'SMS_BULK_PREVIEW_FAILED')
@@ -3105,7 +3105,7 @@ app.get('/api/v1/events/:eventId/messages/no-pledge-members', requireAuth, loadU
     const { data, error } = await client.rpc('rpc_list_event_no_pledge_members', {
       p_tenant_id: tenantId,
       p_event_id: eventId,
-      p_cooldown_hours: env.PLEDGE_REQUEST_COOLDOWN_HOURS,
+      p_cooldown_hours: 0,
     })
     if (error) {
       throwFinancialDatabaseError(error, 'NO_PLEDGE_MEMBERS_LIST_FAILED')
@@ -3159,7 +3159,7 @@ app.post('/api/v1/events/:eventId/messages/pledge-request', requireAuth, loadUse
       p_event_id: eventId,
       p_event_member_id: input.eventMemberId,
       p_idempotency_key: input.idempotencyKey,
-      p_cooldown_hours: env.PLEDGE_REQUEST_COOLDOWN_HOURS,
+      p_cooldown_hours: 0,
     })
     if (error) {
       throwFinancialDatabaseError(error, 'PLEDGE_REQUEST_QUEUE_FAILED')
@@ -3182,7 +3182,7 @@ app.post('/api/v1/events/:eventId/messages/pledge-request/bulk', requireAuth, lo
       p_event_id: eventId,
       p_event_member_ids: input.eventMemberIds,
       p_template_code: 'PLEDGE_REQUEST',
-      p_cooldown_hours: env.PLEDGE_REQUEST_COOLDOWN_HOURS,
+      p_cooldown_hours: 0,
     })
     if (preview.error) {
       throwFinancialDatabaseError(preview.error, 'SMS_BULK_PREVIEW_FAILED')
@@ -3197,7 +3197,7 @@ app.post('/api/v1/events/:eventId/messages/pledge-request/bulk', requireAuth, lo
       p_event_id: eventId,
       p_event_member_ids: validIds,
       p_idempotency_key: input.idempotencyKey,
-      p_cooldown_hours: env.PLEDGE_REQUEST_COOLDOWN_HOURS,
+      p_cooldown_hours: 0,
       p_max_batch_size: env.PLEDGE_REQUEST_MAX_BATCH_SIZE,
     })
     if (error) {

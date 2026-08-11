@@ -16,9 +16,9 @@ import {
   Share2,
   Users,
 } from 'lucide-react'
-import { useMemo, useState } from 'react'
-import type { FormEvent } from 'react'
-import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { useEffect, useMemo, useState } from 'react'
+import type { FormEvent, ReactNode } from 'react'
+import { Link, NavLink, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import type { EventSummary } from '@ahadi/types'
 import { DataTable, EmptyState, ErrorState, LoadingState, PageContainer, PageHeader, SearchInput, StatCard, StatusBadge } from '../components/ui'
 import type { DataTableColumn } from '../components/ui'
@@ -29,6 +29,9 @@ type EventSection = 'overview' | 'members' | 'pledges' | 'payments' | 'messages'
 type Row = Record<string, unknown>
 
 const paymentMethods = ['CASH', 'M_PESA', 'AIRTEL_MONEY', 'MIX_BY_YAS', 'HALOPESA', 'BANK_TRANSFER', 'CHEQUE', 'OTHER']
+const recordPaymentRowsPerPage = 5
+const recordPaymentSearchMinLength = 3
+const recordPaymentSearchDebounceMs = 300
 const whatsappFormats = [
   { value: 'DETAILED', label: 'Detailed', description: 'Pledged and paid amounts with symbols.' },
   { value: 'PRIVACY', label: 'Privacy-Friendly', description: 'Names and status symbols only.' },
@@ -419,7 +422,6 @@ export function ContactsPage() {
     return statusMatches && searchText.includes(query.toLowerCase())
   })
   const columns: Array<DataTableColumn<Row>> = [
-    { key: 'code', header: 'Contact Code', render: (row) => <span>{asString(row.member_code)}</span>, sortValue: (row) => asString(row.member_code) },
     { key: 'name', header: 'Name', render: (row) => <Link to={`/app/contacts/${asString(row.member_id)}`}><strong>{titleCaseMemberName(row.full_name, '')}</strong><small>{asString(row.email, 'No email')}</small></Link>, sortValue: (row) => titleCaseMemberName(row.full_name, '') },
     { key: 'phone', header: 'Phone', render: (row) => <span>{asString(row.phone_e164, 'No phone')}</span>, sortValue: (row) => asString(row.phone_e164) },
     { key: 'location', header: 'Location', render: (row) => <span>{asString(row.location, 'Not set')}</span>, sortValue: (row) => asString(row.location) },
@@ -449,7 +451,7 @@ export function ContactsPage() {
         getRowKey={(row) => asString(row.member_id)}
         searchValue={query}
         onSearchChange={setQuery}
-        searchPlaceholder="Search name, phone or contact code"
+        searchPlaceholder="Search name or phone"
         filters={<label className="data-table-page-size"><span>Filter</span><select value={filter} onChange={(event) => setFilter(event.target.value)}>{['ACTIVE', 'ALL', 'ARCHIVED', 'SMS_ENABLED', 'SMS_DISABLED'].map((item) => <option key={item} value={item}>{item.replaceAll('_', ' ')}</option>)}</select></label>}
         emptyTitle="No contacts found."
         emptyMessage={rows.length ? 'Change the search or filter.' : 'Add a contact to build your reusable directory.'}
@@ -718,12 +720,6 @@ export function EventDetailPage({ section = 'overview' }: { section?: EventSecti
       <PageHeader
         title={sectionTitle}
         description={eventStatus === 'ACTIVE' ? sectionDescription : `Event status is ${eventStatus ?? 'unknown'}. Payments require an ACTIVE event.`}
-        action={
-          activeEvent.canCollect && eventStatus === 'ACTIVE' ? <Link className="desktop-primary-button" to={`/app/events/${eventId}/payments/new`}>
-            <Plus size={18} aria-hidden />
-            Record Payment
-          </Link> : null
-        }
       />
       <section className="stats-grid">
         <StatCard label="Total Pledged" value={moneyText(summary.totalPledged)} meta={`${asNumber(summary.membersWithPledges)} pledge members`} icon={Users} />
@@ -1290,8 +1286,10 @@ export function PaymentEntryPage() {
   const queryClient = useQueryClient()
   const activeEvent = useActiveEventContext(eventId)
   const tenantId = activeEvent.tenantId
-  const members = useQuery({ queryKey: ['event-members', tenantId, eventId], queryFn: async () => (await api.eventMembers(tenantId ?? '', eventId)).data, enabled: Boolean(tenantId && eventId && !activeEvent.error) })
+  const outstandingMembers = useQuery({ queryKey: ['event-outstanding-members', tenantId, eventId, 'record-payment'], queryFn: async () => (await api.eventOutstandingMembers(tenantId ?? '', eventId)).data, enabled: Boolean(tenantId && eventId && !activeEvent.error) })
+  const memberPledgeLookup = useQuery({ queryKey: ['event-members', tenantId, eventId, 'record-payment-pledge-lookup'], queryFn: async () => (await api.eventMembers(tenantId ?? '', eventId)).data, enabled: Boolean(tenantId && eventId && !activeEvent.error) })
   const [memberSearch, setMemberSearch] = useState('')
+  const [debouncedMemberSearch, setDebouncedMemberSearch] = useState('')
   const [idempotencyKey, resetIdempotencyKey] = useState(() => crypto.randomUUID())
   const [form, setForm] = useState({
     eventMemberId: search.get('eventMemberId') ?? '',
@@ -1303,12 +1301,34 @@ export function PaymentEntryPage() {
     providerName: '',
     notes: '',
   })
-  const memberRows = members.data ?? []
-  const payableMembers = memberRows.filter(hasActivePledge)
-  const filteredMembers = payableMembers.filter((member) => `${member.full_name ?? ''} ${member.phone_e164 ?? ''} ${member.member_code ?? ''}`.toLowerCase().includes(memberSearch.toLowerCase()))
-  const selectedMember = payableMembers.find((member) => member.event_member_id === form.eventMemberId && asString(member.pledge_id) === form.pledgeId)
-  const outstanding = asNumber(selectedMember?.outstanding_amount)
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebouncedMemberSearch(memberSearch.trim()), recordPaymentSearchDebounceMs)
+    return () => window.clearTimeout(timer)
+  }, [memberSearch])
+  const memberRows = outstandingMembers.data ?? []
+  const pledgeRows = memberPledgeLookup.data ?? []
+  const paymentPledgeId = (member: Row) => {
+    const direct = asString(member.pledgeId ?? member.pledge_id)
+    if (direct) return direct
+    const eventMemberId = asString(member.eventMemberId ?? member.event_member_id)
+    const lookup = pledgeRows.find((row) => asString(row.event_member_id ?? row.eventMemberId) === eventMemberId && hasActivePledge(row))
+    return asString(lookup?.pledge_id ?? lookup?.pledgeId)
+  }
+  const payableMembers = memberRows.filter((member) => asNumber(member.outstandingAmount ?? member.outstanding_amount) > 0 && paymentPledgeId(member))
+  const searchReady = debouncedMemberSearch.length >= recordPaymentSearchMinLength
+  const shortSearch = memberSearch.trim().length > 0 && memberSearch.trim().length < recordPaymentSearchMinLength
+  const filteredMembers = searchReady
+    ? payableMembers.filter((member) => `${member.fullName ?? member.full_name ?? ''} ${member.phone ?? member.phone_e164 ?? ''}`.toLowerCase().includes(debouncedMemberSearch.toLowerCase()))
+    : payableMembers
+  const selectedMember = payableMembers.find((member) => asString(member.eventMemberId ?? member.event_member_id) === form.eventMemberId && paymentPledgeId(member) === form.pledgeId)
+  const outstanding = asNumber(selectedMember?.outstandingAmount ?? selectedMember?.outstanding_amount)
   const paymentAmount = asNumber(form.amount)
+  function selectPaymentMember(member: Row) {
+    setForm((current) => ({ ...current, eventMemberId: asString(member.eventMemberId ?? member.event_member_id), pledgeId: paymentPledgeId(member), amount: '', transactionReference: '', providerName: '', notes: '' }))
+  }
+  function clearPaymentMember() {
+    setForm((current) => ({ ...current, eventMemberId: '', pledgeId: '', amount: '', transactionReference: '', providerName: '', notes: '' }))
+  }
   const mutation = useMutation({
     mutationFn: () => api.recordPayment(tenantId ?? '', eventId, { ...form, amount: Number(form.amount), paymentDate: new Date(form.paymentDate).toISOString(), idempotencyKey, pledgeId: form.pledgeId || null }),
     onSuccess: (result) => {
@@ -1324,60 +1344,91 @@ export function PaymentEntryPage() {
   })
   if (activeEvent.error) return <ErrorState title="Unable to record payment" message={activeEvent.error} />
   if (activeEvent.eventStatus !== 'ACTIVE') return <ErrorState title="Payments require an active event" message={`This event is ${activeEvent.eventStatus ?? 'not active'}.`} />
-  if (members.isLoading) return <LoadingState title="Loading members" message="Fetching members for payment entry." />
-  if (members.isError) return <ErrorState title="Unable to load members" message={errorMessage(members.error, 'Members could not be loaded for payment entry.')} />
+  if (outstandingMembers.isLoading || memberPledgeLookup.isLoading) return <LoadingState title="Loading payable members" message="Fetching outstanding pledge balances for payment entry." />
+  if (outstandingMembers.isError) return <ErrorState title="Unable to load payable members" message={errorMessage(outstandingMembers.error, 'Outstanding members could not be loaded for payment entry.')} />
+  if (memberPledgeLookup.isError) return <ErrorState title="Unable to load pledge lookup" message={errorMessage(memberPledgeLookup.error, 'Pledge records could not be loaded for payment entry.')} />
   return (
-    <PageContainer narrow>
+    <PageContainer>
       <PageHeader title="Record Payment" description="Select a member, confirm the amount and generate a receipt." action={<Link to={`/app/events/${eventId}`}><ArrowLeft size={18} aria-hidden /> Back</Link>} />
       <form className="payment-flow" onSubmit={(event: FormEvent) => { event.preventDefault(); if (!mutation.isPending) mutation.mutate() }}>
         {!selectedMember ? (
           <>
-            <label>Search member<input type="search" value={memberSearch} onChange={(event) => setMemberSearch(event.target.value)} placeholder="Name, phone or member code" /></label>
-            <div className="finance-card-list">
-              {filteredMembers.slice(0, 8).map((member) => (
-                <button
-                  className="finance-card"
-                  key={asString(member.event_member_id)}
-                  type="button"
-                  onClick={() => setForm((current) => ({ ...current, eventMemberId: asString(member.event_member_id), pledgeId: asString(member.pledge_id) }))}
-                >
-                  <div className="card-title-row">
-                    <div><strong>{titleCaseMemberName(member.full_name)}</strong><span>{asString(member.phone_e164, 'No phone')} · {asString(member.member_code)}</span></div>
-                    <StatusBadge tone={statusTone(member.pledge_status)}>{moneyText(member.outstanding_amount)} outstanding</StatusBadge>
-                  </div>
-                </button>
-              ))}
-            </div>
-            {!memberRows.length ? <EmptyState title="No members have been added to this event yet." message="Add a member before recording a payment." /> : null}
+            {shortSearch ? <p className="privacy-note">Enter at least 3 characters to search.</p> : null}
+            <DataTable
+              title="Outstanding Members"
+              rows={filteredMembers}
+              columns={[
+                { key: 'member', header: 'Member', render: (member) => <strong>{titleCaseMemberName(member.fullName ?? member.full_name)}</strong>, sortValue: (member) => titleCaseMemberName(member.fullName ?? member.full_name, '') },
+                { key: 'phone', header: 'Phone', render: (member) => <span>{asString(member.phone ?? member.phone_e164, 'No phone')}</span>, sortValue: (member) => asString(member.phone ?? member.phone_e164) },
+                { key: 'pledged', header: 'Pledged', render: (member) => <span>{moneyText(member.pledgedAmount ?? member.pledged_amount)}</span>, sortValue: (member) => asNumber(member.pledgedAmount ?? member.pledged_amount), align: 'right' },
+                { key: 'paid', header: 'Paid', render: (member) => <span>{moneyText(member.totalPaid ?? member.total_paid ?? member.total_allocated)}</span>, sortValue: (member) => asNumber(member.totalPaid ?? member.total_paid ?? member.total_allocated), align: 'right' },
+                { key: 'outstanding', header: 'Outstanding', render: (member) => <strong>{moneyText(member.outstandingAmount ?? member.outstanding_amount)}</strong>, sortValue: (member) => asNumber(member.outstandingAmount ?? member.outstanding_amount), align: 'right' },
+                { key: 'due', header: 'Due Date', render: (member) => <span>{asDate(member.dueDate ?? member.effective_due_date ?? member.due_date)}</span>, sortValue: (member) => asString(member.dueDate ?? member.effective_due_date ?? member.due_date) },
+                { key: 'actions', header: 'Action', render: (member) => <button type="button" onClick={() => selectPaymentMember(member)}>Select</button>, align: 'right' },
+              ]}
+              getRowKey={(member) => asString(member.eventMemberId ?? member.event_member_id)}
+              searchValue={memberSearch}
+              onSearchChange={setMemberSearch}
+              searchPlaceholder="Search name or phone"
+              pageSizeOptions={[recordPaymentRowsPerPage]}
+              initialPageSize={recordPaymentRowsPerPage}
+              emptyTitle={searchReady ? 'No payable members match your search.' : 'No outstanding pledge balances.'}
+              emptyMessage={memberRows.length ? 'Try another name or phone number.' : 'Members with outstanding pledges in this event will appear here.'}
+              mobileRender={(member) => (
+                <>
+                  <div><span>Member</span><strong>{titleCaseMemberName(member.fullName ?? member.full_name)}</strong></div>
+                  <div><span>Phone</span><strong>{asString(member.phone ?? member.phone_e164, 'No phone')}</strong></div>
+                  <div><span>Pledged</span><strong>{moneyText(member.pledgedAmount ?? member.pledged_amount)}</strong></div>
+                  <div><span>Paid</span><strong>{moneyText(member.totalPaid ?? member.total_paid ?? member.total_allocated)}</strong></div>
+                  <div><span>Outstanding</span><strong>{moneyText(member.outstandingAmount ?? member.outstanding_amount)}</strong></div>
+                  <div><span>Due Date</span><strong>{asDate(member.dueDate ?? member.effective_due_date ?? member.due_date)}</strong></div>
+                  <div><span>Action</span><strong><button type="button" onClick={() => selectPaymentMember(member)}>Select</button></strong></div>
+                </>
+              )}
+            />
             {memberRows.length > 0 && !payableMembers.length ? <EmptyState title="No active pledges available." message="Create a pledge for a member before recording payment." /> : null}
-            {payableMembers.length > 0 && !filteredMembers.length ? <EmptyState title="No pledged members match your search." message="Try a different name, phone number or member code." /> : null}
           </>
         ) : null}
-        {selectedMember ? <div className="review-stack">
-          <div className="panel-header">
-            <div>
-              <h2>{titleCaseMemberName(selectedMember.full_name, 'Selected Member')}</h2>
-              <p>{asString(selectedMember.member_code)} · {asString(selectedMember.phone_e164, 'No phone')}</p>
-            </div>
-            <button type="button" onClick={() => setForm((current) => ({ ...current, eventMemberId: '', pledgeId: '' }))}>Change</button>
-          </div>
-          <ReviewLine label="Pledge" value={moneyText(selectedMember.pledged_amount)} />
-          <ReviewLine label="Paid" value={moneyText(selectedMember.total_allocated)} />
-          <ReviewLine label="Outstanding before payment" value={moneyText(selectedMember.outstanding_amount)} />
-          <ReviewLine label="Outstanding after payment" value={moneyText(Math.max(outstanding - paymentAmount, 0))} />
+        {selectedMember ? <>
+          <PaymentMemberSnapshot member={selectedMember} onChangeMember={clearPaymentMember} />
+          <Input label="Amount received" inputMode="decimal" value={form.amount} onChange={(amount) => setForm((current) => ({ ...current, amount }))} />
+          <div className="quick-amounts"><button type="button" onClick={() => setForm((current) => ({ ...current, amount: String(outstanding) }))}>Outstanding</button><button type="button" onClick={() => setForm((current) => ({ ...current, amount: String(Math.round(outstanding / 2)) }))}>Half</button><button type="button" onClick={() => setForm((current) => ({ ...current, amount: String(asNumber(selectedMember?.pledgedAmount ?? selectedMember?.pledged_amount)) }))}>Pledged</button></div>
+          <ReviewLine label="Outstanding after payment" value={form.amount ? moneyText(Math.max(outstanding - paymentAmount, 0)) : moneyText(outstanding)} />
           <ReviewLine label="Excess / unallocated amount" value={form.amount && paymentAmount > outstanding ? moneyText(paymentAmount - outstanding) : 'None'} />
-        </div> : null}
-        <Input label="Amount received" inputMode="decimal" value={form.amount} onChange={(amount) => setForm((current) => ({ ...current, amount }))} />
-        <div className="quick-amounts"><button type="button" onClick={() => setForm((current) => ({ ...current, amount: String(outstanding) }))}>Outstanding</button><button type="button" onClick={() => setForm((current) => ({ ...current, amount: String(Math.round(outstanding / 2)) }))}>Half</button><button type="button" onClick={() => setForm((current) => ({ ...current, amount: String(asNumber(selectedMember?.pledged_amount)) }))}>Pledged</button></div>
-        <label>Payment method<select value={form.paymentMethod} onChange={(event) => setForm((current) => ({ ...current, paymentMethod: event.target.value }))}>{paymentMethods.map((method) => <option key={method} value={method}>{method}</option>)}</select></label>
-        <Input label="Payment date and time" type="datetime-local" value={form.paymentDate} onChange={(paymentDate) => setForm((current) => ({ ...current, paymentDate }))} />
-        <Input label="Transaction reference optional" value={form.transactionReference} onChange={(transactionReference) => setForm((current) => ({ ...current, transactionReference }))} />
-        <Input label="Provider name optional" value={form.providerName} onChange={(providerName) => setForm((current) => ({ ...current, providerName }))} />
-        <Input label="Notes optional" value={form.notes} onChange={(notes) => setForm((current) => ({ ...current, notes }))} />
-        {mutation.error ? <p className="field-error">{mutation.error.message}</p> : null}
-        <button className="primary-button" type="submit" disabled={mutation.isPending || !selectedMember || !form.pledgeId || !form.amount || !tenantId}>{mutation.isPending ? 'Recording...' : 'Confirm and Generate Receipt'}</button>
+          <label>Payment method<select value={form.paymentMethod} onChange={(event) => setForm((current) => ({ ...current, paymentMethod: event.target.value }))}>{paymentMethods.map((method) => <option key={method} value={method}>{method}</option>)}</select></label>
+          <Input label="Payment date and time" type="datetime-local" value={form.paymentDate} onChange={(paymentDate) => setForm((current) => ({ ...current, paymentDate }))} />
+          <Input label="Transaction reference optional" value={form.transactionReference} onChange={(transactionReference) => setForm((current) => ({ ...current, transactionReference }))} />
+          <Input label="Provider name optional" value={form.providerName} onChange={(providerName) => setForm((current) => ({ ...current, providerName }))} />
+          <Input label="Notes optional" value={form.notes} onChange={(notes) => setForm((current) => ({ ...current, notes }))} />
+          {mutation.error ? <p className="field-error">{mutation.error.message}</p> : null}
+          <button className="primary-button" type="submit" disabled={mutation.isPending || !form.pledgeId || !form.amount || !tenantId}>{mutation.isPending ? 'Recording...' : 'Confirm and Generate Receipt'}</button>
+        </> : null}
       </form>
     </PageContainer>
+  )
+}
+
+function PaymentMemberSnapshot({ member, onChangeMember }: { member: Row; onChangeMember: () => void }) {
+  return (
+    <section className="payment-context-panel">
+      <div className="panel-header">
+        <div>
+          <span className="eyebrow">Selected Member</span>
+          <h2>{titleCaseMemberName(member.fullName ?? member.full_name, 'Selected Member')}</h2>
+          <p>{asString(member.phone ?? member.phone_e164, 'No phone')}</p>
+        </div>
+        <button type="button" onClick={onChangeMember}>Change member</button>
+      </div>
+      <div className="payment-context-amounts">
+        <span><small>Pledged</small>{moneyText(member.pledgedAmount ?? member.pledged_amount)}</span>
+        <span><small>Paid</small>{moneyText(member.totalPaid ?? member.total_paid ?? member.total_allocated)}</span>
+        <span className="payment-context-outstanding"><small>Outstanding</small>{moneyText(member.outstandingAmount ?? member.outstanding_amount)}</span>
+      </div>
+      <div className="payment-context-meta">
+        {asString(member.dueDate ?? member.effective_due_date ?? member.due_date) ? <ReviewLine label="Due date" value={asDate(member.dueDate ?? member.effective_due_date ?? member.due_date)} /> : null}
+        <ReviewLine label="Status" value={<StatusBadge tone={statusTone(member.pledgeStatus ?? member.pledge_status)}>{asString(member.pledgeStatus ?? member.pledge_status, 'PENDING').replaceAll('_', ' ')}</StatusBadge>} />
+      </div>
+    </section>
   )
 }
 
@@ -1871,10 +1922,8 @@ export function SmsHistoryPage() {
   const tenantId = session.selectedTenantId
   const eventOptions = session.selectedTenantContext?.events ?? []
   const permissions = new Set(session.selectedTenantContext?.permissions ?? [])
-  const queryClient = useQueryClient()
   const [searchParams, setSearchParams] = useSearchParams()
-  const canManageTemplates = permissions.has('messages.manage_templates')
-  const canManageSettings = permissions.has('messages.manage_settings')
+  const queryClient = useQueryClient()
   const canSendMessages = permissions.has('messages.send')
   const requestedEventId = searchParams.get('eventId')
   const preferredMessageEventId = requestedEventId ?? session.selectedEventId
@@ -1898,8 +1947,6 @@ export function SmsHistoryPage() {
     setSearchParams(nextParams, { replace: true })
   }
   const messages = useQuery({ queryKey: ['sms-history', tenantId], queryFn: async () => (await api.messages(tenantId ?? '')).data, enabled: Boolean(tenantId) })
-  const settings = useQuery({ queryKey: ['sms-settings', tenantId], queryFn: async () => (await api.smsSettings(tenantId ?? '')).data, enabled: Boolean(tenantId && canManageSettings) })
-  const templates = useQuery({ queryKey: ['sms-templates', tenantId], queryFn: async () => (await api.smsTemplates(tenantId ?? '')).data, enabled: Boolean(tenantId && canManageTemplates) })
   const processQueued = useMutation({
     mutationFn: () => api.processQueuedMessages(tenantId ?? '', 25),
     onSuccess: () => void messages.refetch(),
@@ -1933,9 +1980,10 @@ export function SmsHistoryPage() {
     <PageContainer>
       <PageHeader
         title="Messages"
-        description="SMS delivery history and balance reminder controls, plus sender settings and business message templates for this tenant."
+        description="SMS delivery history and balance reminder controls for this tenant."
         action={<div className="inline-actions">{canSendMessages ? <button type="button" disabled={processQueued.isPending || queuedCount === 0} onClick={() => processQueued.mutate()}><Send size={18} aria-hidden /> {processQueued.isPending ? 'Sending...' : 'Send queued'}</button> : null}{canSendMessages && messageActionEventId ? <button className="desktop-primary-button" type="button" onClick={() => setBalanceReminderOpen((current) => !current)}><Clock3 size={18} aria-hidden /> Reminders</button> : null}</div>}
       />
+      <MessagesSubnav />
       <section className="messages-hero">
         <div>
           <span>SMS health</span>
@@ -1996,7 +2044,7 @@ export function SmsHistoryPage() {
           {pledgeRequestOpen && canSendMessages ? <PledgeRequestSelection tenantId={tenantId} eventId={messageActionEventId} eventName={messageActionEvent?.name ?? 'Event'} onQueued={() => { void messages.refetch(); void queryClient.invalidateQueries({ queryKey: ['no-pledge-members', tenantId, messageActionEventId] }) }} /> : null}
         </section>
       ) : null}
-      <div className={(canManageTemplates || canManageSettings) ? 'messages-layout messages-layout-with-template' : 'messages-layout'}>
+      <div className="messages-layout">
         <section className="messages-history-panel">
           <div className="messages-filter-panel">
             <div className="messages-filter-header">
@@ -2042,13 +2090,59 @@ export function SmsHistoryPage() {
             />
           </div>
         </section>
-        {(canManageTemplates || canManageSettings) ? (
-          <aside className="messages-template-block">
-            {canManageSettings ? <SmsSettingsPanel key={`${String(settings.data?.smsEnabled)}-${asString(settings.data?.provider, 'NEXTSMS')}-${asString(settings.data?.senderId, 'MICHANGO')}`} tenantId={tenantId} settings={settings.data ?? null} loading={settings.isLoading} onSaved={() => void queryClient.invalidateQueries({ queryKey: ['sms-settings', tenantId] })} /> : null}
-            {canManageTemplates ? <SmsTemplateManager tenantId={tenantId} templates={templates.data ?? []} loading={templates.isLoading} onSaved={() => void queryClient.invalidateQueries({ queryKey: ['sms-templates', tenantId] })} /> : null}
-          </aside>
-        ) : null}
       </div>
+    </PageContainer>
+  )
+}
+
+function MessagesSubnav() {
+  return (
+    <nav className="messages-subnav" aria-label="Messages navigation">
+      <NavLink to="/app/messages" end>Message History</NavLink>
+      <NavLink to="/app/messages/templates">Templates</NavLink>
+      <NavLink to="/app/messages/settings">Settings</NavLink>
+    </nav>
+  )
+}
+
+export function SmsTemplatesPage() {
+  const session = useSessionStore()
+  const tenantId = session.selectedTenantId
+  const permissions = new Set(session.selectedTenantContext?.permissions ?? [])
+  const queryClient = useQueryClient()
+  const canManageTemplates = permissions.has('messages.manage_templates')
+  const templates = useQuery({ queryKey: ['sms-templates', tenantId], queryFn: async () => (await api.smsTemplates(tenantId ?? '')).data, enabled: Boolean(tenantId && canManageTemplates) })
+
+  if (!tenantId) return <ErrorState title="Unable to load SMS templates" message="Select a tenant first." />
+  if (!canManageTemplates) return <ErrorState title="SMS templates unavailable" message="You do not have permission to manage message templates." />
+
+  return (
+    <PageContainer>
+      <PageHeader title="Message Templates" description="Tenant overrides for supported pledge and payment SMS templates." />
+      <MessagesSubnav />
+      <SmsTemplateManager tenantId={tenantId} templates={templates.data ?? []} loading={templates.isLoading} onSaved={() => void queryClient.invalidateQueries({ queryKey: ['sms-templates', tenantId] })} />
+      {templates.isError ? <p className="field-error">{errorMessage(templates.error, 'SMS templates could not be loaded.')}</p> : null}
+    </PageContainer>
+  )
+}
+
+export function SmsSettingsPage() {
+  const session = useSessionStore()
+  const tenantId = session.selectedTenantId
+  const permissions = new Set(session.selectedTenantContext?.permissions ?? [])
+  const queryClient = useQueryClient()
+  const canManageSettings = permissions.has('messages.manage_settings')
+  const settings = useQuery({ queryKey: ['sms-settings', tenantId], queryFn: async () => (await api.smsSettings(tenantId ?? '')).data, enabled: Boolean(tenantId && canManageSettings) })
+
+  if (!tenantId) return <ErrorState title="Unable to load SMS settings" message="Select a tenant first." />
+  if (!canManageSettings) return <ErrorState title="SMS settings unavailable" message="You do not have permission to manage message settings." />
+
+  return (
+    <PageContainer>
+      <PageHeader title="Message Settings" description="Tenant-level SMS status, provider, and Sender ID preferences." />
+      <MessagesSubnav />
+      <SmsSettingsPanel key={`${String(settings.data?.smsEnabled)}-${asString(settings.data?.provider, 'NEXTSMS')}-${asString(settings.data?.senderId, 'MICHANGO')}`} tenantId={tenantId} settings={settings.data ?? null} loading={settings.isLoading} onSaved={() => void queryClient.invalidateQueries({ queryKey: ['sms-settings', tenantId] })} />
+      {settings.isError ? <p className="field-error">{errorMessage(settings.error, 'SMS settings could not be loaded.')}</p> : null}
     </PageContainer>
   )
 }
@@ -3243,6 +3337,6 @@ function Input({ label, value, onChange, inputMode, type = 'text' }: { label: st
   return <label>{label}<input inputMode={inputMode} type={type} value={value} onChange={(event) => onChange(event.target.value)} /></label>
 }
 
-function ReviewLine({ label, value }: { label: string; value: string }) {
+function ReviewLine({ label, value }: { label: string; value: ReactNode }) {
   return <div className="review-line"><span>{label}</span><strong>{value}</strong></div>
 }

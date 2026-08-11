@@ -74,11 +74,10 @@ interface TenantNavProps {
   onEventChange?: (eventId: string) => void
 }
 
-export function MobileTopBar({ tenant, event, showPlatformLink = false }: TenantNavProps) {
+export function MobileTopBar({ tenant, showPlatformLink = false }: TenantNavProps) {
   return (
     <header className="mobile-topbar">
       <TenantSwitcherDisplay tenant={tenant} />
-      <EventContextDisplay event={event} />
       {showPlatformLink ? (
         <Link className="topbar-icon-link" to="/platform" aria-label="Open Platform Console">
           <ShieldCheck size={18} aria-hidden />
