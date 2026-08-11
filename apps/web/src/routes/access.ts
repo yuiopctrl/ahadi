@@ -4,6 +4,7 @@ import { getSingleActiveMembership, isAccessibleTenantMembership } from '../stor
 
 const requiredPlatformDashboardPermission = 'platform.dashboard.view'
 const activePlatformRoles = new Set(['PLATFORM_OWNER', 'PLATFORM_ADMIN', 'PLATFORM_SUPPORT', 'PLATFORM_AUDITOR'])
+export type RequestedAppContext = 'platform' | 'tenant' | 'default'
 
 export interface PlatformAccessDiagnostic {
   authenticated: boolean
@@ -26,11 +27,8 @@ export function hasActivePlatformRole(context: UserContext | null): boolean {
   return Boolean(context?.isPlatformUser && context.platformStatus === 'ACTIVE' && context.platformRole && activePlatformRoles.has(context.platformRole))
 }
 
-export function getPublicRouteRedirect(context: UserContext | null): string {
+function tenantDestination(context: UserContext | null): string {
   const accessibleMemberships = context?.tenantMemberships.filter(isAccessibleTenantMembership) ?? []
-  if (hasActivePlatformRole(context)) {
-    return '/platform'
-  }
   if (!context?.onboardingCompleted) {
     return '/onboarding'
   }
@@ -44,11 +42,48 @@ export function getPublicRouteRedirect(context: UserContext | null): string {
   return '/onboarding'
 }
 
-export function getPostAuthDestination(context: UserContext | null, preferredDestination: string | null): string {
-  if ((preferredDestination === '/platform' && hasActivePlatformAccess(context)) || hasActivePlatformRole(context)) {
+function inferRequestedContext(path: string | null | undefined): RequestedAppContext {
+  if (!path) return 'default'
+  if (path === '/platform' || path.startsWith('/platform/')) return 'platform'
+  if (path === '/app' || path.startsWith('/app/') || path === '/onboarding' || path === '/register') return 'tenant'
+  return 'default'
+}
+
+function platformDestination(path: string | null | undefined): string {
+  if (path && path.startsWith('/platform') && path !== '/platform/login') {
+    return path
+  }
+  return '/platform'
+}
+
+export function resolveAuthenticatedDestination({
+  context,
+  requestedPath = null,
+  requestedContext,
+}: {
+  context: UserContext | null
+  requestedPath?: string | null
+  requestedContext?: RequestedAppContext
+}): string {
+  const appContext = requestedContext ?? inferRequestedContext(requestedPath)
+  if (appContext === 'platform') {
+    return platformDestination(requestedPath)
+  }
+  if (appContext === 'tenant') {
+    return tenantDestination(context)
+  }
+  if (hasActivePlatformRole(context)) {
     return '/platform'
   }
-  return getPublicRouteRedirect(context)
+  return tenantDestination(context)
+}
+
+export function getPublicRouteRedirect(context: UserContext | null): string {
+  return resolveAuthenticatedDestination({ context, requestedContext: 'default' })
+}
+
+export function getPostAuthDestination(context: UserContext | null, preferredDestination: string | null): string {
+  return resolveAuthenticatedDestination({ context, requestedPath: preferredDestination })
 }
 
 export function getPlatformRouteDenialReason(context: UserContext | null, permission = requiredPlatformDashboardPermission): string | null {

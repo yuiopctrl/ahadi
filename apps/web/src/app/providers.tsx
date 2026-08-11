@@ -1,6 +1,7 @@
 import { QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import { queryClient } from '../lib/query-client'
+import { NetworkStatusProvider } from '../lib/network-status'
 import { SessionProvider } from '../stores/session-store'
 
 interface AppProvidersProps {
@@ -10,7 +11,9 @@ interface AppProvidersProps {
 export function AppProviders({ children }: AppProvidersProps) {
   return (
     <QueryClientProvider client={queryClient}>
-      <SessionProvider>{children}</SessionProvider>
+      <NetworkStatusProvider>
+        <SessionProvider>{children}</SessionProvider>
+      </NetworkStatusProvider>
     </QueryClientProvider>
   )
 }

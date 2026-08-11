@@ -2,7 +2,7 @@ import { Navigate, Outlet, useLocation } from 'react-router-dom'
 import { ErrorState, LoadingState, PageContainer } from '../components/ui'
 import { useSessionStore } from '../stores/session-store'
 import { isAccessibleTenantMembership } from '../stores/session-selection'
-import { buildPlatformAccessDiagnostic, getPlatformRouteRedirect, getPostAuthDestination, getTenantRouteRedirect, hasActivePlatformRole } from './access'
+import { buildPlatformAccessDiagnostic, getPlatformRouteRedirect, getTenantRouteRedirect, hasActivePlatformRole, resolveAuthenticatedDestination } from './access'
 
 function FullScreenLoading() {
   return (
@@ -26,10 +26,10 @@ export function PublicRoute() {
     return <Outlet />
   }
   if (session.lockState.isLocked) {
-    return <Navigate to="/setup-pin" replace />
+    const postAuthDestination = location.pathname.startsWith('/platform') ? '/platform' : null
+    return <Navigate to="/setup-pin" replace state={postAuthDestination ? { postAuthDestination } : undefined} />
   }
-  const preferredDestination = location.pathname.startsWith('/platform') ? '/platform' : null
-  return <Navigate to={getPostAuthDestination(session.userContext, preferredDestination)} replace />
+  return <Navigate to={resolveAuthenticatedDestination({ context: session.userContext, requestedPath: location.pathname })} replace />
 }
 
 export function AuthenticatedRoute() {
@@ -38,7 +38,11 @@ export function AuthenticatedRoute() {
   if (session.isLoading) {
     return <FullScreenLoading />
   }
-  return session.session ? <Outlet /> : <Navigate to="/login" replace state={{ from: location, next: postAuthDestination() }} />
+  if (session.session) {
+    return <Outlet />
+  }
+  const isPlatformRoute = location.pathname === '/platform' || location.pathname.startsWith('/platform/')
+  return <Navigate to={isPlatformRoute ? '/platform/login' : '/login'} replace state={{ from: location, next: postAuthDestination() }} />
 }
 
 export function PinUnlockedRoute() {

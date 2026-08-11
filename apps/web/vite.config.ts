@@ -11,7 +11,7 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       injectRegister: 'auto',
-      includeAssets: ['favicon.svg', 'offline.html'],
+      includeAssets: ['favicon.svg'],
       manifest: {
         name: 'Ahadi',
         short_name: 'Ahadi',
@@ -43,6 +43,7 @@ export default defineConfig({
         navigateFallback: '/index.html',
         navigateFallbackDenylist: [/^\/api\//],
         globPatterns: ['**/*.{js,css,html,svg,png,ico}'],
+        globIgnores: ['**/offline.html'],
       },
     }),
   ],

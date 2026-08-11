@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import type { UserContext } from '@ahadi/types'
-import { buildPlatformAccessDiagnostic, getPlatformRouteDenialReason, getPlatformRouteRedirect, getPostAuthDestination, getPublicRouteRedirect, getTenantRouteRedirect, hasActivePlatformAccess, hasActivePlatformRole } from './access'
+import { buildPlatformAccessDiagnostic, getPlatformRouteDenialReason, getPlatformRouteRedirect, getPostAuthDestination, getPublicRouteRedirect, getTenantRouteRedirect, hasActivePlatformAccess, hasActivePlatformRole, resolveAuthenticatedDestination } from './access'
 
 function context(overrides: Partial<UserContext> = {}): UserContext {
   return {
@@ -87,6 +87,26 @@ test('active platform roles bypass onboarding after authentication', () => {
     assert.equal(getPublicRouteRedirect(platformUser), '/platform')
     assert.notEqual(getPostAuthDestination(platformUser, null), '/onboarding')
   }
+})
+
+test('requested platform routes stay in platform context', () => {
+  const owner = activePlatformRole('PLATFORM_OWNER')
+  const admin = activePlatformRole('PLATFORM_ADMIN')
+  assert.equal(resolveAuthenticatedDestination({ context: owner, requestedPath: '/platform' }), '/platform')
+  assert.equal(resolveAuthenticatedDestination({ context: admin, requestedPath: '/platform/users' }), '/platform/users')
+  assert.notEqual(resolveAuthenticatedDestination({ context: owner, requestedPath: '/platform' }), '/onboarding')
+})
+
+test('platform-only user without tenant membership keeps platform destination', () => {
+  const support = activePlatformRole('PLATFORM_SUPPORT')
+  assert.equal(support.tenantMemberships.length, 0)
+  assert.equal(resolveAuthenticatedDestination({ context: support, requestedPath: '/platform' }), '/platform')
+  assert.equal(resolveAuthenticatedDestination({ context: support, requestedContext: 'default' }), '/platform')
+})
+
+test('tenant context still sends unfinished tenant users to onboarding', () => {
+  const tenantOnly = context({ onboardingCompleted: false, tenantMemberships: [tenantMembership()] })
+  assert.equal(resolveAuthenticatedDestination({ context: tenantOnly, requestedPath: '/app/events' }), '/onboarding')
 })
 
 test('tenant-only unfinished registration still uses onboarding', () => {

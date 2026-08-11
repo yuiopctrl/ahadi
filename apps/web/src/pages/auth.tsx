@@ -192,6 +192,7 @@ export function AuthPage({ title, subtitle, mode }: AuthPageProps) {
 function LoginPage({ title, subtitle }: Pick<AuthPageProps, 'title' | 'subtitle'>) {
   const navigate = useNavigate()
   const location = useLocation()
+  const routeState = location.state as { from?: { pathname?: string } } | null
   const [phone, setPhone] = useState(localStorage.getItem(phoneDraftKey) ?? '')
   const [error, setError] = useState<string | null>(null)
   const mutation = useMutation({
@@ -200,7 +201,8 @@ function LoginPage({ title, subtitle }: Pick<AuthPageProps, 'title' | 'subtitle'
       await api.requestOtp(normalized)
       localStorage.setItem(phoneDraftKey, normalized)
       if (location.pathname.startsWith('/platform')) {
-        localStorage.setItem(postAuthDestinationKey, '/platform')
+        const requestedPlatformPath = routeState?.from?.pathname?.startsWith('/platform') ? routeState.from.pathname : '/platform'
+        localStorage.setItem(postAuthDestinationKey, requestedPlatformPath === '/platform/login' ? '/platform' : requestedPlatformPath)
       } else if (location.pathname === '/register') {
         localStorage.setItem(postAuthDestinationKey, '/onboarding')
       } else {
@@ -306,6 +308,8 @@ function OtpPage({ title, subtitle }: Pick<AuthPageProps, 'title' | 'subtitle'>)
 
 function PinPage({ title, subtitle }: Pick<AuthPageProps, 'title' | 'subtitle'>) {
   const navigate = useNavigate()
+  const location = useLocation()
+  const routeState = location.state as { postAuthDestination?: string } | null
   const session = useSessionStore()
   const [pin, setPin] = useState('')
   const [confirmPin, setConfirmPin] = useState('')
@@ -337,6 +341,9 @@ function PinPage({ title, subtitle }: Pick<AuthPageProps, 'title' | 'subtitle'>)
       }
       session.lockState.unlock()
       const context = await session.refreshContext()
+      if (routeState?.postAuthDestination) {
+        localStorage.setItem(postAuthDestinationKey, routeState.postAuthDestination)
+      }
       await routeAfterAuthentication({ context, navigate, session })
     },
     onError: (nextError) => {

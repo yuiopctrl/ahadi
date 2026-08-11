@@ -70,6 +70,14 @@ test('registration intent survives OTP and allows onboarding after tenant reset'
   assert.match(guards, /onboardingCompleted && hasAccessibleTenant/)
 })
 
+test('platform auth routes preserve platform context instead of falling into tenant onboarding', () => {
+  assert.match(guards, /const isPlatformRoute = location\.pathname === '\/platform' \|\| location\.pathname\.startsWith\('\/platform\/'\)/)
+  assert.match(guards, /<Navigate to=\{isPlatformRoute \? '\/platform\/login' : '\/login'\}/)
+  assert.match(guards, /resolveAuthenticatedDestination\(\{ context: session\.userContext, requestedPath: location\.pathname \}\)/)
+  assert.match(authPage, /requestedPlatformPath = routeState\?\.from\?\.pathname\?\.startsWith\('\/platform'\) \? routeState\.from\.pathname : '\/platform'/)
+  assert.match(authPage, /requestedPlatformPath === '\/platform\/login' \? '\/platform' : requestedPlatformPath/)
+})
+
 test('financial pages render explicit empty and error states instead of blank lists', () => {
   for (const copy of [
     'No members have been added to this event yet.',

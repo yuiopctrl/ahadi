@@ -55,6 +55,12 @@ test('development CORS allows common localhost web origins', () => {
   assert.match(app, /'Pragma'/)
 })
 
+test('production CORS and public health endpoint support web refresh checks', () => {
+  assert.match(app, /: env\.WEB_URL/)
+  assert.match(app, /app\.get\('\/api\/v1\/health', \(_request, response\) => \{\s+response\.json\(healthPayload\(\)\)/)
+  assert.doesNotMatch(app, /app\.get\('\/api\/v1\/health', requireAuth/)
+})
+
 test('platform middleware authorizes from platform permissions and returns 403 for inactive or missing permission', () => {
   assert.match(types, /\| 'PLATFORM_ACCESS_DENIED'/)
   assert.match(middleware, /context\.platformStatus !== 'ACTIVE'/)

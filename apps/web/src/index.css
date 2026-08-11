@@ -81,6 +81,27 @@ a {
   min-height: 100svh;
 }
 
+.offline-banner {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  align-items: center;
+  justify-content: center;
+  border-bottom: 1px solid rgba(197, 48, 48, 0.24);
+  background: var(--color-danger-soft);
+  color: var(--color-danger);
+  padding: 10px 14px;
+  font-size: 13px;
+  text-align: center;
+}
+
+.offline-banner strong {
+  font-weight: 900;
+}
+
 .brand-mark {
   display: inline-grid;
   width: 44px;
