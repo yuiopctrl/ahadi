@@ -1,15 +1,15 @@
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { ArrowLeft, CheckCircle2, LockKeyhole } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import type { OnboardingPayload, SubscriptionPlan, TenantMembershipContext, UserContext } from '@ahadi/types'
 import { normalizeTanzaniaPhone, onboardingPayloadSchema, setupPinSchema } from '@ahadi/validation'
 import { api, ApiClientError } from '../lib/api'
 import { supabase } from '../lib/supabase'
-import { hasActivePlatformAccess } from '../routes/access'
-import { isAccessibleTenantMembership } from '../stores/session-selection'
+import { getPostAuthDestination } from '../routes/access'
 import { getSingleActiveMembership, useSessionStore } from '../stores/session-store'
 import { MoneyDisplay, StatusBadge } from '../components/ui'
+import { PinEntry, canSubmitPin } from '../components/pin-entry'
 
 type AuthMode = 'login' | 'otp' | 'pin' | 'register' | 'onboarding' | 'selectTenant'
 
@@ -154,8 +154,23 @@ function errorMessage(error: unknown) {
   return 'Something went wrong'
 }
 
-function accessibleMembershipCount(context: UserContext | null) {
-  return context?.tenantMemberships.filter(isAccessibleTenantMembership).length ?? 0
+async function routeAfterAuthentication({
+  context,
+  navigate,
+  session,
+}: {
+  context: UserContext | null
+  navigate: ReturnType<typeof useNavigate>
+  session: ReturnType<typeof useSessionStore>
+}) {
+  const preferredDestination = localStorage.getItem(postAuthDestinationKey)
+  const destination = getPostAuthDestination(context, preferredDestination)
+  localStorage.removeItem(postAuthDestinationKey)
+  const singleTenant = destination === '/app' ? getSingleActiveMembership(context) : null
+  if (singleTenant) {
+    await session.selectTenant(singleTenant.tenantId)
+  }
+  navigate(destination, { replace: true })
 }
 
 export function AuthPage({ title, subtitle, mode }: AuthPageProps) {
@@ -239,34 +254,13 @@ function OtpPage({ title, subtitle }: Pick<AuthPageProps, 'title' | 'subtitle'>)
     },
     onSuccess: async () => {
       const context = await session.refreshContext()
-      const preferredDestination = localStorage.getItem(postAuthDestinationKey)
       const hasPin = await api.hasPin()
       if (!hasPin.hasPin) {
         navigate('/setup-pin', { replace: true })
         return
       }
       session.lockState.unlock()
-      if (preferredDestination === '/platform' && hasActivePlatformAccess(context)) {
-        localStorage.removeItem(postAuthDestinationKey)
-        navigate('/platform', { replace: true })
-        return
-      }
-      if (hasActivePlatformAccess(context) && !(context?.tenantMemberships.length ?? 0)) {
-        navigate('/platform', { replace: true })
-        return
-      }
-      if (!context?.onboardingCompleted || (preferredDestination === '/onboarding' && accessibleMembershipCount(context) === 0) || (!hasActivePlatformAccess(context) && accessibleMembershipCount(context) === 0)) {
-        localStorage.removeItem(postAuthDestinationKey)
-        navigate('/onboarding', { replace: true })
-        return
-      }
-      const singleTenant = getSingleActiveMembership(context)
-      if (singleTenant) {
-        await session.selectTenant(singleTenant.tenantId)
-        navigate('/app', { replace: true })
-        return
-      }
-      navigate('/select-tenant', { replace: true })
+      await routeAfterAuthentication({ context, navigate, session })
     },
     onError: (nextError) => {
       setDigits('')
@@ -317,57 +311,52 @@ function PinPage({ title, subtitle }: Pick<AuthPageProps, 'title' | 'subtitle'>)
   const [confirmPin, setConfirmPin] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [remaining, setRemaining] = useState<number | null>(null)
+  const submittingRef = useRef(false)
   const hasPinQuery = useQuery({
     queryKey: ['has-pin'],
     queryFn: api.hasPin,
   })
   const returningDevice = Boolean(hasPinQuery.data?.hasPin && session.lockState.isLocked)
   const mutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (values: { pin: string; confirmPin: string }) => {
       if (returningDevice) {
-        return api.verifyPin(pin)
+        return api.verifyPin(values.pin)
       }
-      setupPinSchema.parse({ pin, confirmPin })
-      await api.setPin(pin, confirmPin)
+      setupPinSchema.parse({ pin: values.pin, confirmPin: values.confirmPin })
+      await api.setPin(values.pin, values.confirmPin)
       return { ok: true, lockedUntil: null }
     },
     onSuccess: async (result) => {
       if (!result.ok) {
+        submittingRef.current = false
         setPin('')
+        setConfirmPin('')
         setRemaining(result.remainingAttempts ?? null)
         setError(result.lockedUntil ? `PIN is locked until ${new Date(result.lockedUntil).toLocaleTimeString()}` : 'Incorrect PIN')
         return
       }
       session.lockState.unlock()
       const context = await session.refreshContext()
-      const preferredDestination = localStorage.getItem(postAuthDestinationKey)
-      if (preferredDestination === '/platform' && hasActivePlatformAccess(context)) {
-        localStorage.removeItem(postAuthDestinationKey)
-        navigate('/platform', { replace: true })
-        return
-      }
-      if (hasActivePlatformAccess(context) && !(context?.tenantMemberships.length ?? 0)) {
-        navigate('/platform', { replace: true })
-        return
-      }
-      if (!context?.onboardingCompleted || (preferredDestination === '/onboarding' && accessibleMembershipCount(context) === 0) || (!hasActivePlatformAccess(context) && accessibleMembershipCount(context) === 0)) {
-        localStorage.removeItem(postAuthDestinationKey)
-        navigate('/onboarding', { replace: true })
-        return
-      }
-      const singleTenant = getSingleActiveMembership(context)
-      if (singleTenant) {
-        await session.selectTenant(singleTenant.tenantId)
-        navigate('/app', { replace: true })
-        return
-      }
-      navigate('/select-tenant', { replace: true })
+      await routeAfterAuthentication({ context, navigate, session })
     },
     onError: (nextError) => {
+      submittingRef.current = false
       setPin('')
+      setConfirmPin('')
       setError(errorMessage(nextError))
     },
   })
+  const pinSubmissionPending = mutation.isPending || submittingRef.current
+
+  function submitPin(nextPin = pin, nextConfirmPin = confirmPin) {
+    if (!canSubmitPin({ pin: nextPin, confirmPin: returningDevice ? undefined : nextConfirmPin, isPending: mutation.isPending, isSubmitting: submittingRef.current })) {
+      return
+    }
+    submittingRef.current = true
+    setError(null)
+    setRemaining(null)
+    mutation.mutate({ pin: nextPin, confirmPin: nextConfirmPin })
+  }
 
   return (
     <form className="auth-form" onSubmit={(event) => event.preventDefault()}>
@@ -379,24 +368,31 @@ function PinPage({ title, subtitle }: Pick<AuthPageProps, 'title' | 'subtitle'>)
         <LockKeyhole size={20} aria-hidden />
         <span>PIN unlocks this device only. Full logout, session expiry, or a new device requires OTP again.</span>
       </div>
-      <label>
-        PIN
-        <input inputMode="numeric" type="password" maxLength={4} value={pin} onChange={(event) => setPin(event.target.value.replace(/\D/g, '').slice(0, 4))} />
-      </label>
+      <PinEntry
+        label="PIN"
+        value={pin}
+        disabled={pinSubmissionPending}
+        autoFocus
+        onChange={setPin}
+        onComplete={(nextPin) => {
+          if (returningDevice) {
+            submitPin(nextPin, confirmPin)
+          }
+        }}
+        onEnterComplete={() => submitPin()}
+      />
       {!returningDevice ? (
-        <label>
-          Confirm PIN
-          <input
-            inputMode="numeric"
-            type="password"
-            maxLength={4}
-            value={confirmPin}
-            onChange={(event) => setConfirmPin(event.target.value.replace(/\D/g, '').slice(0, 4))}
-          />
-        </label>
+        <PinEntry
+          label="Confirm PIN"
+          value={confirmPin}
+          disabled={pinSubmissionPending}
+          onChange={setConfirmPin}
+          onComplete={(nextConfirmPin) => submitPin(pin, nextConfirmPin)}
+          onEnterComplete={() => submitPin()}
+        />
       ) : null}
       {error ? <p className="field-error">{error}{remaining !== null ? ` (${remaining} attempts left)` : ''}</p> : null}
-      <button className="primary-button" type="button" disabled={pin.length !== 4 || mutation.isPending} onClick={() => mutation.mutate()}>
+      <button className="primary-button" type="button" disabled={!canSubmitPin({ pin, confirmPin: returningDevice ? undefined : confirmPin, isPending: mutation.isPending, isSubmitting: submittingRef.current })} onClick={() => submitPin()}>
         {mutation.isPending ? 'Checking...' : returningDevice ? 'Unlock' : 'Continue'}
       </button>
     </form>

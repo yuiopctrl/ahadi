@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import type { UserContext } from '@ahadi/types'
-import { buildPlatformAccessDiagnostic, getPlatformRouteDenialReason, getPlatformRouteRedirect, getPostAuthDestination, getPublicRouteRedirect, getTenantRouteRedirect, hasActivePlatformAccess } from './access'
+import { buildPlatformAccessDiagnostic, getPlatformRouteDenialReason, getPlatformRouteRedirect, getPostAuthDestination, getPublicRouteRedirect, getTenantRouteRedirect, hasActivePlatformAccess, hasActivePlatformRole } from './access'
 
 function context(overrides: Partial<UserContext> = {}): UserContext {
   return {
@@ -23,6 +23,17 @@ function activePlatformOwner(overrides: Partial<UserContext> = {}): UserContext 
     platformStatus: 'ACTIVE',
     platformPermissions: ['platform.dashboard.view', 'platform.tenants.view'],
     ...overrides,
+  })
+}
+
+function activePlatformRole(role: NonNullable<UserContext['platformRole']>): UserContext {
+  return context({
+    isPlatformUser: true,
+    platformRole: role,
+    platformStatus: 'ACTIVE',
+    platformPermissions: ['platform.dashboard.view'],
+    onboardingCompleted: false,
+    tenantMemberships: [],
   })
 }
 
@@ -52,6 +63,7 @@ test('normal tenant owner cannot open platform routes', () => {
 
 test('active platform owner can open platform without tenant membership or selected tenant', () => {
   const owner = activePlatformOwner({ onboardingCompleted: false, tenantMemberships: [] })
+  assert.equal(hasActivePlatformRole(owner), true)
   assert.equal(hasActivePlatformAccess(owner), true)
   assert.equal(getPublicRouteRedirect(owner), '/platform')
   assert.equal(getTenantRouteRedirect(owner, null, true), '/platform')
@@ -62,9 +74,25 @@ test('dual platform and tenant owner can access both app contexts', () => {
   const dualRole = activePlatformOwner({ tenantMemberships: [tenantMembership()] })
   assert.equal(getPlatformRouteRedirect(dualRole), null)
   assert.equal(getTenantRouteRedirect(dualRole, 'tenant_1', false), null)
-  assert.equal(getPublicRouteRedirect(dualRole), '/app')
+  assert.equal(getPublicRouteRedirect(dualRole), '/platform')
   assert.equal(getPostAuthDestination(dualRole, '/platform'), '/platform')
-  assert.equal(getPostAuthDestination(dualRole, null), '/app')
+  assert.equal(getPostAuthDestination(dualRole, null), '/platform')
+})
+
+test('active platform roles bypass onboarding after authentication', () => {
+  for (const role of ['PLATFORM_OWNER', 'PLATFORM_ADMIN', 'PLATFORM_SUPPORT', 'PLATFORM_AUDITOR'] as const) {
+    const platformUser = activePlatformRole(role)
+    assert.equal(hasActivePlatformRole(platformUser), true)
+    assert.equal(getPostAuthDestination(platformUser, null), '/platform')
+    assert.equal(getPublicRouteRedirect(platformUser), '/platform')
+    assert.notEqual(getPostAuthDestination(platformUser, null), '/onboarding')
+  }
+})
+
+test('tenant-only unfinished registration still uses onboarding', () => {
+  const tenantOnly = context({ onboardingCompleted: false, tenantMemberships: [] })
+  assert.equal(hasActivePlatformRole(tenantOnly), false)
+  assert.equal(getPostAuthDestination(tenantOnly, '/onboarding'), '/onboarding')
 })
 
 test('platform route guard depends on platform status and permissions, not tenant permissions', () => {

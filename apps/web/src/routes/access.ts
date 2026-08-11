@@ -3,6 +3,7 @@ import type { SessionLockState } from '../stores/session-store'
 import { getSingleActiveMembership, isAccessibleTenantMembership } from '../stores/session-selection'
 
 const requiredPlatformDashboardPermission = 'platform.dashboard.view'
+const activePlatformRoles = new Set(['PLATFORM_OWNER', 'PLATFORM_ADMIN', 'PLATFORM_SUPPORT', 'PLATFORM_AUDITOR'])
 
 export interface PlatformAccessDiagnostic {
   authenticated: boolean
@@ -21,9 +22,13 @@ export function hasActivePlatformAccess(context: UserContext | null, permission 
   return Boolean(context?.isPlatformUser && context.platformStatus === 'ACTIVE' && context.platformPermissions.includes(permission))
 }
 
+export function hasActivePlatformRole(context: UserContext | null): boolean {
+  return Boolean(context?.isPlatformUser && context.platformStatus === 'ACTIVE' && context.platformRole && activePlatformRoles.has(context.platformRole))
+}
+
 export function getPublicRouteRedirect(context: UserContext | null): string {
   const accessibleMemberships = context?.tenantMemberships.filter(isAccessibleTenantMembership) ?? []
-  if (hasActivePlatformAccess(context) && !accessibleMemberships.length) {
+  if (hasActivePlatformRole(context)) {
     return '/platform'
   }
   if (!context?.onboardingCompleted) {
@@ -36,11 +41,11 @@ export function getPublicRouteRedirect(context: UserContext | null): string {
   if (accessibleMemberships.length) {
     return '/select-tenant'
   }
-  return hasActivePlatformAccess(context) ? '/platform' : '/onboarding'
+  return '/onboarding'
 }
 
 export function getPostAuthDestination(context: UserContext | null, preferredDestination: string | null): string {
-  if (preferredDestination === '/platform' && hasActivePlatformAccess(context)) {
+  if ((preferredDestination === '/platform' && hasActivePlatformAccess(context)) || hasActivePlatformRole(context)) {
     return '/platform'
   }
   return getPublicRouteRedirect(context)
@@ -65,7 +70,7 @@ export function getPlatformRouteRedirect(context: UserContext | null, fallback =
 
 export function getTenantRouteRedirect(context: UserContext | null, selectedTenantId: string | null, selectedTenantBlocked: boolean): string | null {
   if (!context?.onboardingCompleted) {
-    return hasActivePlatformAccess(context) ? '/platform' : '/onboarding'
+    return hasActivePlatformRole(context) ? '/platform' : '/onboarding'
   }
   const selectedMembership = context.tenantMemberships.find((membership) => membership.tenantId === selectedTenantId)
   if (!selectedTenantId || selectedTenantBlocked || (selectedMembership && !isAccessibleTenantMembership(selectedMembership))) {

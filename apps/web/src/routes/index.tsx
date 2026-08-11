@@ -4,7 +4,7 @@ import { PlatformAppLayout } from '../layouts/PlatformAppLayout'
 import { TenantAppLayout } from '../layouts/TenantAppLayout'
 import { AuthPage } from '../pages/auth'
 import { PlatformBetaPage, PlatformBillingGatewaysPage, PlatformBillingReconciliationPage, PlatformErrorsPage, PlatformFeaturesPage, PlatformFeedbackPage, PlatformPage, PlatformSmsProvidersPage, PlatformSupportPage, PlatformTenantDetailPage } from '../pages/platform'
-import { ContactDetailPage, ContactsPage, EventDetailPage, MemberDetailPage, OutstandingPage, PaymentEntryPage, ReceiptPage, ReportsPage, ShareListPage, SmsHistoryPage, TenantBillingInvoicePage, TenantBillingPage, TenantDashboardPage, TenantHelpPage, TenantListPage, TenantSettingsPage, TenantUsersPage } from '../pages/tenant'
+import { ContactDetailPage, ContactsPage, EventDetailPage, MemberDetailPage, OutstandingPage, PaymentEntryPage, ReceiptPage, ReportsPage, ShareListPage, SmsHistoryPage, SmsSettingsPage, SmsTemplatesPage, TenantBillingInvoicePage, TenantBillingPage, TenantDashboardPage, TenantHelpPage, TenantListPage, TenantSettingsPage, TenantUsersPage } from '../pages/tenant'
 import { AuthenticatedRoute, OnboardingRoute, PinUnlockedRoute, PlatformOwnerRoute, PublicRoute, TenantRoute } from './guards'
 
 export const router = createBrowserRouter([
@@ -71,11 +71,13 @@ export const router = createBrowserRouter([
                   { path: 'members', element: <ContactsPage /> },
                   { path: 'payments', element: <TenantListPage title="Payments" kind="payments" /> },
                   { path: 'messages', element: <SmsHistoryPage /> },
+                  { path: 'messages/templates', element: <SmsTemplatesPage /> },
+                  { path: 'messages/settings', element: <SmsSettingsPage /> },
                   { path: 'reports', element: <ReportsPage /> },
                   { path: 'users', element: <TenantUsersPage /> },
                   { path: 'help', element: <TenantHelpPage /> },
                   { path: 'settings', element: <TenantSettingsPage /> },
-                  { path: 'settings/messages', element: <SmsHistoryPage /> },
+                  { path: 'settings/messages', element: <SmsSettingsPage /> },
                   { path: 'settings/billing', element: <TenantBillingPage /> },
                   { path: 'settings/billing/invoices/:invoiceId', element: <TenantBillingInvoicePage /> },
                 ],
