@@ -52,6 +52,30 @@ const whatsappStatuses = [
   ['UNPAID', 'Unpaid'],
   ['OVERDUE', 'Overdue'],
 ]
+type WhatsappSummaryRow = {
+  label: string
+  valueSource: string
+  visible: boolean
+  order: number
+}
+const defaultWhatsappSummaryRows: WhatsappSummaryRow[] = [
+  { label: 'Jumla ya Ahadi', valueSource: 'TOTAL_PLEDGED', visible: true, order: 1 },
+  { label: 'Jumla CASH', valueSource: 'CASH_RECEIVED', visible: true, order: 2 },
+]
+const defaultWhatsappSummarySources = [
+  { valueSource: 'TOTAL_PLEDGED', label: 'Total Pledged' },
+  { valueSource: 'TOTAL_RECEIVED', label: 'Total Received' },
+  { valueSource: 'TOTAL_OUTSTANDING', label: 'Outstanding' },
+  { valueSource: 'CASH_RECEIVED', label: 'Cash Received' },
+  { valueSource: 'MOBILE_MONEY_RECEIVED', label: 'Mobile Money Received' },
+  { valueSource: 'M_PESA_RECEIVED', label: 'M-Pesa Received' },
+  { valueSource: 'AIRTEL_MONEY_RECEIVED', label: 'Airtel Money Received' },
+  { valueSource: 'MIX_BY_YAS_RECEIVED', label: 'Mix by Yas Received' },
+  { valueSource: 'HALOPESA_RECEIVED', label: 'HaloPesa Received' },
+  { valueSource: 'BANK_RECEIVED', label: 'Bank Received' },
+  { valueSource: 'CHEQUE_RECEIVED', label: 'Cheque Received' },
+  { valueSource: 'OTHER_RECEIVED', label: 'Other Received' },
+]
 const eventTypes = ['WEDDING', 'SENDOFF', 'FUNERAL', 'FUNDRAISER', 'BIRTHDAY', 'GRADUATION', 'RELIGIOUS', 'OTHER']
 const reportCards = [
   { type: 'summary', title: 'Collection Summary', description: 'Targets, pledged totals, collections, coverage and member status counts.' },
@@ -123,6 +147,32 @@ function asDateTime(value: unknown) {
 
 function moneyText(value: unknown) {
   return new Intl.NumberFormat('en-TZ', { style: 'currency', currency: 'TZS', maximumFractionDigits: 0 }).format(asNumber(value))
+}
+
+function normalizeWhatsappSummaryRows(value: unknown): WhatsappSummaryRow[] {
+  if (!Array.isArray(value)) return defaultWhatsappSummaryRows
+  const rows = value.map((row, index) => {
+    const record = jsonRecord(row)
+    return {
+      label: asString(record.label, defaultWhatsappSummaryRows[index]?.label ?? 'Muhtasari'),
+      valueSource: asString(record.valueSource, defaultWhatsappSummaryRows[index]?.valueSource ?? 'TOTAL_PLEDGED'),
+      visible: record.visible !== false,
+      order: asNumber(record.order) || index + 1,
+    }
+  }).filter((row) => row.label && row.valueSource)
+  return rows.length ? rows.sort((left, right) => left.order - right.order).map((row, index) => ({ ...row, order: index + 1 })) : defaultWhatsappSummaryRows
+}
+
+function normalizeWhatsappSummarySources(value: unknown) {
+  if (!Array.isArray(value)) return defaultWhatsappSummarySources
+  const sources = value.map((source) => {
+    const record = jsonRecord(source)
+    return {
+      valueSource: asString(record.valueSource),
+      label: asString(record.label, asString(record.valueSource)),
+    }
+  }).filter((source) => source.valueSource)
+  return sources.length ? sources : defaultWhatsappSummarySources
 }
 
 function statusTone(status: unknown): 'success' | 'warning' | 'danger' | 'neutral' {
@@ -1573,6 +1623,7 @@ export function ShareListPage() {
   const [includeBankInstructions, setIncludeBankInstructions] = useState<boolean | null>(null)
   const [headerText, setHeaderText] = useState<string | null>(null)
   const [footerText, setFooterText] = useState<string | null>(null)
+  const [summaryRows, setSummaryRows] = useState<WhatsappSummaryRow[] | null>(null)
   const [copyMessage, setCopyMessage] = useState('')
   const [selectedPart, setSelectedPart] = useState(0)
   const canQuery = Boolean(tenantId && eventId && !activeEvent.error)
@@ -1587,6 +1638,8 @@ export function ShareListPage() {
   const effectiveIncludeBankInstructions = includeBankInstructions ?? (settings.data?.includeBankInstructions === true)
   const effectiveHeaderText = headerText ?? asString(settings.data?.headerText, '')
   const effectiveFooterText = footerText ?? asString(settings.data?.footerText, '')
+  const summarySources = normalizeWhatsappSummarySources(settings.data?.availableSummarySources)
+  const effectiveSummaryRows = summaryRows ?? normalizeWhatsappSummaryRows(settings.data?.summaryRows)
 
   const previewPayload = {
     format: effectiveFormat,
@@ -1601,6 +1654,7 @@ export function ShareListPage() {
     includeWithoutPledges,
     phoneFilter,
     search,
+    summaryRows: effectiveSummaryRows,
   }
   const preview = useQuery({
     queryKey: ['whatsapp-share-preview', tenantId, eventId, previewPayload],
@@ -1619,6 +1673,7 @@ export function ShareListPage() {
       defaultListFormat: effectiveFormat,
       defaultSort: effectiveSort,
       defaultIncludeSummary: effectiveIncludeSummary,
+      summaryRows: effectiveSummaryRows,
     }),
     onSuccess: () => {
       void settings.refetch()
@@ -1641,6 +1696,34 @@ export function ShareListPage() {
     effectiveIncludeBankInstructions,
     includeWithoutPledges,
   ].filter(Boolean).length
+
+  function commitSummaryRows(rows: WhatsappSummaryRow[]) {
+    setSummaryRows(rows.map((row, index) => ({ ...row, order: index + 1 })))
+  }
+
+  function updateSummaryRow(index: number, patch: Partial<WhatsappSummaryRow>) {
+    commitSummaryRows(effectiveSummaryRows.map((row, rowIndex) => rowIndex === index ? { ...row, ...patch } : row))
+  }
+
+  function moveSummaryRow(index: number, direction: -1 | 1) {
+    const nextIndex = index + direction
+    if (nextIndex < 0 || nextIndex >= effectiveSummaryRows.length) return
+    const rows = [...effectiveSummaryRows]
+    const [row] = rows.splice(index, 1)
+    if (!row) return
+    rows.splice(nextIndex, 0, row)
+    commitSummaryRows(rows)
+  }
+
+  function addSummaryRow() {
+    const source = summarySources.find((item) => !effectiveSummaryRows.some((row) => row.valueSource === item.valueSource)) ?? summarySources[0]
+    if (!source) return
+    commitSummaryRows([...effectiveSummaryRows, { label: source.label, valueSource: source.valueSource, visible: true, order: effectiveSummaryRows.length + 1 }])
+  }
+
+  function resetSummaryRows() {
+    setSummaryRows(normalizeWhatsappSummaryRows(settings.data?.defaultSummaryRows))
+  }
 
   async function copyText(value: string, label = 'List copied') {
     await copyPlainText(value)
@@ -1734,6 +1817,32 @@ export function ShareListPage() {
               <label className="share-toggle-row"><input type="checkbox" checked={effectiveIncludeMobileMoneyInstructions} onChange={(event) => setIncludeMobileMoneyInstructions(event.target.checked)} /> <span>Mobile Money</span></label>
               <label className="share-toggle-row"><input type="checkbox" checked={effectiveIncludeBankInstructions} onChange={(event) => setIncludeBankInstructions(event.target.checked)} /> <span>Bank Instructions</span></label>
             </div>
+            {canFinancial && effectiveFormat !== 'PRIVACY' ? (
+              <section className="share-summary-builder">
+                <div className="card-title-row">
+                  <strong>Muhtasari</strong>
+                  <div className="card-actions">
+                    <button type="button" onClick={addSummaryRow}>Add Row</button>
+                    <button type="button" onClick={resetSummaryRows}>Reset to Default</button>
+                  </div>
+                </div>
+                {effectiveSummaryRows.map((row, index) => (
+                  <div className="summary-row-editor" key={`${row.valueSource}-${index}`}>
+                    <label>Label<input value={row.label} onChange={(event) => updateSummaryRow(index, { label: event.target.value })} /></label>
+                    <label>Value Source<select value={row.valueSource} onChange={(event) => {
+                      const source = summarySources.find((item) => item.valueSource === event.target.value)
+                      updateSummaryRow(index, { valueSource: event.target.value, label: row.label || source?.label || event.target.value })
+                    }}>{summarySources.map((source) => <option key={source.valueSource} value={source.valueSource}>{source.label}</option>)}</select></label>
+                    <label>Visible<select value={row.visible ? 'YES' : 'NO'} onChange={(event) => updateSummaryRow(index, { visible: event.target.value === 'YES' })}><option value="YES">Visible</option><option value="NO">Hidden</option></select></label>
+                    <label>Order<input type="number" min={1} value={row.order} onChange={(event) => updateSummaryRow(index, { order: Number(event.target.value) || index + 1 })} /></label>
+                    <div className="card-actions">
+                      <button type="button" disabled={index === 0} onClick={() => moveSummaryRow(index, -1)}>Up</button>
+                      <button type="button" disabled={index === effectiveSummaryRows.length - 1} onClick={() => moveSummaryRow(index, 1)}>Down</button>
+                    </div>
+                  </div>
+                ))}
+              </section>
+            ) : null}
             <div className="share-text-grid">
               <label>Header Text<textarea value={effectiveHeaderText} onChange={(event) => setHeaderText(event.target.value)} rows={3} placeholder={asString(settings.data?.defaultHeaderText)} /></label>
               <label>Footer Text<textarea value={effectiveFooterText} onChange={(event) => setFooterText(event.target.value)} rows={3} placeholder="Karibuni sana kwa michango na ahadi." /></label>

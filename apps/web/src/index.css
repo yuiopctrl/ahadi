@@ -2633,7 +2633,8 @@ th {
 }
 
 .share-filter-grid label,
-.share-text-grid label {
+.share-text-grid label,
+.summary-row-editor label {
   display: grid;
   gap: 6px;
   min-width: 0;
@@ -2644,7 +2645,9 @@ th {
 
 .share-filter-grid input,
 .share-filter-grid select,
-.share-text-grid textarea {
+.share-text-grid textarea,
+.summary-row-editor input,
+.summary-row-editor select {
   width: 100%;
   border: 1px solid var(--color-border);
   border-radius: 8px;
@@ -2654,23 +2657,37 @@ th {
 }
 
 .share-filter-grid input,
-.share-filter-grid select {
+.share-filter-grid select,
+.summary-row-editor input,
+.summary-row-editor select {
   min-height: 44px;
   padding: 0 12px;
 }
 
 .share-filter-grid input:focus,
 .share-filter-grid select:focus,
-.share-text-grid textarea:focus {
+.share-text-grid textarea:focus,
+.summary-row-editor input:focus,
+.summary-row-editor select:focus {
   border-color: var(--color-primary);
   box-shadow: 0 0 0 3px rgba(143, 29, 44, 0.12);
   outline: none;
 }
 
 .share-toggle-grid,
-.share-text-grid {
+.share-text-grid,
+.share-summary-builder {
   display: grid;
   gap: 10px;
+}
+
+.summary-row-editor {
+  display: grid;
+  gap: 10px;
+  align-items: end;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 10px;
 }
 
 .share-toggle-row {
@@ -2802,6 +2819,10 @@ th {
   .share-toggle-grid,
   .share-text-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .summary-row-editor {
+    grid-template-columns: minmax(0, 1.2fr) minmax(0, 1.4fr) minmax(120px, 0.6fr) minmax(90px, 0.5fr) auto;
   }
 
   .share-filter-grid {

@@ -37,12 +37,11 @@ test('static offline page is not shipped as a refresh destination', () => {
 })
 
 test('web builds are identifiable and deploy copies the latest dist', () => {
-  assert.match(env, /VITE_BUILD_COMMIT/)
   assert.match(env, /VITE_BUILD_SHA/)
-  assert.match(env, /buildCommit: parsed\.data\.VITE_BUILD_SHA \?\? parsed\.data\.VITE_BUILD_COMMIT/)
-  assert.match(env, /buildSha: parsed\.data\.VITE_BUILD_SHA \?\? parsed\.data\.VITE_BUILD_COMMIT/)
+  assert.match(env, /buildCommit: parsed\.data\.VITE_BUILD_SHA/)
   assert.match(main, /Ahadi web \$\{env\.appVersion\} \(\$\{env\.buildCommit\}\)/)
-  assert.match(deployDoc, /VITE_BUILD_SHA="\$\(git rev-parse --short HEAD\)" pnpm --filter web build/)
-  assert.match(deployDoc, /rsync -av --delete apps\/web\/dist\/ \/var\/www\/ahadi\//)
+  assert.match(deployDoc, /BUILD_SHA="\$\(git rev-parse --short HEAD\)"/)
+  assert.match(deployDoc, /VITE_BUILD_SHA="\$BUILD_SHA" pnpm --filter web build/)
+  assert.match(deployDoc, /sudo rsync -av --delete \\\s+apps\/web\/dist\/ \\\s+\/var\/www\/ahadi\//)
   assert.doesNotMatch(deployDoc, /--filter @ahadi\/web build/)
 })

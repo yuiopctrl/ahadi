@@ -499,6 +499,26 @@ const whatsappShareFormatSchema = z.enum(['DETAILED', 'PRIVACY', 'PAYMENT_PROGRE
 const whatsappShareSortSchema = z.enum(['ORIGINAL', 'NAME_ASC', 'PLEDGED_DESC', 'PAID_FIRST', 'OUTSTANDING_FIRST'])
 const whatsappShareStatusSchema = z.enum(['ALL', 'PAID', 'PARTIAL', 'UNPAID', 'OVERDUE'])
 const whatsappPhoneFilterSchema = z.enum(['ALL', 'WITH_PHONE', 'WITHOUT_PHONE'])
+const whatsappSummaryValueSourceSchema = z.enum([
+  'TOTAL_PLEDGED',
+  'TOTAL_RECEIVED',
+  'TOTAL_OUTSTANDING',
+  'CASH_RECEIVED',
+  'MOBILE_MONEY_RECEIVED',
+  'M_PESA_RECEIVED',
+  'AIRTEL_MONEY_RECEIVED',
+  'MIX_BY_YAS_RECEIVED',
+  'HALOPESA_RECEIVED',
+  'BANK_RECEIVED',
+  'CHEQUE_RECEIVED',
+  'OTHER_RECEIVED',
+])
+const whatsappSummaryRowSchema = z.object({
+  label: z.string().trim().min(1).max(80),
+  valueSource: whatsappSummaryValueSourceSchema,
+  visible: z.boolean().default(true),
+  order: z.coerce.number().int().min(1).max(50),
+})
 
 const whatsappSharePreviewSchema = z.object({
   format: whatsappShareFormatSchema.default('DETAILED'),
@@ -513,6 +533,7 @@ const whatsappSharePreviewSchema = z.object({
   includeWithoutPledges: z.boolean().optional().default(false),
   phoneFilter: whatsappPhoneFilterSchema.default('ALL'),
   search: z.string().trim().max(120).optional().default(''),
+  summaryRows: z.array(whatsappSummaryRowSchema).max(12).optional().nullable(),
 })
 
 const whatsappShareSettingsSchema = z.object({
@@ -526,6 +547,7 @@ const whatsappShareSettingsSchema = z.object({
   defaultListFormat: whatsappShareFormatSchema.default('DETAILED'),
   defaultSort: whatsappShareSortSchema.default('ORIGINAL'),
   defaultIncludeSummary: z.boolean().optional().default(true),
+  summaryRows: z.array(whatsappSummaryRowSchema).max(12).optional().nullable(),
 })
 
 const reportTypeSchema = z.enum(['summary', 'pledges', 'payments', 'outstanding', 'payment-methods', 'collectors', 'member-statement'])
@@ -2983,6 +3005,7 @@ app.put('/api/v1/events/:eventId/share/whatsapp-settings', requireAuth, loadUser
       p_default_list_format: input.defaultListFormat,
       p_default_sort: input.defaultSort,
       p_default_include_summary: input.defaultIncludeSummary,
+      p_summary_rows: input.summaryRows ?? null,
     })
     if (error) {
       throwFinancialDatabaseError(error, 'WHATSAPP_SHARE_SETTINGS_SAVE_FAILED')
@@ -3016,6 +3039,7 @@ app.post('/api/v1/events/:eventId/share/whatsapp-preview', requireAuth, loadUser
       p_phone_filter: input.phoneFilter,
       p_search: input.search,
       p_safe_char_limit: env.WHATSAPP_SHARE_SAFE_CHAR_LIMIT,
+      p_summary_rows: input.summaryRows ?? null,
     })
     if (error) {
       throwFinancialDatabaseError(error, 'WHATSAPP_SHARE_PREVIEW_FAILED')
