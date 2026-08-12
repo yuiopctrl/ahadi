@@ -1,5 +1,14 @@
 alter table public.event_share_settings
-add column if not exists whatsapp_summary_rows jsonb;
+add column if not exists whatsapp_summary_rows jsonb,
+add column if not exists whatsapp_payment_instructions text,
+add column if not exists show_whatsapp_payment_instructions boolean not null default true,
+add column if not exists whatsapp_alama_labels jsonb,
+add column if not exists show_whatsapp_alama boolean not null default true;
+
+drop trigger if exists event_share_settings_set_updated_at on public.event_share_settings;
+create trigger event_share_settings_set_updated_at
+before update on public.event_share_settings
+for each row execute function public.set_updated_at();
 
 create or replace function public.default_whatsapp_summary_rows()
 returns jsonb
@@ -31,6 +40,43 @@ as $$
     jsonb_build_object('valueSource', 'CHEQUE_RECEIVED', 'label', 'Cheque Received'),
     jsonb_build_object('valueSource', 'OTHER_RECEIVED', 'label', 'Other Received')
   );
+$$;
+
+create or replace function public.default_whatsapp_alama_labels()
+returns jsonb
+language sql
+stable
+as $$
+  select jsonb_build_object(
+    'completed', 'Amemaliza',
+    'partial', 'Amepunguza',
+    'noPledge', 'Hajatoa Ahadi'
+  );
+$$;
+
+create or replace function public.normalize_whatsapp_alama_labels(p_labels jsonb)
+returns jsonb
+language sql
+stable
+as $$
+  select jsonb_build_object(
+    'completed', coalesce(nullif(public.whatsapp_single_line(p_labels ->> 'completed'), ''), 'Amemaliza'),
+    'partial', coalesce(nullif(public.whatsapp_single_line(p_labels ->> 'partial'), ''), 'Amepunguza'),
+    'noPledge', coalesce(nullif(public.whatsapp_single_line(p_labels ->> 'noPledge'), ''), 'Hajatoa Ahadi')
+  );
+$$;
+
+create or replace function public.whatsapp_render_alama(p_labels jsonb, p_show boolean)
+returns text
+language sql
+stable
+as $$
+  select case when coalesce(p_show, true) then
+    'Alama:' || E'\n' ||
+    '✅✅ -- ' || (public.normalize_whatsapp_alama_labels(p_labels) ->> 'completed') || E'\n' ||
+    '☑️ -- ' || (public.normalize_whatsapp_alama_labels(p_labels) ->> 'partial') || E'\n' ||
+    '🙏🏿 -- ' || (public.normalize_whatsapp_alama_labels(p_labels) ->> 'noPledge')
+  else '' end;
 $$;
 
 create or replace function public.normalize_whatsapp_summary_rows(p_rows jsonb)
@@ -201,10 +247,6 @@ begin
   if not found or not public.can_access_event(p_event_id) then
     raise exception 'EVENT_ACCESS_DENIED' using errcode = '42501';
   end if;
-  if not public.has_tenant_permission(p_tenant_id, 'shares.whatsapp.view') then
-    raise exception 'SHARE_WHATSAPP_ACCESS_DENIED' using errcode = '42501';
-  end if;
-
   select * into settings_record from public.event_share_settings where tenant_id = p_tenant_id and event_id = p_event_id;
 
   return jsonb_build_object(
@@ -216,6 +258,12 @@ begin
     'includeEventPaymentInstructions', coalesce(settings_record.include_event_payment_instructions, false),
     'includeMobileMoneyInstructions', coalesce(settings_record.include_mobile_money_instructions, false),
     'includeBankInstructions', coalesce(settings_record.include_bank_instructions, false),
+    'showPaymentInstructions', coalesce(settings_record.show_whatsapp_payment_instructions, true),
+    'paymentInstructions', coalesce(settings_record.whatsapp_payment_instructions, public.whatsapp_plain_text(event_record.payment_instructions), ''),
+    'defaultPaymentInstructions', public.whatsapp_plain_text(event_record.payment_instructions),
+    'showAlama', coalesce(settings_record.show_whatsapp_alama, true),
+    'alamaLabels', public.normalize_whatsapp_alama_labels(settings_record.whatsapp_alama_labels),
+    'defaultAlamaLabels', public.default_whatsapp_alama_labels(),
     'defaultListFormat', coalesce(settings_record.default_list_format, 'DETAILED'),
     'defaultSort', coalesce(settings_record.default_sort, 'ORIGINAL'),
     'defaultIncludeSummary', coalesce(settings_record.default_include_summary, true),
@@ -228,6 +276,7 @@ end;
 $$;
 
 drop function if exists public.rpc_update_event_whatsapp_share_settings(uuid, uuid, text, text, boolean, boolean, boolean, boolean, boolean, text, text, boolean);
+drop function if exists public.rpc_update_event_whatsapp_share_settings(uuid, uuid, text, text, boolean, boolean, boolean, boolean, boolean, text, text, boolean, jsonb);
 
 create or replace function public.rpc_update_event_whatsapp_share_settings(
   p_tenant_id uuid,
@@ -242,7 +291,11 @@ create or replace function public.rpc_update_event_whatsapp_share_settings(
   p_default_list_format text default 'DETAILED',
   p_default_sort text default 'ORIGINAL',
   p_default_include_summary boolean default true,
-  p_summary_rows jsonb default null
+  p_summary_rows jsonb default null,
+  p_show_payment_instructions boolean default true,
+  p_payment_instructions text default null,
+  p_show_alama boolean default true,
+  p_alama_labels jsonb default null
 )
 returns jsonb
 language plpgsql
@@ -253,6 +306,9 @@ declare
   normalized_format text := upper(coalesce(p_default_list_format, 'DETAILED'));
   normalized_sort text := upper(coalesce(p_default_sort, 'ORIGINAL'));
   normalized_summary_rows jsonb := public.normalize_whatsapp_summary_rows(p_summary_rows);
+  normalized_alama_labels jsonb := public.normalize_whatsapp_alama_labels(p_alama_labels);
+  normalized_payment_instructions text := nullif(public.whatsapp_plain_text(p_payment_instructions), '');
+  settings_before public.event_share_settings%rowtype;
 begin
   if auth.uid() is null then
     raise exception 'SESSION_REQUIRED' using errcode = '28000';
@@ -271,6 +327,8 @@ begin
     raise exception 'INVALID_INPUT' using errcode = '22023';
   end if;
 
+  select * into settings_before from public.event_share_settings where tenant_id = p_tenant_id and event_id = p_event_id;
+
   insert into public.event_share_settings (
     tenant_id,
     event_id,
@@ -285,6 +343,10 @@ begin
     default_sort,
     default_include_summary,
     whatsapp_summary_rows,
+    show_whatsapp_payment_instructions,
+    whatsapp_payment_instructions,
+    show_whatsapp_alama,
+    whatsapp_alama_labels,
     updated_by
   )
   values (
@@ -301,6 +363,10 @@ begin
     normalized_sort,
     coalesce(p_default_include_summary, true),
     normalized_summary_rows,
+    coalesce(p_show_payment_instructions, true),
+    normalized_payment_instructions,
+    coalesce(p_show_alama, true),
+    normalized_alama_labels,
     auth.uid()
   )
   on conflict (event_id) do update
@@ -315,13 +381,131 @@ begin
       default_sort = excluded.default_sort,
       default_include_summary = excluded.default_include_summary,
       whatsapp_summary_rows = excluded.whatsapp_summary_rows,
+      show_whatsapp_payment_instructions = excluded.show_whatsapp_payment_instructions,
+      whatsapp_payment_instructions = excluded.whatsapp_payment_instructions,
+      show_whatsapp_alama = excluded.show_whatsapp_alama,
+      whatsapp_alama_labels = excluded.whatsapp_alama_labels,
       updated_by = excluded.updated_by;
+
+  if coalesce(settings_before.show_whatsapp_payment_instructions, true) is distinct from coalesce(p_show_payment_instructions, true)
+     or coalesce(settings_before.whatsapp_payment_instructions, '') is distinct from coalesce(normalized_payment_instructions, '') then
+    perform public.write_audit_log(
+      p_tenant_id,
+      'share.whatsapp.payment_instructions.updated',
+      'event_share_settings',
+      p_event_id,
+      p_event_id,
+      jsonb_build_object('showPaymentInstructions', coalesce(settings_before.show_whatsapp_payment_instructions, true), 'paymentInstructions', settings_before.whatsapp_payment_instructions),
+      jsonb_build_object('showPaymentInstructions', coalesce(p_show_payment_instructions, true), 'paymentInstructions', normalized_payment_instructions),
+      'Updated Share List payment instructions'
+    );
+  end if;
+
+  if coalesce(settings_before.show_whatsapp_alama, true) is distinct from coalesce(p_show_alama, true)
+     or public.normalize_whatsapp_alama_labels(settings_before.whatsapp_alama_labels) is distinct from normalized_alama_labels then
+    perform public.write_audit_log(
+      p_tenant_id,
+      'share.whatsapp.alama.updated',
+      'event_share_settings',
+      p_event_id,
+      p_event_id,
+      jsonb_build_object('showAlama', coalesce(settings_before.show_whatsapp_alama, true), 'alamaLabels', public.normalize_whatsapp_alama_labels(settings_before.whatsapp_alama_labels)),
+      jsonb_build_object('showAlama', coalesce(p_show_alama, true), 'alamaLabels', normalized_alama_labels),
+      'Updated Share List Alama'
+    );
+  end if;
+
+  return public.rpc_get_event_whatsapp_share_settings(p_tenant_id, p_event_id);
+end;
+$$;
+
+create or replace function public.rpc_update_event_whatsapp_share_presentation_settings(
+  p_tenant_id uuid,
+  p_event_id uuid,
+  p_show_payment_instructions boolean default true,
+  p_payment_instructions text default null,
+  p_show_alama boolean default true,
+  p_alama_labels jsonb default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = pg_catalog, public
+as $$
+declare
+  normalized_alama_labels jsonb := public.normalize_whatsapp_alama_labels(p_alama_labels);
+  normalized_payment_instructions text := nullif(public.whatsapp_plain_text(p_payment_instructions), '');
+  settings_before public.event_share_settings%rowtype;
+begin
+  if auth.uid() is null then
+    raise exception 'SESSION_REQUIRED' using errcode = '28000';
+  end if;
+  perform 1 from public.events where id = p_event_id and tenant_id = p_tenant_id;
+  if not found or not public.can_access_event(p_event_id) then
+    raise exception 'EVENT_ACCESS_DENIED' using errcode = '42501';
+  end if;
+
+  select * into settings_before from public.event_share_settings where tenant_id = p_tenant_id and event_id = p_event_id;
+
+  insert into public.event_share_settings (
+    tenant_id,
+    event_id,
+    show_whatsapp_payment_instructions,
+    whatsapp_payment_instructions,
+    show_whatsapp_alama,
+    whatsapp_alama_labels,
+    updated_by
+  )
+  values (
+    p_tenant_id,
+    p_event_id,
+    coalesce(p_show_payment_instructions, true),
+    normalized_payment_instructions,
+    coalesce(p_show_alama, true),
+    normalized_alama_labels,
+    auth.uid()
+  )
+  on conflict (event_id) do update
+  set show_whatsapp_payment_instructions = excluded.show_whatsapp_payment_instructions,
+      whatsapp_payment_instructions = excluded.whatsapp_payment_instructions,
+      show_whatsapp_alama = excluded.show_whatsapp_alama,
+      whatsapp_alama_labels = excluded.whatsapp_alama_labels,
+      updated_by = excluded.updated_by;
+
+  if coalesce(settings_before.show_whatsapp_payment_instructions, true) is distinct from coalesce(p_show_payment_instructions, true)
+     or coalesce(settings_before.whatsapp_payment_instructions, '') is distinct from coalesce(normalized_payment_instructions, '') then
+    perform public.write_audit_log(
+      p_tenant_id,
+      'share.whatsapp.payment_instructions.updated',
+      'event_share_settings',
+      p_event_id,
+      p_event_id,
+      jsonb_build_object('showPaymentInstructions', coalesce(settings_before.show_whatsapp_payment_instructions, true), 'paymentInstructions', settings_before.whatsapp_payment_instructions),
+      jsonb_build_object('showPaymentInstructions', coalesce(p_show_payment_instructions, true), 'paymentInstructions', normalized_payment_instructions),
+      'Updated Share List payment instructions'
+    );
+  end if;
+
+  if coalesce(settings_before.show_whatsapp_alama, true) is distinct from coalesce(p_show_alama, true)
+     or public.normalize_whatsapp_alama_labels(settings_before.whatsapp_alama_labels) is distinct from normalized_alama_labels then
+    perform public.write_audit_log(
+      p_tenant_id,
+      'share.whatsapp.alama.updated',
+      'event_share_settings',
+      p_event_id,
+      p_event_id,
+      jsonb_build_object('showAlama', coalesce(settings_before.show_whatsapp_alama, true), 'alamaLabels', public.normalize_whatsapp_alama_labels(settings_before.whatsapp_alama_labels)),
+      jsonb_build_object('showAlama', coalesce(p_show_alama, true), 'alamaLabels', normalized_alama_labels),
+      'Updated Share List Alama'
+    );
+  end if;
 
   return public.rpc_get_event_whatsapp_share_settings(p_tenant_id, p_event_id);
 end;
 $$;
 
 drop function if exists public.rpc_generate_event_whatsapp_share_preview(uuid, uuid, text, text, uuid, text, boolean, boolean, boolean, boolean, boolean, boolean, text, text, integer);
+drop function if exists public.rpc_generate_event_whatsapp_share_preview(uuid, uuid, text, text, uuid, text, boolean, boolean, boolean, boolean, boolean, boolean, text, text, integer, jsonb);
 
 create or replace function public.rpc_generate_event_whatsapp_share_preview(
   p_tenant_id uuid,
@@ -339,7 +523,11 @@ create or replace function public.rpc_generate_event_whatsapp_share_preview(
   p_phone_filter text default 'ALL',
   p_search text default '',
   p_safe_char_limit integer default 3500,
-  p_summary_rows jsonb default null
+  p_summary_rows jsonb default null,
+  p_show_payment_instructions boolean default null,
+  p_payment_instructions text default null,
+  p_show_alama boolean default null,
+  p_alama_labels jsonb default null
 )
 returns jsonb
 language plpgsql
@@ -362,9 +550,14 @@ declare
   effective_include_mobile_money boolean;
   effective_include_bank boolean;
   effective_summary_rows jsonb;
+  effective_show_payment_instructions boolean;
+  effective_payment_instructions text;
+  effective_show_alama boolean;
+  effective_alama_labels jsonb;
   header_block text;
   summary_block text := '';
   payment_block text := '';
+  alama_block text := '';
   footer_block text := '';
   tail_block text := '';
   lines text[] := array[]::text[];
@@ -387,10 +580,6 @@ begin
   if not found or not public.can_access_event(p_event_id) then
     raise exception 'EVENT_ACCESS_DENIED' using errcode = '42501';
   end if;
-  if not public.has_tenant_permission(p_tenant_id, 'shares.whatsapp.view') then
-    raise exception 'SHARE_WHATSAPP_ACCESS_DENIED' using errcode = '42501';
-  end if;
-
   can_financial := public.has_tenant_permission(p_tenant_id, 'shares.whatsapp.financial');
   if normalized_format not in ('DETAILED', 'PRIVACY', 'PAYMENT_PROGRESS', 'OUTSTANDING_FOLLOW_UP') then
     raise exception 'INVALID_INPUT' using errcode = '22023';
@@ -420,6 +609,13 @@ begin
   effective_include_mobile_money := coalesce(p_include_mobile_money_instructions, coalesce(settings_record.include_mobile_money_instructions, false));
   effective_include_bank := coalesce(p_include_bank_instructions, coalesce(settings_record.include_bank_instructions, false));
   effective_summary_rows := public.normalize_whatsapp_summary_rows(coalesce(p_summary_rows, settings_record.whatsapp_summary_rows));
+  effective_show_payment_instructions := coalesce(p_show_payment_instructions, coalesce(settings_record.show_whatsapp_payment_instructions, true));
+  effective_payment_instructions := case
+    when p_payment_instructions is not null then nullif(public.whatsapp_plain_text(p_payment_instructions), '')
+    else coalesce(nullif(settings_record.whatsapp_payment_instructions, ''), nullif(public.whatsapp_plain_text(event_record.payment_instructions), ''))
+  end;
+  effective_show_alama := coalesce(p_show_alama, coalesce(settings_record.show_whatsapp_alama, true));
+  effective_alama_labels := public.normalize_whatsapp_alama_labels(coalesce(p_alama_labels, settings_record.whatsapp_alama_labels));
 
   header_block := coalesce(nullif(public.whatsapp_plain_text(settings_record.whatsapp_header_text), ''), public.default_whatsapp_header(event_record.event_type, event_record.name));
   if effective_include_event_date and event_record.event_date is not null then
@@ -533,40 +729,43 @@ begin
     end if;
   end if;
 
-  if effective_include_event_payment and nullif(public.whatsapp_plain_text(event_record.payment_instructions), '') is not null then
-    payment_block := concat_ws(E'\n', payment_block, public.whatsapp_plain_text(event_record.payment_instructions));
-  end if;
-  if effective_include_mobile_money and nullif(public.whatsapp_plain_text(tenant_settings_record.mobile_money_instructions), '') is not null then
-    payment_block := concat_ws(E'\n', payment_block, public.whatsapp_plain_text(tenant_settings_record.mobile_money_instructions));
-  end if;
-  if effective_include_bank and nullif(public.whatsapp_plain_text(tenant_settings_record.bank_payment_instructions), '') is not null then
-    payment_block := concat_ws(E'\n', payment_block, public.whatsapp_plain_text(tenant_settings_record.bank_payment_instructions));
-  end if;
-  if nullif(payment_block, '') is not null then
-    payment_block := '*MALIPO*' || E'\n\n' || payment_block;
+  if effective_show_payment_instructions then
+    if effective_payment_instructions is not null then
+      payment_block := effective_payment_instructions;
+    elsif effective_include_event_payment and nullif(public.whatsapp_plain_text(event_record.payment_instructions), '') is not null then
+      payment_block := concat_ws(E'\n', payment_block, public.whatsapp_plain_text(event_record.payment_instructions));
+    end if;
+    if payment_block = '' and effective_include_mobile_money and nullif(public.whatsapp_plain_text(tenant_settings_record.mobile_money_instructions), '') is not null then
+      payment_block := concat_ws(E'\n', payment_block, public.whatsapp_plain_text(tenant_settings_record.mobile_money_instructions));
+    end if;
+    if payment_block = '' and effective_include_bank and nullif(public.whatsapp_plain_text(tenant_settings_record.bank_payment_instructions), '') is not null then
+      payment_block := concat_ws(E'\n', payment_block, public.whatsapp_plain_text(tenant_settings_record.bank_payment_instructions));
+    end if;
   end if;
 
+  alama_block := public.whatsapp_render_alama(effective_alama_labels, effective_show_alama);
+
   footer_block := coalesce(nullif(public.whatsapp_plain_text(settings_record.whatsapp_footer_text), ''), '');
-  tail_block := array_to_string(array_remove(array[summary_block, payment_block, footer_block], ''), E'\n\n');
-  full_text := array_to_string(array_remove(array[header_block, array_to_string(lines, E'\n'), tail_block], ''), E'\n\n');
+  tail_block := array_to_string(array_remove(array[summary_block, alama_block, footer_block], ''), E'\n\n');
+  full_text := array_to_string(array_remove(array[header_block, payment_block, array_to_string(lines, E'\n'), tail_block], ''), E'\n\n');
 
   if length(full_text) <= safe_limit then
     part_texts := array[full_text];
   else
     foreach line in array lines loop
       candidate_lines := current_lines || line;
-      candidate_text := array_to_string(array_remove(array[header_block, array_to_string(candidate_lines, E'\n')], ''), E'\n\n');
+      candidate_text := array_to_string(array_remove(array[header_block, payment_block, array_to_string(candidate_lines, E'\n')], ''), E'\n\n');
       if array_length(current_lines, 1) is not null and length(candidate_text) > safe_limit then
-        part_texts := part_texts || array_to_string(array_remove(array[header_block, array_to_string(current_lines, E'\n')], ''), E'\n\n');
+        part_texts := part_texts || array_to_string(array_remove(array[header_block, payment_block, array_to_string(current_lines, E'\n')], ''), E'\n\n');
         current_lines := array[line];
       else
         current_lines := candidate_lines;
       end if;
     end loop;
     if array_length(current_lines, 1) is not null then
-      part_texts := part_texts || array_to_string(array_remove(array[header_block, array_to_string(current_lines, E'\n'), tail_block], ''), E'\n\n');
+      part_texts := part_texts || array_to_string(array_remove(array[header_block, payment_block, array_to_string(current_lines, E'\n'), tail_block], ''), E'\n\n');
     elsif tail_block <> '' then
-      part_texts := part_texts || array_to_string(array_remove(array[header_block, tail_block], ''), E'\n\n');
+      part_texts := part_texts || array_to_string(array_remove(array[header_block, payment_block, tail_block], ''), E'\n\n');
     end if;
   end if;
 
@@ -588,6 +787,10 @@ begin
     'summary', summary,
     'summaryRows', effective_summary_rows,
     'availableSummarySources', public.whatsapp_summary_value_sources(),
+    'showPaymentInstructions', effective_show_payment_instructions,
+    'paymentInstructions', coalesce(effective_payment_instructions, ''),
+    'showAlama', effective_show_alama,
+    'alamaLabels', effective_alama_labels,
     'isLong', length(full_text) > safe_limit,
     'safeCharLimit', safe_limit,
     'textLength', length(full_text),
@@ -600,6 +803,12 @@ begin
       'includeEventPaymentInstructions', effective_include_event_payment,
       'includeMobileMoneyInstructions', effective_include_mobile_money,
       'includeBankInstructions', effective_include_bank,
+      'showPaymentInstructions', effective_show_payment_instructions,
+      'paymentInstructions', coalesce(effective_payment_instructions, ''),
+      'defaultPaymentInstructions', public.whatsapp_plain_text(event_record.payment_instructions),
+      'showAlama', effective_show_alama,
+      'alamaLabels', effective_alama_labels,
+      'defaultAlamaLabels', public.default_whatsapp_alama_labels(),
       'defaultListFormat', coalesce(settings_record.default_list_format, 'DETAILED'),
       'defaultSort', coalesce(settings_record.default_sort, 'ORIGINAL'),
       'defaultIncludeSummary', coalesce(settings_record.default_include_summary, true),
@@ -618,10 +827,14 @@ $$;
 
 grant execute on function public.default_whatsapp_summary_rows() to authenticated;
 grant execute on function public.whatsapp_summary_value_sources() to authenticated;
+grant execute on function public.default_whatsapp_alama_labels() to authenticated;
+grant execute on function public.normalize_whatsapp_alama_labels(jsonb) to authenticated;
+grant execute on function public.whatsapp_render_alama(jsonb, boolean) to authenticated;
 grant execute on function public.normalize_whatsapp_summary_rows(jsonb) to authenticated;
 grant execute on function public.whatsapp_summary_value(jsonb, text) to authenticated;
 grant execute on function public.whatsapp_render_financial_summary(jsonb, jsonb) to authenticated;
 grant execute on function public.whatsapp_share_summary(uuid, uuid) to authenticated;
 grant execute on function public.rpc_get_event_whatsapp_share_settings(uuid, uuid) to authenticated;
-grant execute on function public.rpc_update_event_whatsapp_share_settings(uuid, uuid, text, text, boolean, boolean, boolean, boolean, boolean, text, text, boolean, jsonb) to authenticated;
-grant execute on function public.rpc_generate_event_whatsapp_share_preview(uuid, uuid, text, text, uuid, text, boolean, boolean, boolean, boolean, boolean, boolean, text, text, integer, jsonb) to authenticated;
+grant execute on function public.rpc_update_event_whatsapp_share_settings(uuid, uuid, text, text, boolean, boolean, boolean, boolean, boolean, text, text, boolean, jsonb, boolean, text, boolean, jsonb) to authenticated;
+grant execute on function public.rpc_update_event_whatsapp_share_presentation_settings(uuid, uuid, boolean, text, boolean, jsonb) to authenticated;
+grant execute on function public.rpc_generate_event_whatsapp_share_preview(uuid, uuid, text, text, uuid, text, boolean, boolean, boolean, boolean, boolean, boolean, text, text, integer, jsonb, boolean, text, boolean, jsonb) to authenticated;

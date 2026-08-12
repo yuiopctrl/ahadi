@@ -519,6 +519,17 @@ const whatsappSummaryRowSchema = z.object({
   visible: z.boolean().default(true),
   order: z.coerce.number().int().min(1).max(50),
 })
+const whatsappAlamaLabelsSchema = z.object({
+  completed: z.string().trim().min(1).max(80),
+  partial: z.string().trim().min(1).max(80),
+  noPledge: z.string().trim().min(1).max(80),
+})
+const whatsappSharePresentationSchema = z.object({
+  showPaymentInstructions: z.boolean().optional().default(true),
+  paymentInstructions: z.string().max(1200).optional().nullable(),
+  showAlama: z.boolean().optional().default(true),
+  alamaLabels: whatsappAlamaLabelsSchema.optional().nullable(),
+})
 
 const whatsappSharePreviewSchema = z.object({
   format: whatsappShareFormatSchema.default('DETAILED'),
@@ -534,6 +545,10 @@ const whatsappSharePreviewSchema = z.object({
   phoneFilter: whatsappPhoneFilterSchema.default('ALL'),
   search: z.string().trim().max(120).optional().default(''),
   summaryRows: z.array(whatsappSummaryRowSchema).max(12).optional().nullable(),
+  showPaymentInstructions: z.boolean().optional().nullable(),
+  paymentInstructions: z.string().max(1200).optional().nullable(),
+  showAlama: z.boolean().optional().nullable(),
+  alamaLabels: whatsappAlamaLabelsSchema.optional().nullable(),
 })
 
 const whatsappShareSettingsSchema = z.object({
@@ -548,6 +563,10 @@ const whatsappShareSettingsSchema = z.object({
   defaultSort: whatsappShareSortSchema.default('ORIGINAL'),
   defaultIncludeSummary: z.boolean().optional().default(true),
   summaryRows: z.array(whatsappSummaryRowSchema).max(12).optional().nullable(),
+  showPaymentInstructions: z.boolean().optional().default(true),
+  paymentInstructions: z.string().max(1200).optional().nullable(),
+  showAlama: z.boolean().optional().default(true),
+  alamaLabels: whatsappAlamaLabelsSchema.optional().nullable(),
 })
 
 const reportTypeSchema = z.enum(['summary', 'pledges', 'payments', 'outstanding', 'payment-methods', 'collectors', 'member-statement'])
@@ -3006,9 +3025,37 @@ app.put('/api/v1/events/:eventId/share/whatsapp-settings', requireAuth, loadUser
       p_default_sort: input.defaultSort,
       p_default_include_summary: input.defaultIncludeSummary,
       p_summary_rows: input.summaryRows ?? null,
+      p_show_payment_instructions: input.showPaymentInstructions,
+      p_payment_instructions: input.paymentInstructions ?? null,
+      p_show_alama: input.showAlama,
+      p_alama_labels: input.alamaLabels ?? null,
     })
     if (error) {
       throwFinancialDatabaseError(error, 'WHATSAPP_SHARE_SETTINGS_SAVE_FAILED')
+    }
+    response.json({ data: jsonRecord(data) })
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.put('/api/v1/events/:eventId/share/whatsapp-presentation-settings', requireAuth, loadUserContext, requireTenantContext, async (request, response, next) => {
+  try {
+    const tenantId = tenantIdFromRequest(request)
+    const eventId = uuidParamSchema.parse(request.params['eventId'])
+    const input = whatsappSharePresentationSchema.parse(request.body)
+    const client = createUserSupabase(request.auth?.accessToken ?? '')
+    await ensureTenantFeatureEnabled(client, tenantId, 'whatsapp_lists')
+    const { data, error } = await client.rpc('rpc_update_event_whatsapp_share_presentation_settings', {
+      p_tenant_id: tenantId,
+      p_event_id: eventId,
+      p_show_payment_instructions: input.showPaymentInstructions,
+      p_payment_instructions: input.paymentInstructions ?? null,
+      p_show_alama: input.showAlama,
+      p_alama_labels: input.alamaLabels ?? null,
+    })
+    if (error) {
+      throwFinancialDatabaseError(error, 'WHATSAPP_SHARE_PRESENTATION_SETTINGS_SAVE_FAILED')
     }
     response.json({ data: jsonRecord(data) })
   } catch (error) {
@@ -3040,6 +3087,10 @@ app.post('/api/v1/events/:eventId/share/whatsapp-preview', requireAuth, loadUser
       p_search: input.search,
       p_safe_char_limit: env.WHATSAPP_SHARE_SAFE_CHAR_LIMIT,
       p_summary_rows: input.summaryRows ?? null,
+      p_show_payment_instructions: input.showPaymentInstructions,
+      p_payment_instructions: input.paymentInstructions ?? null,
+      p_show_alama: input.showAlama,
+      p_alama_labels: input.alamaLabels ?? null,
     })
     if (error) {
       throwFinancialDatabaseError(error, 'WHATSAPP_SHARE_PREVIEW_FAILED')

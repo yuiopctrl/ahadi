@@ -2634,6 +2634,7 @@ th {
 
 .share-filter-grid label,
 .share-text-grid label,
+.share-editor-section label,
 .summary-row-editor label {
   display: grid;
   gap: 6px;
@@ -2646,6 +2647,8 @@ th {
 .share-filter-grid input,
 .share-filter-grid select,
 .share-text-grid textarea,
+.share-editor-section input,
+.share-editor-section textarea,
 .summary-row-editor input,
 .summary-row-editor select {
   width: 100%;
@@ -2658,6 +2661,7 @@ th {
 
 .share-filter-grid input,
 .share-filter-grid select,
+.share-editor-section input,
 .summary-row-editor input,
 .summary-row-editor select {
   min-height: 44px;
@@ -2667,6 +2671,8 @@ th {
 .share-filter-grid input:focus,
 .share-filter-grid select:focus,
 .share-text-grid textarea:focus,
+.share-editor-section input:focus,
+.share-editor-section textarea:focus,
 .summary-row-editor input:focus,
 .summary-row-editor select:focus {
   border-color: var(--color-primary);
@@ -2676,9 +2682,37 @@ th {
 
 .share-toggle-grid,
 .share-text-grid,
+.share-editor-section,
 .share-summary-builder {
   display: grid;
   gap: 10px;
+}
+
+.share-editor-section {
+  border-top: 1px solid var(--color-border);
+  padding-top: 12px;
+}
+
+.share-editor-section textarea {
+  min-height: 108px;
+  resize: vertical;
+  padding: 10px 12px;
+  line-height: 1.45;
+}
+
+.alama-grid {
+  display: grid;
+  gap: 8px;
+}
+
+.alama-grid label {
+  grid-template-columns: 52px minmax(0, 1fr);
+  align-items: center;
+}
+
+.alama-grid span {
+  font-size: 18px;
+  line-height: 1;
 }
 
 .summary-row-editor {

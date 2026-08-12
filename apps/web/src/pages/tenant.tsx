@@ -58,10 +58,20 @@ type WhatsappSummaryRow = {
   visible: boolean
   order: number
 }
+type WhatsappAlamaLabels = {
+  completed: string
+  partial: string
+  noPledge: string
+}
 const defaultWhatsappSummaryRows: WhatsappSummaryRow[] = [
   { label: 'Jumla ya Ahadi', valueSource: 'TOTAL_PLEDGED', visible: true, order: 1 },
   { label: 'Jumla CASH', valueSource: 'CASH_RECEIVED', visible: true, order: 2 },
 ]
+const defaultWhatsappAlamaLabels: WhatsappAlamaLabels = {
+  completed: 'Amemaliza',
+  partial: 'Amepunguza',
+  noPledge: 'Hajatoa Ahadi',
+}
 const defaultWhatsappSummarySources = [
   { valueSource: 'TOTAL_PLEDGED', label: 'Total Pledged' },
   { valueSource: 'TOTAL_RECEIVED', label: 'Total Received' },
@@ -173,6 +183,15 @@ function normalizeWhatsappSummarySources(value: unknown) {
     }
   }).filter((source) => source.valueSource)
   return sources.length ? sources : defaultWhatsappSummarySources
+}
+
+function normalizeWhatsappAlamaLabels(value: unknown): WhatsappAlamaLabels {
+  const record = jsonRecord(value)
+  return {
+    completed: asString(record.completed, defaultWhatsappAlamaLabels.completed),
+    partial: asString(record.partial, defaultWhatsappAlamaLabels.partial),
+    noPledge: asString(record.noPledge, defaultWhatsappAlamaLabels.noPledge),
+  }
 }
 
 function statusTone(status: unknown): 'success' | 'warning' | 'danger' | 'neutral' {
@@ -1618,12 +1637,13 @@ export function ShareListPage() {
   const [includeWithoutPledges, setIncludeWithoutPledges] = useState(false)
   const [includeSummary, setIncludeSummary] = useState<boolean | null>(null)
   const [includeEventDate, setIncludeEventDate] = useState<boolean | null>(null)
-  const [includeEventPaymentInstructions, setIncludeEventPaymentInstructions] = useState<boolean | null>(null)
-  const [includeMobileMoneyInstructions, setIncludeMobileMoneyInstructions] = useState<boolean | null>(null)
-  const [includeBankInstructions, setIncludeBankInstructions] = useState<boolean | null>(null)
   const [headerText, setHeaderText] = useState<string | null>(null)
   const [footerText, setFooterText] = useState<string | null>(null)
   const [summaryRows, setSummaryRows] = useState<WhatsappSummaryRow[] | null>(null)
+  const [showPaymentInstructions, setShowPaymentInstructions] = useState<boolean | null>(null)
+  const [paymentInstructions, setPaymentInstructions] = useState<string | null>(null)
+  const [showAlama, setShowAlama] = useState<boolean | null>(null)
+  const [alamaLabels, setAlamaLabels] = useState<WhatsappAlamaLabels | null>(null)
   const [copyMessage, setCopyMessage] = useState('')
   const [selectedPart, setSelectedPart] = useState(0)
   const canQuery = Boolean(tenantId && eventId && !activeEvent.error)
@@ -1633,13 +1653,23 @@ export function ShareListPage() {
   const effectiveSort = sort || asString(settings.data?.defaultSort, 'ORIGINAL')
   const effectiveIncludeSummary = effectiveFormat === 'PRIVACY' && includeSummary === null ? false : (includeSummary ?? settings.data?.defaultIncludeSummary !== false)
   const effectiveIncludeEventDate = includeEventDate ?? (settings.data?.includeEventDate === true)
-  const effectiveIncludeEventPaymentInstructions = includeEventPaymentInstructions ?? (settings.data?.includeEventPaymentInstructions === true)
-  const effectiveIncludeMobileMoneyInstructions = includeMobileMoneyInstructions ?? (settings.data?.includeMobileMoneyInstructions === true)
-  const effectiveIncludeBankInstructions = includeBankInstructions ?? (settings.data?.includeBankInstructions === true)
+  const effectiveIncludeEventPaymentInstructions = settings.data?.includeEventPaymentInstructions === true
+  const effectiveIncludeMobileMoneyInstructions = settings.data?.includeMobileMoneyInstructions === true
+  const effectiveIncludeBankInstructions = settings.data?.includeBankInstructions === true
   const effectiveHeaderText = headerText ?? asString(settings.data?.headerText, '')
   const effectiveFooterText = footerText ?? asString(settings.data?.footerText, '')
   const summarySources = normalizeWhatsappSummarySources(settings.data?.availableSummarySources)
   const effectiveSummaryRows = summaryRows ?? normalizeWhatsappSummaryRows(settings.data?.summaryRows)
+  const effectiveShowPaymentInstructions = showPaymentInstructions ?? settings.data?.showPaymentInstructions !== false
+  const effectivePaymentInstructions = paymentInstructions ?? asString(settings.data?.paymentInstructions, '')
+  const effectiveShowAlama = showAlama ?? settings.data?.showAlama !== false
+  const effectiveAlamaLabels = alamaLabels ?? normalizeWhatsappAlamaLabels(settings.data?.alamaLabels)
+  const presentationPayload = {
+    showPaymentInstructions: effectiveShowPaymentInstructions,
+    paymentInstructions: effectivePaymentInstructions || null,
+    showAlama: effectiveShowAlama,
+    alamaLabels: effectiveAlamaLabels,
+  }
 
   const previewPayload = {
     format: effectiveFormat,
@@ -1655,6 +1685,7 @@ export function ShareListPage() {
     phoneFilter,
     search,
     summaryRows: effectiveSummaryRows,
+    ...presentationPayload,
   }
   const preview = useQuery({
     queryKey: ['whatsapp-share-preview', tenantId, eventId, previewPayload],
@@ -1662,19 +1693,22 @@ export function ShareListPage() {
     enabled: canQuery && !settings.isLoading,
   })
   const saveSettings = useMutation({
-    mutationFn: () => api.saveWhatsappShareSettings(tenantId ?? '', eventId, {
-      headerText: effectiveHeaderText || null,
-      footerText: effectiveFooterText || null,
-      includeEventName: true,
-      includeEventDate: effectiveIncludeEventDate,
-      includeEventPaymentInstructions: effectiveIncludeEventPaymentInstructions,
-      includeMobileMoneyInstructions: effectiveIncludeMobileMoneyInstructions,
-      includeBankInstructions: effectiveIncludeBankInstructions,
-      defaultListFormat: effectiveFormat,
-      defaultSort: effectiveSort,
-      defaultIncludeSummary: effectiveIncludeSummary,
-      summaryRows: effectiveSummaryRows,
-    }),
+    mutationFn: () => canFinancial
+      ? api.saveWhatsappShareSettings(tenantId ?? '', eventId, {
+        headerText: effectiveHeaderText || null,
+        footerText: effectiveFooterText || null,
+        includeEventName: true,
+        includeEventDate: effectiveIncludeEventDate,
+        includeEventPaymentInstructions: effectiveIncludeEventPaymentInstructions,
+        includeMobileMoneyInstructions: effectiveIncludeMobileMoneyInstructions,
+        includeBankInstructions: effectiveIncludeBankInstructions,
+        defaultListFormat: effectiveFormat,
+        defaultSort: effectiveSort,
+        defaultIncludeSummary: effectiveIncludeSummary,
+        summaryRows: effectiveSummaryRows,
+        ...presentationPayload,
+      })
+      : api.saveWhatsappSharePresentationSettings(tenantId ?? '', eventId, presentationPayload),
     onSuccess: () => {
       void settings.refetch()
       setCopyMessage('Settings saved')
@@ -1691,9 +1725,8 @@ export function ShareListPage() {
   const optionCount = [
     effectiveIncludeSummary,
     effectiveIncludeEventDate,
-    effectiveIncludeEventPaymentInstructions,
-    effectiveIncludeMobileMoneyInstructions,
-    effectiveIncludeBankInstructions,
+    effectiveShowPaymentInstructions,
+    effectiveShowAlama,
     includeWithoutPledges,
   ].filter(Boolean).length
 
@@ -1723,6 +1756,20 @@ export function ShareListPage() {
 
   function resetSummaryRows() {
     setSummaryRows(normalizeWhatsappSummaryRows(settings.data?.defaultSummaryRows))
+  }
+
+  function updateAlamaLabel(key: keyof WhatsappAlamaLabels, value: string) {
+    setAlamaLabels({ ...effectiveAlamaLabels, [key]: value })
+  }
+
+  function resetPaymentInstructions() {
+    setPaymentInstructions(asString(settings.data?.defaultPaymentInstructions, ''))
+    setShowPaymentInstructions(true)
+  }
+
+  function resetAlamaLabels() {
+    setAlamaLabels(normalizeWhatsappAlamaLabels(settings.data?.defaultAlamaLabels))
+    setShowAlama(true)
   }
 
   async function copyText(value: string, label = 'List copied') {
@@ -1813,10 +1860,16 @@ export function ShareListPage() {
             <div className="share-toggle-grid">
               <label className="share-toggle-row"><input type="checkbox" checked={effectiveIncludeSummary} onChange={(event) => setIncludeSummary(event.target.checked)} disabled={effectiveFormat === 'PRIVACY' && !canFinancial} /> <span>Summary</span></label>
               <label className="share-toggle-row"><input type="checkbox" checked={effectiveIncludeEventDate} onChange={(event) => setIncludeEventDate(event.target.checked)} /> <span>Event Date</span></label>
-              <label className="share-toggle-row"><input type="checkbox" checked={effectiveIncludeEventPaymentInstructions} onChange={(event) => setIncludeEventPaymentInstructions(event.target.checked)} /> <span>Event Payment Instructions</span></label>
-              <label className="share-toggle-row"><input type="checkbox" checked={effectiveIncludeMobileMoneyInstructions} onChange={(event) => setIncludeMobileMoneyInstructions(event.target.checked)} /> <span>Mobile Money</span></label>
-              <label className="share-toggle-row"><input type="checkbox" checked={effectiveIncludeBankInstructions} onChange={(event) => setIncludeBankInstructions(event.target.checked)} /> <span>Bank Instructions</span></label>
             </div>
+            <section className="share-editor-section">
+              <div className="card-title-row">
+                <strong>Payment Instructions</strong>
+                {asString(settings.data?.defaultPaymentInstructions) ? <button type="button" onClick={resetPaymentInstructions}>Reset Payment Instructions</button> : null}
+              </div>
+              <label className="share-toggle-row"><input type="checkbox" checked={effectiveShowPaymentInstructions} onChange={(event) => setShowPaymentInstructions(event.target.checked)} /> <span>Show Payment Instructions</span></label>
+              <label>Instructions<textarea value={effectivePaymentInstructions} onChange={(event) => setPaymentInstructions(event.target.value)} rows={4} placeholder="TUMA KWA&#10;JINA LA MPOKEAJI&#10;NAMBA AU AKAUNTI" /></label>
+              {effectivePaymentInstructions ? <pre className="whatsapp-preview compact">{effectivePaymentInstructions}</pre> : null}
+            </section>
             {canFinancial && effectiveFormat !== 'PRIVACY' ? (
               <section className="share-summary-builder">
                 <div className="card-title-row">
@@ -1843,14 +1896,28 @@ export function ShareListPage() {
                 ))}
               </section>
             ) : null}
-            <div className="share-text-grid">
-              <label>Header Text<textarea value={effectiveHeaderText} onChange={(event) => setHeaderText(event.target.value)} rows={3} placeholder={asString(settings.data?.defaultHeaderText)} /></label>
-              <label>Footer Text<textarea value={effectiveFooterText} onChange={(event) => setFooterText(event.target.value)} rows={3} placeholder="Karibuni sana kwa michango na ahadi." /></label>
-            </div>
+            <section className="share-editor-section">
+              <div className="card-title-row">
+                <strong>Alama</strong>
+                <button type="button" onClick={resetAlamaLabels}>Reset Alama to Default</button>
+              </div>
+              <label className="share-toggle-row"><input type="checkbox" checked={effectiveShowAlama} onChange={(event) => setShowAlama(event.target.checked)} /> <span>Show Alama</span></label>
+              <div className="alama-grid">
+                <label><span>✅✅</span><input value={effectiveAlamaLabels.completed} onChange={(event) => updateAlamaLabel('completed', event.target.value)} /></label>
+                <label><span>☑️</span><input value={effectiveAlamaLabels.partial} onChange={(event) => updateAlamaLabel('partial', event.target.value)} /></label>
+                <label><span>🙏🏿</span><input value={effectiveAlamaLabels.noPledge} onChange={(event) => updateAlamaLabel('noPledge', event.target.value)} /></label>
+              </div>
+            </section>
+            {canFinancial ? (
+              <div className="share-text-grid">
+                <label>Header Text<textarea value={effectiveHeaderText} onChange={(event) => setHeaderText(event.target.value)} rows={3} placeholder={asString(settings.data?.defaultHeaderText)} /></label>
+                <label>Footer Text<textarea value={effectiveFooterText} onChange={(event) => setFooterText(event.target.value)} rows={3} placeholder="Karibuni sana kwa michango na ahadi." /></label>
+              </div>
+            ) : null}
             {saveSettings.error ? <p className="field-error">{errorMessage(saveSettings.error, 'Share settings could not be saved.')}</p> : null}
             <div className="sheet-actions">
-              <button type="button" onClick={() => { setHeaderText(''); setFooterText('') }}>Reset to Default</button>
-              {canFinancial ? <button className="primary-button" type="button" disabled={saveSettings.isPending} onClick={() => saveSettings.mutate()}>{saveSettings.isPending ? 'Saving...' : 'Save Settings'}</button> : null}
+              {canFinancial ? <button type="button" onClick={() => { setHeaderText(''); setFooterText('') }}>Reset to Default</button> : null}
+              <button className="primary-button" type="button" disabled={saveSettings.isPending} onClick={() => saveSettings.mutate()}>{saveSettings.isPending ? 'Saving...' : 'Save Settings'}</button>
             </div>
           </article>
         </div>

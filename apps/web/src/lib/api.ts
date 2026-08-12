@@ -183,6 +183,8 @@ export const api = {
   whatsappShareSettings: (tenantId: string, eventId: string) => apiFetch<{ data: Record<string, unknown> }>(`/events/${eventId}/share/whatsapp-settings`, { tenantId }),
   saveWhatsappShareSettings: (tenantId: string, eventId: string, payload: Record<string, unknown>) =>
     apiFetch<{ data: Record<string, unknown> }>(`/events/${eventId}/share/whatsapp-settings`, { tenantId, method: 'PUT', body: JSON.stringify(payload) }),
+  saveWhatsappSharePresentationSettings: (tenantId: string, eventId: string, payload: Record<string, unknown>) =>
+    apiFetch<{ data: Record<string, unknown> }>(`/events/${eventId}/share/whatsapp-presentation-settings`, { tenantId, method: 'PUT', body: JSON.stringify(payload) }),
   whatsappSharePreview: (tenantId: string, eventId: string, payload: Record<string, unknown>) =>
     apiFetch<{ data: Record<string, unknown> }>(`/events/${eventId}/share/whatsapp-preview`, { tenantId, method: 'POST', body: JSON.stringify(payload) }),
   sendBalanceReminder: (tenantId: string, eventId: string, payload: Record<string, unknown>) =>
