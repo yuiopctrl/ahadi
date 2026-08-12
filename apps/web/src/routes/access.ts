@@ -92,7 +92,7 @@ export function hasDualWorkspaceAccess(context: UserContext | null): boolean {
 function inferRequestedContext(path: string | null | undefined): RequestedAppContext {
   if (!path) return 'default'
   if (path === '/platform' || path.startsWith('/platform/')) return 'platform'
-  if (path === '/app' || path.startsWith('/app/') || path === '/onboarding' || path === '/register') return 'tenant'
+  if (path === '/app' || path.startsWith('/app/') || path === '/onboarding' || path === '/organizations/new' || path === '/register') return 'tenant'
   return 'default'
 }
 
@@ -116,8 +116,8 @@ export function resolveAuthenticatedDestination({
   if (appContext === 'platform') {
     return platformDestination(requestedPath)
   }
-  if (requestedPath === '/onboarding') {
-    return '/onboarding'
+  if (requestedPath === '/onboarding' || requestedPath === '/organizations/new') {
+    return requestedPath
   }
   if (appContext === 'tenant') {
     return tenantDestination(context)

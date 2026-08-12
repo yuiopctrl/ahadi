@@ -283,6 +283,7 @@ export interface TenantContext {
 
 export interface OnboardingPayload {
   planCode: string
+  onboardingIntent?: 'FIRST_TENANT' | 'CREATE_ADDITIONAL_TENANT'
   tenantName: string
   tenantPhone: string
   tenantEmail?: string | null

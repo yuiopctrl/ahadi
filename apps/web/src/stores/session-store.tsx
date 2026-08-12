@@ -1,6 +1,7 @@
 /* eslint-disable react-refresh/only-export-components */
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import type { Session } from '@supabase/supabase-js'
 import type { TenantContext, UserContext } from '@ahadi/types'
 import { api, ApiClientError } from '../lib/api'
@@ -150,6 +151,7 @@ function createLockState(
 }
 
 export function SessionProvider({ children }: { children: ReactNode }) {
+  const queryClient = useQueryClient()
   const [bootstrapState, setBootstrapState] = useState<BootstrapState>('INITIALIZING')
   const [bootstrapError, setBootstrapError] = useState<string | null>(null)
   const [session, setSession] = useState<Session | null>(null)
@@ -194,12 +196,14 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
   const selectTenant = useCallback(async (tenantId: string) => {
     const response = await api.tenantContext(tenantId)
+    await queryClient.cancelQueries()
     localStorage.setItem(selectedTenantStorageKey, tenantId)
     setSelectedTenantId(tenantId)
     setSelectedTenantContext(response.data)
     setSelectedEventId(storedEventIdForTenant(tenantId, response.data))
+    await queryClient.invalidateQueries()
     return response.data
-  }, [])
+  }, [queryClient])
 
   const selectEvent = useCallback((eventId: string | null) => {
     setSelectedEventId(eventId)

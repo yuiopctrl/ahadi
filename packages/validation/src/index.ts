@@ -123,6 +123,7 @@ export const eventSetupSchema = z
 export const onboardingPayloadSchema = z
   .object({
     planCode: planCodeSchema,
+    onboardingIntent: z.enum(['FIRST_TENANT', 'CREATE_ADDITIONAL_TENANT']).optional().default('FIRST_TENANT'),
     betaInvitationCode: nullableTextSchema(64),
     idempotencyKey: z.string().uuid(),
   })

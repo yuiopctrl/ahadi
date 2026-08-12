@@ -33,7 +33,10 @@ export const router = createBrowserRouter([
   },
   {
     element: <OnboardingRoute />,
-    children: [{ path: '/onboarding', element: <AuthPage mode="onboarding" title="Onboarding" subtitle="Confirm your tenant profile and event defaults." /> }],
+    children: [
+      { path: '/onboarding', element: <AuthPage mode="onboarding" title="Onboarding" subtitle="Confirm your tenant profile and event defaults." /> },
+      { path: '/organizations/new', element: <AuthPage mode="onboarding" title="Create another organization" subtitle="This organization will have its own events, users, settings and subscription." /> },
+    ],
   },
   {
     element: <AuthenticatedRoute />,

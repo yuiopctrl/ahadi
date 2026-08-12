@@ -12,6 +12,7 @@ import { MoneyDisplay, StatusBadge } from '../components/ui'
 import { PinEntry, canSubmitPin } from '../components/pin-entry'
 
 type AuthMode = 'login' | 'otp' | 'pin' | 'register' | 'onboarding' | 'selectTenant' | 'workspace'
+type OnboardingIntent = 'FIRST_TENANT' | 'CREATE_ADDITIONAL_TENANT'
 
 interface AuthPageProps {
   title: string
@@ -21,6 +22,7 @@ interface AuthPageProps {
 
 const phoneDraftKey = 'ahadi:verification-phone'
 const onboardingDraftKey = 'ahadi:onboarding-draft'
+const additionalOrganizationDraftKey = 'ahadi:additional-organization-draft'
 const postAuthDestinationKey = 'ahadi:post-auth-destination'
 
 interface OnboardingDraft {
@@ -206,6 +208,8 @@ function LoginPage({ title, subtitle, mode }: Pick<AuthPageProps, 'title' | 'sub
       if (location.pathname.startsWith('/platform')) {
         const requestedPlatformPath = routeState?.from?.pathname?.startsWith('/platform') ? routeState.from.pathname : '/platform'
         localStorage.setItem(postAuthDestinationKey, requestedPlatformPath === '/platform/login' ? '/platform' : requestedPlatformPath)
+      } else if (routeState?.from?.pathname === '/organizations/new') {
+        localStorage.setItem(postAuthDestinationKey, '/organizations/new')
       } else if (location.pathname === '/register') {
         localStorage.setItem(postAuthDestinationKey, '/onboarding')
       } else {
@@ -431,11 +435,15 @@ function PinPage({ title, subtitle }: Pick<AuthPageProps, 'title' | 'subtitle'>)
 
 function OnboardingPage() {
   const navigate = useNavigate()
+  const location = useLocation()
   const session = useSessionStore()
+  const intent: OnboardingIntent = location.pathname === '/organizations/new' ? 'CREATE_ADDITIONAL_TENANT' : 'FIRST_TENANT'
+  const draftKey = intent === 'CREATE_ADDITIONAL_TENANT' ? additionalOrganizationDraftKey : onboardingDraftKey
+  const currentTenantId = session.selectedTenantId
   const [step, setStep] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const [draft, setDraft] = useState<OnboardingDraft>(() => {
-    const stored = localStorage.getItem(onboardingDraftKey)
+    const stored = localStorage.getItem(draftKey)
     return stored ? ({ ...defaultDraft, ...JSON.parse(stored) } as OnboardingDraft) : defaultDraft
   })
   const plansQuery = useQuery({
@@ -452,13 +460,14 @@ function OnboardingPage() {
   const isRegistrationPaused = registrationMode === 'PAUSED'
 
   useEffect(() => {
-    localStorage.setItem(onboardingDraftKey, JSON.stringify(draft))
-  }, [draft])
+    localStorage.setItem(draftKey, JSON.stringify(draft))
+  }, [draft, draftKey])
 
   const mutation = useMutation({
     mutationFn: async () => {
       const payload: OnboardingPayload = {
         planCode: draft.planCode,
+        onboardingIntent: intent,
         tenantName: draft.tenantName,
         tenantPhone: draft.tenantPhone || session.userContext?.profile?.phoneE164 || '',
         tenantEmail: draft.tenantEmail || null,
@@ -482,7 +491,7 @@ function OnboardingPage() {
       return api.completeOnboarding(parsedPayload.data)
     },
     onSuccess: async (result) => {
-      localStorage.removeItem(onboardingDraftKey)
+      localStorage.removeItem(draftKey)
       await session.refreshContext()
       const onboardingResult = result as { tenant_id?: string; tenantId?: string; event_id?: string; eventId?: string }
       const tenantId = onboardingResult.tenant_id ?? onboardingResult.tenantId
@@ -497,6 +506,17 @@ function OnboardingPage() {
 
   const setField = <K extends keyof OnboardingDraft>(key: K, value: OnboardingDraft[K]) => setDraft((current) => ({ ...current, [key]: value }))
   const steps = ['Package', 'Organization', 'Admin', 'Event', 'Review']
+  const heading = intent === 'CREATE_ADDITIONAL_TENANT' ? 'Create another organization' : steps[step]
+  const subtext = intent === 'CREATE_ADDITIONAL_TENANT' ? 'This organization will have its own events, users, settings and subscription.' : null
+
+  function cancelOnboarding() {
+    localStorage.removeItem(draftKey)
+    if (intent === 'CREATE_ADDITIONAL_TENANT') {
+      navigate(currentTenantId ? '/app' : '/select-tenant', { replace: true })
+      return
+    }
+    navigate('/login', { replace: true })
+  }
 
   return (
     <main className="onboarding-layout">
@@ -504,7 +524,8 @@ function OnboardingPage() {
         <header className="onboarding-header">
           <div>
             <p className="eyebrow">Step {step + 1} of 5</p>
-            <h1>{steps[step]}</h1>
+            <h1>{heading}</h1>
+            {subtext ? <p>{subtext}</p> : null}
           </div>
           <div className="progress-dots" aria-label="Onboarding progress">
             {steps.map((item, index) => (
@@ -596,12 +617,13 @@ function OnboardingPage() {
           Back
         </button>
         {step < 4 ? (
-          <button type="button" disabled={isRegistrationPaused || (step === 0 && isInviteOnly && !draft.betaInvitationCode.trim())} onClick={() => setStep((value) => Math.min(4, value + 1))}>Continue</button>
+          <button className="primary-button" type="button" disabled={isRegistrationPaused || (step === 0 && isInviteOnly && !draft.betaInvitationCode.trim())} onClick={() => setStep((value) => Math.min(4, value + 1))}>Continue</button>
         ) : (
-          <button type="button" disabled={!draft.confirmed || mutation.isPending || isRegistrationPaused || (isInviteOnly && !draft.betaInvitationCode.trim())} onClick={() => mutation.mutate()}>
-            {mutation.isPending ? 'Creating...' : 'Create Account'}
+          <button className="primary-button" type="button" disabled={!draft.confirmed || mutation.isPending || isRegistrationPaused || (isInviteOnly && !draft.betaInvitationCode.trim())} onClick={() => mutation.mutate()}>
+            {mutation.isPending ? 'Creating...' : intent === 'CREATE_ADDITIONAL_TENANT' ? 'Create Organization' : 'Create Account'}
           </button>
         )}
+        <button type="button" disabled={mutation.isPending} onClick={cancelOnboarding}>Cancel</button>
       </div>
     </main>
   )
@@ -633,6 +655,12 @@ function WorkspaceChooserPage({ title, subtitle }: Pick<AuthPageProps, 'title' |
         <button type="button" className="tenant-card" onClick={() => void openOrganization()}>
           <strong>Organization</strong>
           <span>Manage events, contacts, pledges and payments.</span>
+        </button>
+      ) : null}
+      {canOpenTenant ? (
+        <button type="button" className="tenant-card" onClick={() => navigate('/organizations/new')}>
+          <strong>Create another organization</strong>
+          <span>Start a separate organization with its own package, data and settings.</span>
         </button>
       ) : null}
       {canOpenPlatform ? (
@@ -674,7 +702,7 @@ function TenantSelectionPage({ title, subtitle }: Pick<AuthPageProps, 'title' | 
       <div className="tenant-card-stack">
         {memberships.map((membership) => (
           <button type="button" className="tenant-card" key={membership.tenantId} onClick={() => void chooseTenant(membership)}>
-            <strong>{membership.tenantName}</strong>
+            <strong>{membership.tenantId === session.selectedTenantId ? `✓ ${membership.tenantName}` : membership.tenantName}</strong>
             <span>{membership.tenantCode} · {membership.subscription?.status ?? 'No subscription'}</span>
             <small>{membership.roles.join(', ') || 'Member'} · {membership.accessibleEvents.filter((event) => event.status === 'ACTIVE').length} active events</small>
             <StatusBadge tone={membership.tenantStatus === 'ACTIVE' || membership.tenantStatus === 'TRIAL' ? 'success' : 'danger'}>{membership.tenantStatus}</StatusBadge>
@@ -687,11 +715,9 @@ function TenantSelectionPage({ title, subtitle }: Pick<AuthPageProps, 'title' | 
           <span>No organization workspace is linked to this account yet.</span>
         </div>
       ) : null}
-      {!memberships.length ? (
-        <button type="button" className="text-button" onClick={() => navigate('/register')}>
-          Create a new organization
-        </button>
-      ) : null}
+      <button type="button" className="text-button" onClick={() => navigate(memberships.length ? '/organizations/new' : '/register')}>
+        {memberships.length ? 'Create another organization' : 'Create a new organization'}
+      </button>
       {hasActivePlatformAccess(session.userContext) ? (
         <button type="button" className="text-button" onClick={() => navigate('/platform')}>
           Open Platform Console

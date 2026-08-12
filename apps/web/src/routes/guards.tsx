@@ -136,6 +136,8 @@ export function PlatformGuard() {
 
 export function OnboardingRoute() {
   const session = useSessionStore()
+  const location = useLocation()
+  const isAdditionalOrganizationFlow = location.pathname === '/organizations/new'
   if (session.isLoading) {
     return <FullScreenLoading />
   }
@@ -143,14 +145,14 @@ export function OnboardingRoute() {
     return <FullScreenBootstrapError message={session.bootstrapError} />
   }
   if (!session.session) {
-    return <Navigate to="/login" replace />
+    return <Navigate to="/login" replace state={{ from: location }} />
   }
   if (session.lockState.isLocked) {
-    return <Navigate to="/setup-pin" replace />
+    return <Navigate to="/setup-pin" replace state={{ postAuthDestination: location.pathname }} />
   }
-  if (hasActivePlatformRole(session.userContext)) {
+  if (!isAdditionalOrganizationFlow && hasActivePlatformRole(session.userContext)) {
     return <Navigate to="/platform" replace />
   }
   const hasAccessibleTenant = Boolean(session.userContext?.tenantMemberships.some(isAccessibleTenantMembership))
-  return session.userContext?.onboardingCompleted && hasAccessibleTenant ? <Navigate to="/select-tenant" replace /> : <Outlet />
+  return !isAdditionalOrganizationFlow && session.userContext?.onboardingCompleted && hasAccessibleTenant ? <Navigate to="/select-tenant" replace /> : <Outlet />
 }

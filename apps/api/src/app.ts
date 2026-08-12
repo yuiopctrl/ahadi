@@ -1887,6 +1887,7 @@ app.post('/api/v1/onboarding/complete', requireAuth, async (request, response, n
     }
     const { data, error } = await client.rpc('rpc_complete_tenant_onboarding', {
       p_plan_code: input.planCode,
+      p_onboarding_intent: input.onboardingIntent,
       p_tenant_name: input.tenantName,
       p_tenant_phone: input.tenantPhone,
       p_first_event_name: input.firstEventName,

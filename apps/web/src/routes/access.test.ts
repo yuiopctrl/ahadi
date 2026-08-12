@@ -136,6 +136,13 @@ test('tenant-only unfinished account without tenant does not fall into onboardin
   assert.equal(getPostAuthDestination(tenantOnly, '/onboarding'), '/onboarding')
 })
 
+test('explicit additional organization route survives authenticated redirects', () => {
+  const tenantOwner = context({ tenantMemberships: [tenantMembership()] })
+  assert.equal(resolveAuthenticatedDestination({ context: tenantOwner, requestedPath: '/organizations/new' }), '/organizations/new')
+  assert.equal(getPostAuthDestination(tenantOwner, '/organizations/new'), '/organizations/new')
+  assert.notEqual(resolveAuthenticatedDestination({ context: tenantOwner, requestedPath: '/organizations/new' }), '/select-tenant')
+})
+
 test('platform route guard depends on platform status and permissions, not tenant permissions', () => {
   const platformOnly = activePlatformOwner({ tenantMemberships: [] })
   assert.equal(getPlatformRouteDenialReason(platformOnly), null)

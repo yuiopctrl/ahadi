@@ -434,7 +434,7 @@ a {
   left: 0;
   z-index: 40;
   display: grid;
-  grid-template-columns: 0.8fr 1.2fr;
+  grid-template-columns: 0.8fr 1.2fr 0.8fr;
   gap: 10px;
   border-top: 1px solid var(--color-border);
   background: rgba(255, 255, 255, 0.98);
@@ -454,7 +454,7 @@ a {
   font-weight: 900;
 }
 
-.onboarding-action-bar button:last-child {
+.onboarding-action-bar .primary-button {
   border-color: var(--color-primary);
   background: var(--color-primary);
   color: white;

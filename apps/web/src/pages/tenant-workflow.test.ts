@@ -11,6 +11,9 @@ const apiClient = readFileSync(new URL('../lib/api.ts', import.meta.url), 'utf8'
 const routes = readFileSync(new URL('../routes/index.tsx', import.meta.url), 'utf8')
 const authPage = readFileSync(new URL('./auth.tsx', import.meta.url), 'utf8')
 const guards = readFileSync(new URL('../routes/guards.tsx', import.meta.url), 'utf8')
+const access = readFileSync(new URL('../routes/access.ts', import.meta.url), 'utf8')
+const validation = readFileSync(new URL('../../../../packages/validation/src/index.ts', import.meta.url), 'utf8')
+const onboardingIntentMigration = readFileSync(new URL('../../../../supabase/migrations/053_additional_tenant_onboarding_intent.sql', import.meta.url), 'utf8')
 
 test('tenant workflow does not depend on hardcoded demo event ids', () => {
   assert.doesNotMatch(navigation, /event_001/)
@@ -70,6 +73,33 @@ test('registration intent survives OTP and allows onboarding after tenant reset'
   assert.match(guards, /onboardingCompleted && hasAccessibleTenant/)
 })
 
+test('existing users can explicitly create another organization without old tenant redirect', () => {
+  assert.match(routes, /path: '\/organizations\/new'/)
+  assert.match(guards, /const isAdditionalOrganizationFlow = location\.pathname === '\/organizations\/new'/)
+  assert.match(guards, /!isAdditionalOrganizationFlow && session\.userContext\?\.onboardingCompleted && hasAccessibleTenant/)
+  assert.match(guards, /state=\{\{ from: location \}\}/)
+  assert.match(authPage, /routeState\?\.from\?\.pathname === '\/organizations\/new'/)
+  assert.match(authPage, /localStorage\.setItem\(postAuthDestinationKey, '\/organizations\/new'\)/)
+  assert.match(authPage, /type OnboardingIntent = 'FIRST_TENANT' \| 'CREATE_ADDITIONAL_TENANT'/)
+  assert.match(authPage, /onboardingIntent: intent/)
+  assert.match(authPage, /additionalOrganizationDraftKey/)
+  assert.match(authPage, /Create another organization/)
+  assert.match(authPage, /This organization will have its own events, users, settings and subscription\./)
+  assert.match(access, /requestedPath === '\/onboarding' \|\| requestedPath === '\/organizations\/new'/)
+})
+
+test('additional organization onboarding uses the same tenant transaction with explicit DB intent', () => {
+  assert.match(validation, /onboardingIntent: z\.enum\(\['FIRST_TENANT', 'CREATE_ADDITIONAL_TENANT'\]\)/)
+  assert.match(apiClient, /completeOnboarding: \(payload: OnboardingPayload\)/)
+  assert.match(onboardingIntentMigration, /p_onboarding_intent text default 'FIRST_TENANT'/)
+  assert.match(onboardingIntentMigration, /normalized_intent not in \('FIRST_TENANT', 'CREATE_ADDITIONAL_TENANT'\)/)
+  assert.match(onboardingIntentMigration, /if normalized_intent = 'FIRST_TENANT'[\s\S]+ONBOARDING_ALREADY_COMPLETED/)
+  assert.match(onboardingIntentMigration, /insert into public\.tenant_subscriptions \([\s\S]+tenant_id/)
+  assert.match(onboardingIntentMigration, /insert into public\.tenant_users \(tenant_id, user_id, status, is_owner, joined_at\)/)
+  assert.match(onboardingIntentMigration, /insert into public\.event_user_assignments/)
+  assert.doesNotMatch(onboardingIntentMigration, /platform_users/)
+})
+
 test('platform auth routes preserve platform context instead of falling into tenant onboarding', () => {
   assert.match(guards, /const isPlatformRoute = location\.pathname === '\/platform' \|\| location\.pathname\.startsWith\('\/platform\/'\)/)
   assert.match(guards, /<Navigate to=\{isPlatformRoute \? '\/platform\/login' : '\/login'\}/)
@@ -93,12 +123,22 @@ test('auth entry points are explicit and dual-role generic login uses workspace 
   assert.match(authPage, /Create a new organization/)
   assert.match(authPage, /Platform administration/)
   assert.match(authPage, /I already have an account/)
+  assert.match(authPage, /Create another organization/)
 })
 
 test('tenant guard does not use onboarding as the fallback for accounts without tenants', () => {
   assert.match(sessionStore, /export type AccessState/)
   assert.match(authPage, /No organization workspace is linked to this account yet\./)
   assert.match(authPage, /Create a new organization/)
+})
+
+test('organization switcher exposes active tenant switching and creation from inside the app', () => {
+  assert.match(navigation, /Switch Organization/)
+  assert.match(navigation, /Create another organization/)
+  assert.match(authPage, /membership\.tenantId === session\.selectedTenantId \? `✓ \$\{membership\.tenantName\}`/)
+  assert.match(authPage, /navigate\(memberships\.length \? '\/organizations\/new' : '\/register'\)/)
+  assert.match(sessionStore, /queryClient\.cancelQueries\(\)/)
+  assert.match(sessionStore, /queryClient\.invalidateQueries\(\)/)
 })
 
 test('financial pages render explicit empty and error states instead of blank lists', () => {
