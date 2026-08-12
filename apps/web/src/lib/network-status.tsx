@@ -1,105 +1,58 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
-import { env } from './env'
 
-export type NetworkStatus = 'checking' | 'online' | 'offline'
+export type NetworkState = 'CHECKING' | 'ONLINE' | 'OFFLINE'
 
-const healthCheckTimeoutMs = 3500
-const healthCheckRetryDelayMs = 700
-
-export function healthUrl(apiUrl = env.apiUrl) {
-  return `${apiUrl.replace(/\/$/, '')}/health`
-}
-
-export function isConnectivityFailure(error: unknown) {
-  return error instanceof TypeError || error instanceof DOMException && error.name === 'AbortError'
-}
-
-async function fetchHealth(signal: AbortSignal) {
-  const response = await fetch(healthUrl(), {
-    cache: 'no-store',
-    credentials: 'omit',
-    headers: { Accept: 'application/json' },
-    signal,
-  })
-  return response.status
-}
-
-export async function resolveNetworkStatus({
+export function resolveNetworkStatus({
   online = typeof navigator === 'undefined' ? true : navigator.onLine,
-  attempts = 2,
-  retryDelayMs = healthCheckRetryDelayMs,
-  timeoutMs = healthCheckTimeoutMs,
 }: {
   online?: boolean
-  attempts?: number
-  retryDelayMs?: number
-  timeoutMs?: number
-} = {}): Promise<NetworkStatus> {
-  if (!online) {
-    return 'offline'
-  }
-
-  for (let attempt = 0; attempt < attempts; attempt += 1) {
-    const controller = new AbortController()
-    const timeout = window.setTimeout(() => controller.abort(), timeoutMs)
-    try {
-      await fetchHealth(controller.signal)
-      return 'online'
-    } catch (error) {
-      if (!isConnectivityFailure(error)) {
-        return 'online'
-      }
-      if (attempt < attempts - 1) {
-        await new Promise((resolve) => window.setTimeout(resolve, retryDelayMs))
-      }
-    } finally {
-      window.clearTimeout(timeout)
-    }
-  }
-
-  return 'offline'
+} = {}): NetworkState {
+  return online ? 'ONLINE' : 'OFFLINE'
 }
 
-function initialNetworkStatus(): NetworkStatus {
-  if (typeof navigator !== 'undefined' && navigator.onLine === false) {
-    return 'offline'
-  }
-  return 'checking'
+function initialNetworkStatus(): NetworkState {
+  return 'CHECKING'
 }
+
+const offlineEventGraceMs = 2500
 
 export function NetworkStatusProvider({ children }: { children: ReactNode }) {
-  const [status, setStatus] = useState<NetworkStatus>(initialNetworkStatus)
+  const [status, setStatus] = useState<NetworkState>(initialNetworkStatus)
+  const offlineTimerRef = useRef<number | null>(null)
 
   useEffect(() => {
-    let cancelled = false
-
-    async function check() {
-      if (typeof navigator !== 'undefined' && navigator.onLine === false) {
-        setStatus('offline')
-        return
-      }
-      setStatus('checking')
-      const nextStatus = await resolveNetworkStatus()
-      if (!cancelled) {
-        setStatus(nextStatus)
+    function clearOfflineTimer() {
+      if (offlineTimerRef.current !== null) {
+        window.clearTimeout(offlineTimerRef.current)
+        offlineTimerRef.current = null
       }
     }
 
     function handleOnline() {
-      void check()
+      clearOfflineTimer()
+      setStatus('ONLINE')
     }
 
     function handleOffline() {
-      setStatus('offline')
+      clearOfflineTimer()
+      offlineTimerRef.current = window.setTimeout(() => {
+        if (navigator.onLine === false) {
+          setStatus('OFFLINE')
+        }
+      }, offlineEventGraceMs)
     }
 
     window.addEventListener('online', handleOnline)
     window.addEventListener('offline', handleOffline)
-    void check()
+    if (resolveNetworkStatus() === 'OFFLINE') {
+      handleOffline()
+    } else {
+      handleOnline()
+    }
 
     return () => {
-      cancelled = true
+      clearOfflineTimer()
       window.removeEventListener('online', handleOnline)
       window.removeEventListener('offline', handleOffline)
     }
@@ -107,7 +60,7 @@ export function NetworkStatusProvider({ children }: { children: ReactNode }) {
 
   return (
     <>
-      {status === 'offline' ? (
+      {status === 'OFFLINE' ? (
         <div className="offline-banner" role="status">
           <strong>Ahadi is offline</strong>
           <span>Reconnect to continue managing pledges and payments.</span>

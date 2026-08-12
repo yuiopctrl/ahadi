@@ -65,8 +65,10 @@ test('production CORS and public health endpoint support web refresh checks', ()
 
 test('platform middleware authorizes from platform permissions and returns 403 for inactive or missing permission', () => {
   assert.match(types, /\| 'PLATFORM_ACCESS_DENIED'/)
-  assert.match(middleware, /context\.platformStatus !== 'ACTIVE'/)
+  assert.match(middleware, /activePlatformRoles = new Set/)
+  assert.match(middleware, /!context \|\| context\.platformStatus !== 'ACTIVE' \|\| !context\.platformRole \|\| !activePlatformRoles\.has\(context\.platformRole\)/)
   assert.match(middleware, /context\.platformPermissions\.includes\(permission\)/)
+  assert.doesNotMatch(middleware, /context\?\.isPlatformUser|context\.isPlatformUser/)
   assert.doesNotMatch(middleware, /context\.platformRole === 'PLATFORM_ADMIN'/)
 })
 

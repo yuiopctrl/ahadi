@@ -6,7 +6,7 @@ import type { OnboardingPayload, SubscriptionPlan, TenantMembershipContext, User
 import { normalizeTanzaniaPhone, onboardingPayloadSchema, setupPinSchema } from '@ahadi/validation'
 import { api, ApiClientError } from '../lib/api'
 import { supabase } from '../lib/supabase'
-import { getPostAuthDestination } from '../routes/access'
+import { getPostAuthDestination, hasActivePlatformAccess } from '../routes/access'
 import { getSingleActiveMembership, useSessionStore } from '../stores/session-store'
 import { MoneyDisplay, StatusBadge } from '../components/ui'
 import { PinEntry, canSubmitPin } from '../components/pin-entry'
@@ -617,7 +617,7 @@ function TenantSelectionPage({ title, subtitle }: Pick<AuthPageProps, 'title' | 
           </button>
         ))}
       </div>
-      {session.userContext?.isPlatformUser && session.userContext.platformStatus === 'ACTIVE' && session.userContext.platformPermissions.includes('platform.dashboard.view') ? (
+      {hasActivePlatformAccess(session.userContext) ? (
         <button type="button" className="text-button" onClick={() => navigate('/platform')}>
           Open Platform Console
         </button>

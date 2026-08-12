@@ -76,6 +76,9 @@ test('platform auth routes preserve platform context instead of falling into ten
   assert.match(guards, /resolveAuthenticatedDestination\(\{ context: session\.userContext, requestedPath: location\.pathname \}\)/)
   assert.match(authPage, /requestedPlatformPath = routeState\?\.from\?\.pathname\?\.startsWith\('\/platform'\) \? routeState\.from\.pathname : '\/platform'/)
   assert.match(authPage, /requestedPlatformPath === '\/platform\/login' \? '\/platform' : requestedPlatformPath/)
+  assert.match(authPage, /hasActivePlatformAccess\(session\.userContext\)/)
+  assert.match(routes, /element: <PlatformGuard \/>/)
+  assert.match(guards, /export function PlatformGuard\(\)/)
   assert.match(guards, /export function PinUnlockedRoute\(\)[\s\S]+const location = useLocation\(\)[\s\S]+postAuthDestination = location\.pathname\.startsWith\('\/platform'\) \? location\.pathname : null[\s\S]+<Navigate to="\/setup-pin" replace state=\{postAuthDestination \? \{ postAuthDestination \} : undefined\}/)
 })
 

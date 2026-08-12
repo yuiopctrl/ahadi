@@ -3,7 +3,7 @@ cd /home/deploy/apps/ahadi
 git pull
 pnpm install --frozen-lockfile
 
-pnpm --filter @ahadi/web build
+VITE_BUILD_COMMIT="$(git rev-parse --short HEAD)" pnpm --filter web build
 pnpm --filter @ahadi/api build
 pnpm --filter @ahadi/worker build
 

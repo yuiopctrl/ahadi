@@ -12,6 +12,14 @@ function FullScreenLoading() {
   )
 }
 
+function FullScreenBootstrapError({ message }: { message: string | null }) {
+  return (
+    <PageContainer narrow>
+      <ErrorState title="Unable to restore session" message={message ?? 'Please refresh or sign in again.'} />
+    </PageContainer>
+  )
+}
+
 function postAuthDestination() {
   return '/verify-otp'
 }
@@ -21,6 +29,9 @@ export function PublicRoute() {
   const location = useLocation()
   if (session.isLoading) {
     return <FullScreenLoading />
+  }
+  if (session.bootstrapState === 'ERROR') {
+    return <FullScreenBootstrapError message={session.bootstrapError} />
   }
   if (!session.session) {
     return <Outlet />
@@ -38,6 +49,9 @@ export function AuthenticatedRoute() {
   if (session.isLoading) {
     return <FullScreenLoading />
   }
+  if (session.bootstrapState === 'ERROR') {
+    return <FullScreenBootstrapError message={session.bootstrapError} />
+  }
   if (session.session) {
     return <Outlet />
   }
@@ -51,6 +65,9 @@ export function PinUnlockedRoute() {
   if (session.isLoading) {
     return <FullScreenLoading />
   }
+  if (session.bootstrapState === 'ERROR') {
+    return <FullScreenBootstrapError message={session.bootstrapError} />
+  }
   if (!session.session) {
     return <Navigate to="/login" replace />
   }
@@ -63,6 +80,9 @@ export function PinUnlockedRoute() {
 
 export function TenantRoute() {
   const session = useSessionStore()
+  if (session.bootstrapState === 'ERROR') {
+    return <FullScreenBootstrapError message={session.bootstrapError} />
+  }
   const redirectTarget = getTenantRouteRedirect(
     session.userContext,
     session.selectedTenantId,
@@ -74,9 +94,12 @@ export function TenantRoute() {
   return <Outlet />
 }
 
-export function PlatformOwnerRoute() {
+export function PlatformGuard() {
   const session = useSessionStore()
   const location = useLocation()
+  if (session.bootstrapState === 'ERROR') {
+    return <FullScreenBootstrapError message={session.bootstrapError} />
+  }
   const redirectTarget = getPlatformRouteRedirect(session.userContext)
   if (import.meta.env.DEV) {
     console.info('Ahadi platform access diagnostic', buildPlatformAccessDiagnostic({
@@ -101,6 +124,9 @@ export function OnboardingRoute() {
   const session = useSessionStore()
   if (session.isLoading) {
     return <FullScreenLoading />
+  }
+  if (session.bootstrapState === 'ERROR') {
+    return <FullScreenBootstrapError message={session.bootstrapError} />
   }
   if (!session.session) {
     return <Navigate to="/login" replace />

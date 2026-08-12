@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import test from 'node:test'
 import type { UserContext } from '@ahadi/types'
 import { getSingleActiveMembership } from './session-selection'
+
+const sessionStore = readFileSync(new URL('./session-store.tsx', import.meta.url), 'utf8')
 
 function contextWithMemberships(count: number): UserContext {
   return {
@@ -34,4 +37,21 @@ test('single active tenant can be selected automatically', () => {
 
 test('several active tenants require explicit selection', () => {
   assert.equal(getSingleActiveMembership(contextWithMemberships(2)), null)
+})
+
+test('session bootstrap separates auth restoration, access resolution, tenant restoration and errors', () => {
+  assert.match(sessionStore, /export type BootstrapState =[\s\S]+'INITIALIZING'[\s\S]+'RESTORING_SESSION'[\s\S]+'RESOLVING_ACCESS'[\s\S]+'READY'[\s\S]+'UNAUTHENTICATED'[\s\S]+'ERROR'/)
+  assert.match(sessionStore, /setBootstrapState\('RESTORING_SESSION'\)/)
+  assert.match(sessionStore, /setBootstrapState\('RESOLVING_ACCESS'\)/)
+  assert.match(sessionStore, /setBootstrapState\('READY'\)/)
+  assert.match(sessionStore, /setBootstrapState\('UNAUTHENTICATED'\)/)
+  assert.match(sessionStore, /setBootstrapState\('ERROR'\)/)
+  assert.match(sessionStore, /restoreTenantSelection/)
+  assert.match(sessionStore, /!hasActivePlatformIdentity\(context\) && activeMemberships\.length === 1/)
+  assert.match(sessionStore, /isExpiredSessionError\(error\)[\s\S]+supabase\.auth\.signOut\(\)/)
+})
+
+test('session bootstrap never persists offline or backend availability state', () => {
+  assert.doesNotMatch(sessionStore, /isOffline|networkStatus|backendUnavailable|lastNetworkFailure/)
+  assert.doesNotMatch(sessionStore, /localStorage\.setItem\([^)]*OFFLINE|sessionStorage\.setItem\([^)]*OFFLINE/)
 })

@@ -6,6 +6,8 @@ import { AppError } from './errors.js'
 import { calculateTenantAccessState } from './access.js'
 import { createUserSupabase, supabasePublic } from './supabase.js'
 
+const activePlatformRoles = new Set(['PLATFORM_OWNER', 'PLATFORM_ADMIN', 'PLATFORM_SUPPORT', 'PLATFORM_AUDITOR'])
+
 export function requestIdMiddleware(request: Request, response: Response, next: NextFunction) {
   request.requestId = request.header('X-Request-ID') ?? randomUUID()
   response.setHeader('X-Request-ID', request.requestId)
@@ -52,7 +54,7 @@ export async function loadUserContext(request: Request, _response: Response, nex
 export function requirePlatformPermission(permission: string) {
   return (request: Request, _response: Response, next: NextFunction) => {
     const context = request.auth?.context
-    if (!context?.isPlatformUser || context.platformStatus !== 'ACTIVE') {
+    if (!context || context.platformStatus !== 'ACTIVE' || !context.platformRole || !activePlatformRoles.has(context.platformRole)) {
       next(new AppError('PLATFORM_ACCESS_DENIED', 'Active platform access is required'))
       return
     }

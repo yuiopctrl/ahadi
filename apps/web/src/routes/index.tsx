@@ -5,7 +5,7 @@ import { TenantAppLayout } from '../layouts/TenantAppLayout'
 import { AuthPage } from '../pages/auth'
 import { PlatformBetaPage, PlatformBillingGatewaysPage, PlatformBillingReconciliationPage, PlatformErrorsPage, PlatformFeaturesPage, PlatformFeedbackPage, PlatformPage, PlatformSmsProvidersPage, PlatformSupportPage, PlatformTenantDetailPage } from '../pages/platform'
 import { ContactDetailPage, ContactsPage, EventDetailPage, MemberDetailPage, OutstandingPage, PaymentEntryPage, ReceiptPage, ReportsPage, ShareListPage, SmsHistoryPage, SmsSettingsPage, SmsTemplatesPage, TenantBillingInvoicePage, TenantBillingPage, TenantDashboardPage, TenantHelpPage, TenantListPage, TenantSettingsPage, TenantUsersPage } from '../pages/tenant'
-import { AuthenticatedRoute, OnboardingRoute, PinUnlockedRoute, PlatformOwnerRoute, PublicRoute, TenantRoute } from './guards'
+import { AuthenticatedRoute, OnboardingRoute, PinUnlockedRoute, PlatformGuard, PublicRoute, TenantRoute } from './guards'
 
 export const router = createBrowserRouter([
   {
@@ -85,7 +85,7 @@ export const router = createBrowserRouter([
             ],
           },
           {
-            element: <PlatformOwnerRoute />,
+            element: <PlatformGuard />,
             children: [
               {
                 path: '/platform',
