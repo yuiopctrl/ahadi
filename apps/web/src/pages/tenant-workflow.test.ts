@@ -75,7 +75,8 @@ test('registration intent survives OTP and allows onboarding after tenant reset'
 
 test('existing users can explicitly create another organization without old tenant redirect', () => {
   assert.match(routes, /path: '\/organizations\/new'/)
-  assert.match(guards, /const isAdditionalOrganizationFlow = location\.pathname === '\/organizations\/new'/)
+  assert.match(guards, /const normalizedPath = location\.pathname\.replace/)
+  assert.match(guards, /const isAdditionalOrganizationFlow = normalizedPath === '\/organizations\/new'/)
   assert.match(guards, /!isAdditionalOrganizationFlow && session\.userContext\?\.onboardingCompleted && hasAccessibleTenant/)
   assert.match(guards, /state=\{\{ from: location \}\}/)
   assert.match(authPage, /routeState\?\.from\?\.pathname === '\/organizations\/new'/)
@@ -85,7 +86,7 @@ test('existing users can explicitly create another organization without old tena
   assert.match(authPage, /additionalOrganizationDraftKey/)
   assert.match(authPage, /Create another organization/)
   assert.match(authPage, /This organization will have its own events, users, settings and subscription\./)
-  assert.match(access, /requestedPath === '\/onboarding' \|\| requestedPath === '\/organizations\/new'/)
+  assert.match(access, /normalizedRequestedPath === '\/onboarding' \|\| normalizedRequestedPath === '\/organizations\/new'/)
 })
 
 test('additional organization onboarding uses the same tenant transaction with explicit DB intent', () => {
@@ -137,6 +138,8 @@ test('organization switcher exposes active tenant switching and creation from in
   assert.match(navigation, /Create another organization/)
   assert.match(authPage, /membership\.tenantId === session\.selectedTenantId \? `✓ \$\{membership\.tenantName\}`/)
   assert.match(authPage, /navigate\(memberships\.length \? '\/organizations\/new' : '\/register'\)/)
+  const tenantSelectionPage = authPage.slice(authPage.indexOf('function TenantSelectionPage'), authPage.indexOf('function Input'))
+  assert.doesNotMatch(tenantSelectionPage, /getSingleActiveMembership\(session\.userContext\)[\s\S]+navigate\('\/app'/)
   assert.match(sessionStore, /queryClient\.cancelQueries\(\)/)
   assert.match(sessionStore, /queryClient\.invalidateQueries\(\)/)
 })

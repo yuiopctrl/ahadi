@@ -437,7 +437,7 @@ function OnboardingPage() {
   const navigate = useNavigate()
   const location = useLocation()
   const session = useSessionStore()
-  const intent: OnboardingIntent = location.pathname === '/organizations/new' ? 'CREATE_ADDITIONAL_TENANT' : 'FIRST_TENANT'
+  const intent: OnboardingIntent = location.pathname.replace(/\/+$/, '') === '/organizations/new' ? 'CREATE_ADDITIONAL_TENANT' : 'FIRST_TENANT'
   const draftKey = intent === 'CREATE_ADDITIONAL_TENANT' ? additionalOrganizationDraftKey : onboardingDraftKey
   const currentTenantId = session.selectedTenantId
   const [step, setStep] = useState(0)
@@ -680,13 +680,6 @@ function TenantSelectionPage({ title, subtitle }: Pick<AuthPageProps, 'title' | 
   const navigate = useNavigate()
   const session = useSessionStore()
   const memberships = session.userContext?.tenantMemberships.filter((membership) => membership.membershipStatus === 'ACTIVE' && (membership.tenantStatus === 'ACTIVE' || membership.tenantStatus === 'TRIAL')) ?? []
-
-  useEffect(() => {
-    const singleTenant = getSingleActiveMembership(session.userContext)
-    if (singleTenant) {
-      void session.selectTenant(singleTenant.tenantId).then(() => navigate('/app', { replace: true }))
-    }
-  }, [navigate, session])
 
   async function chooseTenant(membership: TenantMembershipContext) {
     await session.selectTenant(membership.tenantId)

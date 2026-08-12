@@ -90,9 +90,10 @@ export function hasDualWorkspaceAccess(context: UserContext | null): boolean {
 }
 
 function inferRequestedContext(path: string | null | undefined): RequestedAppContext {
-  if (!path) return 'default'
-  if (path === '/platform' || path.startsWith('/platform/')) return 'platform'
-  if (path === '/app' || path.startsWith('/app/') || path === '/onboarding' || path === '/organizations/new' || path === '/register') return 'tenant'
+  const normalizedPath = path?.replace(/\/+$/, '') || null
+  if (!normalizedPath) return 'default'
+  if (normalizedPath === '/platform' || normalizedPath.startsWith('/platform/')) return 'platform'
+  if (normalizedPath === '/app' || normalizedPath.startsWith('/app/') || normalizedPath === '/onboarding' || normalizedPath === '/organizations/new' || normalizedPath === '/register') return 'tenant'
   return 'default'
 }
 
@@ -112,12 +113,13 @@ export function resolveAuthenticatedDestination({
   requestedPath?: string | null
   requestedContext?: RequestedAppContext
 }): string {
-  const appContext = requestedContext ?? inferRequestedContext(requestedPath)
+  const normalizedRequestedPath = requestedPath?.replace(/\/+$/, '') || null
+  const appContext = requestedContext ?? inferRequestedContext(normalizedRequestedPath)
   if (appContext === 'platform') {
-    return platformDestination(requestedPath)
+    return platformDestination(normalizedRequestedPath)
   }
-  if (requestedPath === '/onboarding' || requestedPath === '/organizations/new') {
-    return requestedPath
+  if (normalizedRequestedPath === '/onboarding' || normalizedRequestedPath === '/organizations/new') {
+    return normalizedRequestedPath
   }
   if (appContext === 'tenant') {
     return tenantDestination(context)

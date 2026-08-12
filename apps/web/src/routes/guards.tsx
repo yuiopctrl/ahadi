@@ -137,7 +137,8 @@ export function PlatformGuard() {
 export function OnboardingRoute() {
   const session = useSessionStore()
   const location = useLocation()
-  const isAdditionalOrganizationFlow = location.pathname === '/organizations/new'
+  const normalizedPath = location.pathname.replace(/\/+$/, '')
+  const isAdditionalOrganizationFlow = normalizedPath === '/organizations/new'
   if (session.isLoading) {
     return <FullScreenLoading />
   }
@@ -148,7 +149,7 @@ export function OnboardingRoute() {
     return <Navigate to="/login" replace state={{ from: location }} />
   }
   if (session.lockState.isLocked) {
-    return <Navigate to="/setup-pin" replace state={{ postAuthDestination: location.pathname }} />
+    return <Navigate to="/setup-pin" replace state={{ postAuthDestination: normalizedPath || location.pathname }} />
   }
   if (!isAdditionalOrganizationFlow && hasActivePlatformRole(session.userContext)) {
     return <Navigate to="/platform" replace />

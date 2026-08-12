@@ -139,6 +139,7 @@ test('tenant-only unfinished account without tenant does not fall into onboardin
 test('explicit additional organization route survives authenticated redirects', () => {
   const tenantOwner = context({ tenantMemberships: [tenantMembership()] })
   assert.equal(resolveAuthenticatedDestination({ context: tenantOwner, requestedPath: '/organizations/new' }), '/organizations/new')
+  assert.equal(resolveAuthenticatedDestination({ context: tenantOwner, requestedPath: '/organizations/new/' }), '/organizations/new')
   assert.equal(getPostAuthDestination(tenantOwner, '/organizations/new'), '/organizations/new')
   assert.notEqual(resolveAuthenticatedDestination({ context: tenantOwner, requestedPath: '/organizations/new' }), '/select-tenant')
 })
