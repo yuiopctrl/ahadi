@@ -2,7 +2,7 @@ import { Navigate, Outlet, useLocation } from 'react-router-dom'
 import { ErrorState, LoadingState, PageContainer } from '../components/ui'
 import { useSessionStore } from '../stores/session-store'
 import { isAccessibleTenantMembership } from '../stores/session-selection'
-import { buildPlatformAccessDiagnostic, getPlatformRouteRedirect, getTenantRouteRedirect, hasActivePlatformRole, resolveAuthenticatedDestination } from './access'
+import { buildPlatformAccessDiagnostic, getPlatformRouteDenialReason, getPlatformRouteRedirect, getTenantRouteRedirect, hasActivePlatformRole, resolveAuthenticatedDestination } from './access'
 
 function FullScreenLoading() {
   return (
@@ -22,6 +22,19 @@ function FullScreenBootstrapError({ message }: { message: string | null }) {
 
 function postAuthDestination() {
   return '/verify-otp'
+}
+
+function platformAccessMessage(reason: string | null) {
+  if (reason === 'platform_user_not_found') {
+    return 'This authenticated account does not have a platform_users record. Create or fix that row for this user before opening the platform console.'
+  }
+  if (reason === 'platform_user_not_active') {
+    return 'This account has a platform user record, but it is not ACTIVE.'
+  }
+  if (reason === 'platform_permission_missing') {
+    return 'This account has an active platform role, but it is missing the required platform.dashboard.view permission.'
+  }
+  return 'This account is not allowed to open the platform console.'
 }
 
 export function PublicRoute() {
@@ -100,6 +113,7 @@ export function PlatformGuard() {
   if (session.bootstrapState === 'ERROR') {
     return <FullScreenBootstrapError message={session.bootstrapError} />
   }
+  const denialReason = getPlatformRouteDenialReason(session.userContext)
   const redirectTarget = getPlatformRouteRedirect(session.userContext)
   if (import.meta.env.DEV) {
     console.info('Ahadi platform access diagnostic', buildPlatformAccessDiagnostic({
@@ -113,7 +127,7 @@ export function PlatformGuard() {
   if (redirectTarget) {
     return (
       <PageContainer narrow>
-        <ErrorState title="Platform access is not enabled" message="This account does not have an ACTIVE platform_users row with platform.dashboard.view permission." />
+        <ErrorState title="Platform access is not enabled" message={platformAccessMessage(denialReason)} />
       </PageContainer>
     )
   }

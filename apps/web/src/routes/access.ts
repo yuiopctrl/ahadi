@@ -4,6 +4,35 @@ import { getSingleActiveMembership, isAccessibleTenantMembership } from '../stor
 
 const requiredPlatformDashboardPermission = 'platform.dashboard.view'
 const activePlatformRoles = new Set(['PLATFORM_OWNER', 'PLATFORM_ADMIN', 'PLATFORM_SUPPORT', 'PLATFORM_AUDITOR'])
+const platformRolePermissions: Record<string, string[]> = {
+  PLATFORM_ADMIN: [
+    'platform.dashboard.view',
+    'platform.tenants.view',
+    'platform.tenants.manage',
+    'platform.plans.view',
+    'platform.plans.manage',
+    'platform.subscriptions.manage',
+    'platform.sms.view',
+    'platform.beta.view',
+    'platform.beta.manage',
+    'platform.support.view',
+    'platform.support.manage',
+    'platform.feedback.view',
+    'platform.features.view',
+    'platform.features.manage',
+    'platform.system_errors.view',
+  ],
+  PLATFORM_SUPPORT: [
+    'platform.dashboard.view',
+    'platform.tenants.view',
+    'platform.sms.view',
+    'platform.support.view',
+    'platform.support.manage',
+    'platform.feedback.view',
+    'platform.system_errors.view',
+  ],
+  PLATFORM_AUDITOR: ['platform.dashboard.view', 'platform.audit.view', 'platform.system_errors.view'],
+}
 export type RequestedAppContext = 'platform' | 'tenant' | 'default'
 
 export interface PlatformAccessDiagnostic {
@@ -20,7 +49,16 @@ export interface PlatformAccessDiagnostic {
 }
 
 export function hasActivePlatformAccess(context: UserContext | null, permission = requiredPlatformDashboardPermission): boolean {
-  return Boolean(hasActivePlatformRole(context) && context?.platformPermissions.includes(permission))
+  if (!hasActivePlatformRole(context)) {
+    return false
+  }
+  if (context?.platformPermissions.includes(permission)) {
+    return true
+  }
+  if (context?.platformRole === 'PLATFORM_OWNER' && permission.startsWith('platform.')) {
+    return true
+  }
+  return Boolean(context?.platformRole && platformRolePermissions[context.platformRole]?.includes(permission))
 }
 
 export function hasActivePlatformRole(context: UserContext | null): boolean {
@@ -93,7 +131,7 @@ export function getPlatformRouteDenialReason(context: UserContext | null, permis
   if (context.platformStatus !== 'ACTIVE') {
     return 'platform_user_not_active'
   }
-  if (!context.platformPermissions.includes(permission)) {
+  if (!hasActivePlatformAccess(context, permission)) {
     return 'platform_permission_missing'
   }
   return null

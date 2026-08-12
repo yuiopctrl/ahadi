@@ -113,6 +113,15 @@ test('active platform role wins even when boolean platform flag is stale', () =>
   assert.equal(getPlatformRouteDenialReason(owner), null)
 })
 
+test('active platform owner wins even when rpc returns stale empty permissions', () => {
+  const owner = activePlatformOwner({ platformPermissions: [] })
+  assert.equal(hasActivePlatformRole(owner), true)
+  assert.equal(hasActivePlatformAccess(owner), true)
+  assert.equal(resolveAuthenticatedDestination({ context: owner, requestedPath: '/platform' }), '/platform')
+  assert.equal(getPlatformRouteRedirect(owner), null)
+  assert.equal(getPlatformRouteDenialReason(owner), null)
+})
+
 test('tenant context still sends unfinished tenant users to onboarding', () => {
   const tenantOnly = context({ onboardingCompleted: false, tenantMemberships: [tenantMembership()] })
   assert.equal(resolveAuthenticatedDestination({ context: tenantOnly, requestedPath: '/app/events' }), '/onboarding')
@@ -127,7 +136,8 @@ test('tenant-only unfinished registration still uses onboarding', () => {
 test('platform route guard depends on platform status and permissions, not tenant permissions', () => {
   const platformOnly = activePlatformOwner({ tenantMemberships: [] })
   assert.equal(getPlatformRouteDenialReason(platformOnly), null)
-  assert.equal(getPlatformRouteDenialReason(activePlatformOwner({ platformPermissions: [] })), 'platform_permission_missing')
+  assert.equal(getPlatformRouteDenialReason(context({ platformRole: 'PLATFORM_OWNER', platformStatus: 'ACTIVE', platformPermissions: [] })), null)
+  assert.equal(getPlatformRouteDenialReason(activePlatformRole('PLATFORM_SUPPORT'), 'platform.sms.manage'), 'platform_permission_missing')
   assert.equal(getPlatformRouteDenialReason(activePlatformOwner({ isPlatformUser: false, platformStatus: 'SUSPENDED' })), 'platform_user_not_active')
   assert.equal(getPlatformRouteDenialReason(activePlatformOwner({ platformStatus: 'SUSPENDED', platformPermissions: ['platform.dashboard.view'] })), 'platform_user_not_active')
 })

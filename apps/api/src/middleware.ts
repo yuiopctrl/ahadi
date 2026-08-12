@@ -7,6 +7,45 @@ import { calculateTenantAccessState } from './access.js'
 import { createUserSupabase, supabasePublic } from './supabase.js'
 
 const activePlatformRoles = new Set(['PLATFORM_OWNER', 'PLATFORM_ADMIN', 'PLATFORM_SUPPORT', 'PLATFORM_AUDITOR'])
+const platformRolePermissions: Record<string, string[]> = {
+  PLATFORM_ADMIN: [
+    'platform.dashboard.view',
+    'platform.tenants.view',
+    'platform.tenants.manage',
+    'platform.plans.view',
+    'platform.plans.manage',
+    'platform.subscriptions.manage',
+    'platform.sms.view',
+    'platform.beta.view',
+    'platform.beta.manage',
+    'platform.support.view',
+    'platform.support.manage',
+    'platform.feedback.view',
+    'platform.features.view',
+    'platform.features.manage',
+    'platform.system_errors.view',
+  ],
+  PLATFORM_SUPPORT: [
+    'platform.dashboard.view',
+    'platform.tenants.view',
+    'platform.sms.view',
+    'platform.support.view',
+    'platform.support.manage',
+    'platform.feedback.view',
+    'platform.system_errors.view',
+  ],
+  PLATFORM_AUDITOR: ['platform.dashboard.view', 'platform.audit.view', 'platform.system_errors.view'],
+}
+
+function hasPlatformPermission(context: UserContext, permission: string) {
+  if (context.platformPermissions.includes(permission)) {
+    return true
+  }
+  if (context.platformRole === 'PLATFORM_OWNER' && permission.startsWith('platform.')) {
+    return true
+  }
+  return Boolean(context.platformRole && platformRolePermissions[context.platformRole]?.includes(permission))
+}
 
 export function requestIdMiddleware(request: Request, response: Response, next: NextFunction) {
   request.requestId = request.header('X-Request-ID') ?? randomUUID()
@@ -58,7 +97,7 @@ export function requirePlatformPermission(permission: string) {
       next(new AppError('PLATFORM_ACCESS_DENIED', 'Active platform access is required'))
       return
     }
-    if (!context.platformPermissions.includes(permission)) {
+    if (!hasPlatformPermission(context, permission)) {
       next(new AppError('PLATFORM_ACCESS_DENIED', `Missing platform permission: ${permission}`))
       return
     }
