@@ -1,11 +1,9 @@
 import { z } from 'zod'
 
 const envSchema = z.object({
-  VITE_APP_ENV: z.enum(['development', 'staging', 'production']).default('development'),
+  VITE_APP_ENV: z.enum(['development', 'staging', 'production']),
   VITE_APP_VERSION: z.string().trim().min(1).default('0.9.0-beta'),
-  VITE_BUILD_COMMIT: z.string().trim().min(1).default('local'),
-  VITE_BUILD_SHA: z.string().trim().min(1).optional(),
-  VITE_API_URL: z.string().url().default('http://localhost:4000/api/v1'),
+  VITE_API_URL: z.string().url(),
   VITE_SUPABASE_URL: z.string().url().optional(),
   VITE_SUPABASE_PUBLISHABLE_KEY: z.string().min(1).optional(),
 })
@@ -19,8 +17,6 @@ if (!parsed.success) {
 export const env = {
   appEnv: parsed.data.VITE_APP_ENV,
   appVersion: parsed.data.VITE_APP_VERSION,
-  buildCommit: parsed.data.VITE_BUILD_SHA ?? parsed.data.VITE_BUILD_COMMIT,
-  buildSha: parsed.data.VITE_BUILD_SHA ?? parsed.data.VITE_BUILD_COMMIT,
   apiUrl: parsed.data.VITE_API_URL,
   supabaseUrl: parsed.data.VITE_SUPABASE_URL ?? 'https://placeholder.supabase.co',
   supabasePublishableKey: parsed.data.VITE_SUPABASE_PUBLISHABLE_KEY ?? 'placeholder-publishable-key',
