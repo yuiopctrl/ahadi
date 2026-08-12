@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import type { UserContext } from '@ahadi/types'
-import { buildPlatformAccessDiagnostic, getPlatformRouteDenialReason, getPlatformRouteRedirect, getPostAuthDestination, getPublicRouteRedirect, getTenantRouteRedirect, hasActivePlatformAccess, hasActivePlatformRole, resolveAuthenticatedDestination } from './access'
+import { buildPlatformAccessDiagnostic, getPlatformRouteDenialReason, getPlatformRouteRedirect, getPostAuthDestination, getPublicRouteRedirect, getTenantRouteRedirect, hasActivePlatformAccess, hasActivePlatformRole, hasDualWorkspaceAccess, resolveAuthenticatedDestination } from './access'
 
 function context(overrides: Partial<UserContext> = {}): UserContext {
   return {
@@ -74,9 +74,10 @@ test('dual platform and tenant owner can access both app contexts', () => {
   const dualRole = activePlatformOwner({ tenantMemberships: [tenantMembership()] })
   assert.equal(getPlatformRouteRedirect(dualRole), null)
   assert.equal(getTenantRouteRedirect(dualRole, 'tenant_1', false), null)
-  assert.equal(getPublicRouteRedirect(dualRole), '/platform')
+  assert.equal(hasDualWorkspaceAccess(dualRole), true)
+  assert.equal(getPublicRouteRedirect(dualRole), '/choose-workspace')
   assert.equal(getPostAuthDestination(dualRole, '/platform'), '/platform')
-  assert.equal(getPostAuthDestination(dualRole, null), '/platform')
+  assert.equal(getPostAuthDestination(dualRole, null), '/choose-workspace')
 })
 
 test('active platform roles bypass onboarding after authentication', () => {
@@ -102,6 +103,7 @@ test('platform-only user without tenant membership keeps platform destination', 
   assert.equal(support.tenantMemberships.length, 0)
   assert.equal(resolveAuthenticatedDestination({ context: support, requestedPath: '/platform' }), '/platform')
   assert.equal(resolveAuthenticatedDestination({ context: support, requestedContext: 'default' }), '/platform')
+  assert.notEqual(resolveAuthenticatedDestination({ context: support, requestedContext: 'default' }), '/onboarding')
 })
 
 test('active platform role wins even when boolean platform flag is stale', () => {
@@ -127,9 +129,10 @@ test('tenant context still sends unfinished tenant users to onboarding', () => {
   assert.equal(resolveAuthenticatedDestination({ context: tenantOnly, requestedPath: '/app/events' }), '/onboarding')
 })
 
-test('tenant-only unfinished registration still uses onboarding', () => {
+test('tenant-only unfinished account without tenant does not fall into onboarding from generic login', () => {
   const tenantOnly = context({ onboardingCompleted: false, tenantMemberships: [] })
   assert.equal(hasActivePlatformRole(tenantOnly), false)
+  assert.equal(getPostAuthDestination(tenantOnly, null), '/select-tenant')
   assert.equal(getPostAuthDestination(tenantOnly, '/onboarding'), '/onboarding')
 })
 

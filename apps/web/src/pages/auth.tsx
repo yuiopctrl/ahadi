@@ -6,12 +6,12 @@ import type { OnboardingPayload, SubscriptionPlan, TenantMembershipContext, User
 import { normalizeTanzaniaPhone, onboardingPayloadSchema, setupPinSchema } from '@ahadi/validation'
 import { api, ApiClientError } from '../lib/api'
 import { supabase } from '../lib/supabase'
-import { getPostAuthDestination, hasActivePlatformAccess } from '../routes/access'
+import { getPostAuthDestination, hasActivePlatformAccess, hasTenantWorkspaceAccess } from '../routes/access'
 import { getSingleActiveMembership, useSessionStore } from '../stores/session-store'
 import { MoneyDisplay, StatusBadge } from '../components/ui'
 import { PinEntry, canSubmitPin } from '../components/pin-entry'
 
-type AuthMode = 'login' | 'otp' | 'pin' | 'register' | 'onboarding' | 'selectTenant'
+type AuthMode = 'login' | 'otp' | 'pin' | 'register' | 'onboarding' | 'selectTenant' | 'workspace'
 
 interface AuthPageProps {
   title: string
@@ -186,10 +186,13 @@ export function AuthPage({ title, subtitle, mode }: AuthPageProps) {
   if (mode === 'selectTenant') {
     return <TenantSelectionPage title={title} subtitle={subtitle} />
   }
-  return <LoginPage title={title} subtitle={mode === 'register' ? 'Create your first tenant after phone verification.' : subtitle} />
+  if (mode === 'workspace') {
+    return <WorkspaceChooserPage title={title} subtitle={subtitle} />
+  }
+  return <LoginPage title={title} subtitle={mode === 'register' ? subtitle : subtitle} mode={mode} />
 }
 
-function LoginPage({ title, subtitle }: Pick<AuthPageProps, 'title' | 'subtitle'>) {
+function LoginPage({ title, subtitle, mode }: Pick<AuthPageProps, 'title' | 'subtitle' | 'mode'>) {
   const navigate = useNavigate()
   const location = useLocation()
   const routeState = location.state as { from?: { pathname?: string } } | null
@@ -228,6 +231,26 @@ function LoginPage({ title, subtitle }: Pick<AuthPageProps, 'title' | 'subtitle'
       <button className="primary-button" type="button" disabled={mutation.isPending} onClick={() => mutation.mutate()}>
         {mutation.isPending ? 'Sending...' : 'Continue'}
       </button>
+      {mode === 'login' && location.pathname === '/login' ? (
+        <>
+          <button className="text-button" type="button" onClick={() => navigate('/register')}>
+            Create a new organization
+          </button>
+          <button className="text-button" type="button" onClick={() => navigate('/platform/login')}>
+            Platform administration
+          </button>
+        </>
+      ) : null}
+      {location.pathname === '/platform/login' ? (
+        <button className="text-button" type="button" onClick={() => navigate('/login')}>
+          Existing Ahadi account login
+        </button>
+      ) : null}
+      {mode === 'register' ? (
+        <button className="text-button" type="button" onClick={() => navigate('/login')}>
+          I already have an account
+        </button>
+      ) : null}
       <p className="privacy-note">We use your phone number only to secure your Ahadi account and send requested verification messages.</p>
     </form>
   )
@@ -584,6 +607,47 @@ function OnboardingPage() {
   )
 }
 
+function WorkspaceChooserPage({ title, subtitle }: Pick<AuthPageProps, 'title' | 'subtitle'>) {
+  const navigate = useNavigate()
+  const session = useSessionStore()
+  const canOpenTenant = hasTenantWorkspaceAccess(session.userContext)
+  const canOpenPlatform = hasActivePlatformAccess(session.userContext)
+
+  async function openOrganization() {
+    const singleTenant = getSingleActiveMembership(session.userContext)
+    if (singleTenant) {
+      await session.selectTenant(singleTenant.tenantId)
+      navigate('/app', { replace: true })
+      return
+    }
+    navigate('/select-tenant', { replace: true })
+  }
+
+  return (
+    <form className="auth-form" onSubmit={(event) => event.preventDefault()}>
+      <div>
+        <h1>{title}</h1>
+        <p>{subtitle}</p>
+      </div>
+      {canOpenTenant ? (
+        <button type="button" className="tenant-card" onClick={() => void openOrganization()}>
+          <strong>Organization</strong>
+          <span>Manage events, contacts, pledges and payments.</span>
+        </button>
+      ) : null}
+      {canOpenPlatform ? (
+        <button type="button" className="tenant-card" onClick={() => navigate('/platform', { replace: true })}>
+          <strong>Platform Administration</strong>
+          <span>Manage Ahadi tenants and platform operations.</span>
+        </button>
+      ) : null}
+      {!canOpenTenant && !canOpenPlatform ? (
+        <p className="field-error">No workspace access is enabled for this account.</p>
+      ) : null}
+    </form>
+  )
+}
+
 function TenantSelectionPage({ title, subtitle }: Pick<AuthPageProps, 'title' | 'subtitle'>) {
   const navigate = useNavigate()
   const session = useSessionStore()
@@ -617,6 +681,17 @@ function TenantSelectionPage({ title, subtitle }: Pick<AuthPageProps, 'title' | 
           </button>
         ))}
       </div>
+      {!memberships.length ? (
+        <div className="security-note">
+          <CheckCircle2 size={20} aria-hidden />
+          <span>No organization workspace is linked to this account yet.</span>
+        </div>
+      ) : null}
+      {!memberships.length ? (
+        <button type="button" className="text-button" onClick={() => navigate('/register')}>
+          Create a new organization
+        </button>
+      ) : null}
       {hasActivePlatformAccess(session.userContext) ? (
         <button type="button" className="text-button" onClick={() => navigate('/platform')}>
           Open Platform Console

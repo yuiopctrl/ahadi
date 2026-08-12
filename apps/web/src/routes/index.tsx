@@ -14,10 +14,10 @@ export const router = createBrowserRouter([
       {
         element: <AuthLayout />,
         children: [
-          { path: '/login', element: <AuthPage mode="login" title="Welcome back" subtitle="Sign in with your phone number to continue." /> },
-          { path: '/platform/login', element: <AuthPage mode="login" title="Platform Login" subtitle="Sign in with your phone number to open the platform console." /> },
+          { path: '/login', element: <AuthPage mode="login" title="Sign in to Ahadi" subtitle="For existing Ahadi users with an organization, platform role, or both." /> },
+          { path: '/platform/login', element: <AuthPage mode="login" title="Ahadi Platform Administration" subtitle="Sign in to manage Ahadi tenants and platform operations." /> },
           { path: '/verify-otp', element: <AuthPage mode="otp" title="Verify OTP" subtitle="Enter the code sent to your phone." /> },
-          { path: '/register', element: <AuthPage mode="register" title="Register" subtitle="Create a tenant workspace for your committee." /> },
+          { path: '/register', element: <AuthPage mode="register" title="Create your Ahadi organization" subtitle="Start a new organization for events, pledges and payments." /> },
         ],
       },
     ],
@@ -44,6 +44,10 @@ export const router = createBrowserRouter([
           {
             path: '/select-tenant',
             element: <AuthPage mode="selectTenant" title="Select Tenant" subtitle="Choose the tenant workspace to open." />,
+          },
+          {
+            path: '/choose-workspace',
+            element: <AuthPage mode="workspace" title="Choose Workspace" subtitle="Choose where you want to work in Ahadi." />,
           },
           {
             element: <TenantRoute />,

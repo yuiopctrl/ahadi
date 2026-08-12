@@ -82,6 +82,25 @@ test('platform auth routes preserve platform context instead of falling into ten
   assert.match(guards, /export function PinUnlockedRoute\(\)[\s\S]+const location = useLocation\(\)[\s\S]+postAuthDestination = location\.pathname\.startsWith\('\/platform'\) \? location\.pathname : null[\s\S]+<Navigate to="\/setup-pin" replace state=\{postAuthDestination \? \{ postAuthDestination \} : undefined\}/)
 })
 
+test('auth entry points are explicit and dual-role generic login uses workspace chooser', () => {
+  assert.match(routes, /path: '\/login', element: <AuthPage mode="login" title="Sign in to Ahadi"/)
+  assert.match(routes, /path: '\/platform\/login', element: <AuthPage mode="login" title="Ahadi Platform Administration"/)
+  assert.match(routes, /path: '\/register', element: <AuthPage mode="register" title="Create your Ahadi organization"/)
+  assert.match(routes, /path: '\/choose-workspace'[\s\S]+mode="workspace"/)
+  assert.match(authPage, /function WorkspaceChooserPage/)
+  assert.match(authPage, /Organization[\s\S]+Manage events, contacts, pledges and payments/)
+  assert.match(authPage, /Platform Administration[\s\S]+Manage Ahadi tenants and platform operations/)
+  assert.match(authPage, /Create a new organization/)
+  assert.match(authPage, /Platform administration/)
+  assert.match(authPage, /I already have an account/)
+})
+
+test('tenant guard does not use onboarding as the fallback for accounts without tenants', () => {
+  assert.match(sessionStore, /export type AccessState/)
+  assert.match(authPage, /No organization workspace is linked to this account yet\./)
+  assert.match(authPage, /Create a new organization/)
+})
+
 test('financial pages render explicit empty and error states instead of blank lists', () => {
   for (const copy of [
     'No members have been added to this event yet.',

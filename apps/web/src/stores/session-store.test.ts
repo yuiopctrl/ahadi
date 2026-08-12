@@ -41,6 +41,10 @@ test('several active tenants require explicit selection', () => {
 
 test('session bootstrap separates auth restoration, access resolution, tenant restoration and errors', () => {
   assert.match(sessionStore, /export type BootstrapState =[\s\S]+'INITIALIZING'[\s\S]+'RESTORING_SESSION'[\s\S]+'RESOLVING_ACCESS'[\s\S]+'READY'[\s\S]+'UNAUTHENTICATED'[\s\S]+'ERROR'/)
+  assert.match(sessionStore, /export type AuthStatus = 'INITIALIZING' \| 'AUTHENTICATED' \| 'UNAUTHENTICATED' \| 'ERROR'/)
+  assert.match(sessionStore, /export type AccessState = \{[\s\S]+platform:[\s\S]+tenant:/)
+  assert.match(sessionStore, /authStatusForBootstrap/)
+  assert.match(sessionStore, /accessStateForBootstrap/)
   assert.match(sessionStore, /setBootstrapState\('RESTORING_SESSION'\)/)
   assert.match(sessionStore, /setBootstrapState\('RESOLVING_ACCESS'\)/)
   assert.match(sessionStore, /setBootstrapState\('READY'\)/)

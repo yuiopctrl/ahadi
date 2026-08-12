@@ -23,8 +23,22 @@ export type BootstrapState =
   | 'UNAUTHENTICATED'
   | 'ERROR'
 
+export type AuthStatus = 'INITIALIZING' | 'AUTHENTICATED' | 'UNAUTHENTICATED' | 'ERROR'
+
+export type AccessState = {
+  platform: {
+    status: 'LOADING' | 'ACTIVE' | 'INACTIVE' | 'NONE' | 'ERROR'
+    role?: UserContext['platformRole']
+  }
+  tenant: {
+    status: 'LOADING' | 'READY' | 'ONBOARDING_REQUIRED' | 'NONE' | 'ERROR'
+  }
+}
+
 interface SessionStore {
   isLoading: boolean
+  authStatus: AuthStatus
+  accessState: AccessState
   bootstrapState: BootstrapState
   bootstrapError: string | null
   session: Session | null
@@ -55,6 +69,35 @@ function hasActivePlatformIdentity(context: UserContext | null) {
 
 function isBootstrapLoading(state: BootstrapState) {
   return state === 'INITIALIZING' || state === 'RESTORING_SESSION' || state === 'RESOLVING_ACCESS'
+}
+
+function authStatusForBootstrap(state: BootstrapState, session: Session | null): AuthStatus {
+  if (isBootstrapLoading(state)) return 'INITIALIZING'
+  if (state === 'ERROR') return 'ERROR'
+  if (state === 'UNAUTHENTICATED') return 'UNAUTHENTICATED'
+  return session ? 'AUTHENTICATED' : 'UNAUTHENTICATED'
+}
+
+function accessStateForBootstrap(state: BootstrapState, context: UserContext | null): AccessState {
+  if (isBootstrapLoading(state)) {
+    return { platform: { status: 'LOADING' }, tenant: { status: 'LOADING' } }
+  }
+  if (state === 'ERROR') {
+    return { platform: { status: 'ERROR' }, tenant: { status: 'ERROR' } }
+  }
+  const activeMemberships = context?.tenantMemberships.filter((membership) => membership.membershipStatus === 'ACTIVE') ?? []
+  return {
+    platform: hasActivePlatformIdentity(context)
+      ? { status: 'ACTIVE', role: context?.platformRole }
+      : context?.platformRole || context?.platformStatus
+        ? { status: 'INACTIVE', role: context.platformRole }
+        : { status: 'NONE' },
+    tenant: activeMemberships.length
+      ? context?.onboardingCompleted
+        ? { status: 'READY' }
+        : { status: 'ONBOARDING_REQUIRED' }
+      : { status: 'NONE' },
+  }
 }
 
 function isExpiredSessionError(error: unknown) {
@@ -267,10 +310,14 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   }, [clearTenant, refreshContext, resetLockState, restoreTenantSelection])
 
   const isLoading = isBootstrapLoading(bootstrapState)
+  const authStatus = authStatusForBootstrap(bootstrapState, session)
+  const accessState = accessStateForBootstrap(bootstrapState, userContext)
 
   const value = useMemo<SessionStore>(
     () => ({
       isLoading,
+      authStatus,
+      accessState,
       bootstrapState,
       bootstrapError,
       session,
@@ -285,7 +332,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       clearTenant,
       signOut,
     }),
-    [bootstrapError, bootstrapState, clearTenant, isLoading, lockState, refreshContext, selectEvent, selectTenant, selectedEventId, selectedTenantContext, selectedTenantId, session, signOut, userContext],
+    [accessState, authStatus, bootstrapError, bootstrapState, clearTenant, isLoading, lockState, refreshContext, selectEvent, selectTenant, selectedEventId, selectedTenantContext, selectedTenantId, session, signOut, userContext],
   )
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>
