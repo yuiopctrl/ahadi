@@ -17,6 +17,7 @@ const access = readFileSync(new URL('../routes/access.ts', import.meta.url), 'ut
 const validation = readFileSync(new URL('../../../../packages/validation/src/index.ts', import.meta.url), 'utf8')
 const onboardingIntentMigration = readFileSync(new URL('../../../../supabase/migrations/053_additional_tenant_onboarding_intent.sql', import.meta.url), 'utf8')
 const phonePinMigration = readFileSync(new URL('../../../../supabase/migrations/055_phone_pin_login_uses_auth_phone.sql', import.meta.url), 'utf8')
+const tenantUserManagementMigration = readFileSync(new URL('../../../../supabase/migrations/056_tenant_user_invitations_and_change_pin.sql', import.meta.url), 'utf8')
 const apiServer = readFileSync(new URL('../../../../apps/api/src/app.ts', import.meta.url), 'utf8')
 
 test('tenant workflow does not depend on hardcoded demo event ids', () => {
@@ -81,10 +82,11 @@ test('mobile more opens an overflow menu instead of linking directly to settings
   assert.doesNotMatch(navigation, /to: '\/app\/settings', label: 'More'/)
   assert.match(navigation, /MobileBottomNav\(\{ event, showPlatformLink/)
   assert.match(navigation, /mobile-more-menu/)
-  assert.match(navigation, /overflowNav\(event, showPlatformLink\)/)
-  for (const label of ['Pledges', 'Outstanding', 'Share List', 'Messages', 'Reports', 'Users', 'Settings']) {
+  assert.match(navigation, /overflowNav\(event, showPlatformLink, canManageUsers\)/)
+  for (const label of ['Pledges', 'Outstanding', 'Share List', 'Messages', 'Reports', 'Users & Roles', 'Change PIN', 'Settings']) {
     assert.match(navigation, new RegExp(label))
   }
+  assert.match(navigation, /permissions\.has\('users\.invite'\) \|\| permissions\.has\('users\.manage_roles'\) \|\| permissions\.has\('users\.suspend'\)/)
 })
 
 test('registration intent survives OTP and allows onboarding after tenant reset', () => {
@@ -191,9 +193,35 @@ test('organization switcher exposes active tenant switching and creation from in
   assert.match(sessionStore, /queryClient\.cancelQueries\(\)/)
   assert.match(sessionStore, /queryClient\.invalidateQueries\(\)/)
   assert.match(sessionStore, /queryClient\.clear\(\)/)
-  assert.match(tenantHeader, /Logout/)
+  assert.match(tenantHeader, /Change PIN/)
+  assert.match(tenantHeader, /Sign Out/)
+  assert.doesNotMatch(tenantHeader, /Account Settings/)
   assert.match(tenantLayout, /await session\.signOut\(\)/)
   assert.match(tenantLayout, /navigate\('\/login', \{ replace: true \}\)/)
+})
+
+test('change pin and tenant user invitations reuse existing auth and tenant roles', () => {
+  assert.match(routes, /path: 'change-pin', element: <TenantChangePinPage \/>/)
+  assert.match(validation, /export const changePinSchema/)
+  assert.match(apiClient, /changePin: \(currentPin: string, newPin: string, confirmNewPin: string\)/)
+  assert.match(apiServer, /app\.post\('\/api\/v1\/auth\/change-pin', strictLimiter, requireAuth/)
+  assert.match(apiServer, /rpc\('rpc_change_my_pin'/)
+  assert.match(tenantUserManagementMigration, /create table if not exists public\.tenant_invitations/)
+  assert.match(tenantUserManagementMigration, /create or replace function public\.rpc_change_my_pin\(p_current_pin text, p_new_pin text\)/)
+  assert.match(tenantUserManagementMigration, /credential\.pin_hash <> %1\$I\.crypt\(p_current_pin, credential\.pin_hash\)/)
+  assert.match(tenantUserManagementMigration, /new_hash := %1\$I\.crypt\(p_new_pin, %1\$I\.gen_salt\('bf', 10\)\)/)
+  assert.match(tenantUserManagementMigration, /create or replace function public\.rpc_invite_tenant_user/)
+  assert.match(tenantUserManagementMigration, /USER_ALREADY_IN_TENANT/)
+  assert.match(tenantUserManagementMigration, /LAST_OWNER_REQUIRED/)
+  assert.match(tenantUserManagementMigration, /public\.rpc_accept_my_tenant_invitations/)
+  assert.match(apiServer, /app\.post\('\/api\/v1\/users\/invitations'/)
+  assert.match(apiServer, /app\.patch\('\/api\/v1\/users\/:tenantUserId\/role'/)
+  assert.match(apiServer, /rpc_set_tenant_user_status/)
+  assert.match(tenantPage, /title="Users & Roles"/)
+  assert.match(tenantPage, /Invite User/)
+  assert.match(tenantPage, /Resend Invitation/)
+  assert.match(tenantPage, /roleLabel/)
+  assert.doesNotMatch(tenantPage.slice(tenantPage.indexOf('export function TenantUsersPage'), tenantPage.indexOf('export function TenantChangePinPage')), /disabled>Invite User/)
 })
 
 test('financial pages render explicit empty and error states instead of blank lists', () => {

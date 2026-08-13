@@ -73,12 +73,23 @@ export async function requireAuth(request: Request, _response: Response, next: N
   }
 }
 
+function isMissingInvitationAcceptanceRpc(error: unknown) {
+  if (typeof error !== 'object' || error === null) return false
+  const code = 'code' in error && typeof error.code === 'string' ? error.code : ''
+  const message = 'message' in error && typeof error.message === 'string' ? error.message.toLowerCase() : ''
+  return code === 'PGRST202' || code === '42883' || message.includes('rpc_accept_my_tenant_invitations')
+}
+
 export async function loadUserContext(request: Request, _response: Response, next: NextFunction) {
   try {
     if (!request.auth) {
       throw new AppError('SESSION_REQUIRED')
     }
     const client = createUserSupabase(request.auth.accessToken)
+    const acceptInvitations = await client.rpc('rpc_accept_my_tenant_invitations')
+    if (acceptInvitations.error && !isMissingInvitationAcceptanceRpc(acceptInvitations.error)) {
+      throw acceptInvitations.error
+    }
     const { data, error } = await client.rpc('rpc_get_my_context')
     if (error) {
       throw error

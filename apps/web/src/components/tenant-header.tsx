@@ -1,4 +1,4 @@
-import { CalendarDays, CheckCircle2, Clock3, LogOut, Settings, Target, User } from 'lucide-react'
+import { CalendarDays, CheckCircle2, Clock3, KeyRound, LogOut, Target, User } from 'lucide-react'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import type { User as SupabaseUser } from '@supabase/supabase-js'
@@ -22,7 +22,7 @@ function metadataName(user: SupabaseUser | null, key: string) {
 function resolveDisplayName(context: UserContext | null, user: SupabaseUser | null) {
   const fullName = context?.profile?.fullName?.trim() || metadataName(user, 'full_name')
   const displayName = metadataName(user, 'display_name') || metadataName(user, 'displayName') || metadataName(user, 'name')
-  return fullName || displayName || context?.profile?.phoneE164 || user?.phone || context?.profile?.email || user?.email || 'User'
+  return fullName || displayName || context?.profile?.email || user?.email || context?.profile?.phoneE164 || user?.phone || 'User'
 }
 
 function initialsFor(name: string) {
@@ -31,10 +31,6 @@ function initialsFor(name: string) {
   const second = parts[1] ?? ''
   const initials = second ? `${first[0] ?? ''}${second[0] ?? ''}` : first.slice(0, 2)
   return (initials || 'U').toUpperCase()
-}
-
-function roleFor(context: UserContext | null, tenant: TenantMembershipContext | null) {
-  return context?.platformRole ?? tenant?.roles[0] ?? 'Member'
 }
 
 function EventMetadata({ event }: { event: EventSummary | null }) {
@@ -72,7 +68,6 @@ export function UnifiedTenantHeader({
   const [accountOpen, setAccountOpen] = useState(false)
   const [eventDetailsOpen, setEventDetailsOpen] = useState(false)
   const name = resolveDisplayName(userContext, sessionUser)
-  const role = roleFor(userContext, tenant)
 
   function closeMenus() {
     setAccountOpen(false)
@@ -105,7 +100,6 @@ export function UnifiedTenantHeader({
             <span className="account-avatar">{initialsFor(name)}</span>
             <span className="account-copy">
               <strong>{name}</strong>
-              <small>{role}</small>
             </span>
           </button>
           {accountOpen ? (
@@ -113,13 +107,13 @@ export function UnifiedTenantHeader({
               <button className="account-menu-backdrop" type="button" aria-label="Close account menu" onClick={() => setAccountOpen(false)} />
               <div className="account-menu-popover" role="menu" aria-label="Account">
                 <Link to="/app/settings" role="menuitem" onClick={() => setAccountOpen(false)}><User size={17} aria-hidden /> My Profile</Link>
-                <Link to="/app/settings" role="menuitem" onClick={() => setAccountOpen(false)}><Settings size={17} aria-hidden /> Account Settings</Link>
+                <Link to="/app/change-pin" role="menuitem" onClick={() => setAccountOpen(false)}><KeyRound size={17} aria-hidden /> Change PIN</Link>
                 <button type="button" role="menuitem" onClick={() => {
                   setAccountOpen(false)
                   onLogout()
                 }}>
                   <LogOut size={17} aria-hidden />
-                  Logout
+                  Sign Out
                 </button>
               </div>
             </>

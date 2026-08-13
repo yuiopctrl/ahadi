@@ -88,6 +88,21 @@ export const verifyPinSchema = z.object({
   pin: z.string().regex(/^[0-9]{4}$/),
 })
 
+export const changePinSchema = z
+  .object({
+    currentPin: z.string().regex(/^[0-9]{4}$/),
+    newPin: z.string().regex(/^[0-9]{4}$/),
+    confirmNewPin: z.string().regex(/^[0-9]{4}$/),
+  })
+  .superRefine((value, context) => {
+    if (isWeakPin(value.newPin)) {
+      context.addIssue({ code: 'custom', path: ['newPin'], message: 'Choose a stronger PIN' })
+    }
+    if (value.newPin !== value.confirmNewPin) {
+      context.addIssue({ code: 'custom', path: ['confirmNewPin'], message: 'PINs do not match' })
+    }
+  })
+
 export const phonePinLoginSchema = z.object({
   phone: tanzaniaPhoneSchema,
   pin: z.string().regex(/^[0-9]{4}$/),

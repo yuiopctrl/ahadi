@@ -96,6 +96,8 @@ export const api = {
       body: JSON.stringify({ phone, token }),
     }),
   setPin: (pin: string, confirmPin: string) => apiFetch<{ ok: boolean }>('/auth/set-pin', { method: 'POST', body: JSON.stringify({ pin, confirmPin }) }),
+  changePin: (currentPin: string, newPin: string, confirmNewPin: string) =>
+    apiFetch<{ ok: boolean; message: string }>('/auth/change-pin', { method: 'POST', body: JSON.stringify({ currentPin, newPin, confirmNewPin }) }),
   verifyPin: (pin: string) => apiFetch<PinVerificationResult>('/auth/verify-pin', { method: 'POST', body: JSON.stringify({ pin }) }),
   hasPin: () => apiFetch<{ hasPin: boolean }>('/auth/has-pin'),
   logout: () => apiFetch<{ ok: boolean }>('/auth/logout', { method: 'POST' }),
@@ -150,6 +152,18 @@ export const api = {
     apiFetch<{ data: Record<string, unknown>[] }>(`/platform/features/${featureKey}/tenants`, { method: 'PUT', body: JSON.stringify(payload) }),
   platformErrors: () => apiFetch<{ data: Record<string, unknown>[] }>('/platform/system/errors'),
   tenantUsers: (tenantId: string) => apiFetch<{ data: Record<string, unknown>[] }>('/users', { tenantId }),
+  inviteTenantUser: (tenantId: string, payload: Record<string, unknown>) =>
+    apiFetch<{ data: Record<string, unknown> }>('/users/invitations', { tenantId, method: 'POST', body: JSON.stringify(payload) }),
+  resendTenantInvitation: (tenantId: string, invitationId: string) =>
+    apiFetch<{ data: Record<string, unknown> }>(`/users/invitations/${invitationId}/resend`, { tenantId, method: 'POST' }),
+  updateTenantUserRole: (tenantId: string, tenantUserId: string, role: string) =>
+    apiFetch<{ data: Record<string, unknown> }>(`/users/${tenantUserId}/role`, { tenantId, method: 'PATCH', body: JSON.stringify({ role }) }),
+  suspendTenantUser: (tenantId: string, tenantUserId: string) =>
+    apiFetch<{ data: Record<string, unknown> }>(`/users/${tenantUserId}/suspend`, { tenantId, method: 'POST' }),
+  reactivateTenantUser: (tenantId: string, tenantUserId: string) =>
+    apiFetch<{ data: Record<string, unknown> }>(`/users/${tenantUserId}/reactivate`, { tenantId, method: 'POST' }),
+  removeTenantUser: (tenantId: string, tenantUserId: string) =>
+    apiFetch<{ data: Record<string, unknown> }>(`/users/${tenantUserId}/remove`, { tenantId, method: 'POST' }),
   settingsSummary: (tenantId: string) => apiFetch<{ data: Record<string, unknown> }>('/settings-summary', { tenantId }),
   billingSummary: (tenantId: string) => apiFetch<{ data: Record<string, unknown> }>('/billing/summary', { tenantId }),
   billingInvoice: (tenantId: string, invoiceId: string) => apiFetch<{ data: Record<string, unknown> }>(`/billing/invoices/${invoiceId}`, { tenantId }),

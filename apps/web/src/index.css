@@ -266,6 +266,16 @@ a {
   font-weight: 800;
 }
 
+.success-message {
+  display: inline-flex;
+  margin: 0;
+  align-items: center;
+  gap: 8px;
+  color: #047857;
+  font-size: 13px;
+  font-weight: 900;
+}
+
 .security-note {
   display: flex;
   gap: 10px;
@@ -737,6 +747,7 @@ a {
 
 .inline-actions a,
 .inline-actions button,
+.inline-actions select,
 .export-format-grid button {
   display: inline-flex;
   min-width: 0;
@@ -751,6 +762,10 @@ a {
   padding: 0 12px;
   font-weight: 800;
   overflow-wrap: anywhere;
+}
+
+.inline-actions select {
+  max-width: 170px;
 }
 
 .export-sheet {

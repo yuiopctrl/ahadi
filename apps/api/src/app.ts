@@ -7,10 +7,12 @@ import { createHash, randomBytes } from 'node:crypto'
 import { z, ZodError } from 'zod'
 import type { ApiErrorCode } from '@ahadi/types'
 import {
+  changePinSchema,
   onboardingPayloadSchema,
   phonePinLoginSchema,
   requestOtpSchema,
   setupPinSchema,
+  tanzaniaPhoneSchema,
   tenantContextHeaderSchema,
   verifyOtpSchema,
   verifyPinSchema,
@@ -93,6 +95,17 @@ const strictLimiter = rateLimit({
       },
     })
   },
+})
+
+const tenantRoleSchema = z.enum(['TENANT_OWNER', 'EVENT_ADMIN', 'TREASURER', 'COLLECTOR', 'VIEWER'])
+const inviteTenantUserSchema = z.object({
+  fullName: z.string().trim().min(2).max(120),
+  phone: tanzaniaPhoneSchema,
+  email: z.union([z.email(), z.literal(''), z.null()]).optional().transform((value) => value || null),
+  role: tenantRoleSchema,
+})
+const updateTenantUserRoleSchema = z.object({
+  role: tenantRoleSchema,
 })
 
 const sendSmsHookLimiter = rateLimit({
@@ -624,6 +637,13 @@ const knownDatabaseCodes: ApiErrorCode[] = [
   'TENANT_ACCESS_DENIED',
   'PLATFORM_ACCESS_DENIED',
   'PERMISSION_DENIED',
+  'INVITATION_INVALID',
+  'INVITATION_ALREADY_PENDING',
+  'USER_ALREADY_IN_TENANT',
+  'USER_NOT_FOUND',
+  'ROLE_NOT_FOUND',
+  'LAST_OWNER_REQUIRED',
+  'OWNER_ROLE_REQUIRES_OWNER',
   'BALANCE_REMINDER_NOT_ELIGIBLE',
   'NO_OUTSTANDING_BALANCE',
   'MEMBER_PHONE_MISSING',
@@ -1832,6 +1852,30 @@ app.post('/api/v1/auth/set-pin', requireAuth, async (request, response, next) =>
   }
 })
 
+app.post('/api/v1/auth/change-pin', strictLimiter, requireAuth, async (request, response, next) => {
+  try {
+    const parsedInput = changePinSchema.safeParse(request.body)
+    if (!parsedInput.success) {
+      const weakPin = parsedInput.error.issues.some((issue) => issue.path.join('.') === 'newPin' && issue.message === 'Choose a stronger PIN')
+      throw new AppError(weakPin ? 'PIN_TOO_WEAK' : 'PIN_INVALID')
+    }
+    const input = parsedInput.data
+    const client = createUserSupabase(request.auth?.accessToken ?? '')
+    const { data, error } = await client.rpc('rpc_change_my_pin', { p_current_pin: input.currentPin, p_new_pin: input.newPin })
+    if (error) {
+      const classification = classifyPinSetupDatabaseError(error, Boolean(request.auth?.user))
+      throw new AppError(classification.code, classification.message, classification.status, classification.category)
+    }
+    const result = jsonRecord(data)
+    if (result['ok'] !== true) {
+      throw new AppError(result['locked_until'] ? 'PIN_LOCKED' : 'PIN_INVALID')
+    }
+    response.json({ ok: true, message: 'PIN changed successfully' })
+  } catch (error) {
+    next(error)
+  }
+})
+
 app.post('/api/v1/auth/verify-pin', strictLimiter, requireAuth, async (request, response, next) => {
   try {
     const input = verifyPinSchema.parse(request.body)
@@ -2788,6 +2832,85 @@ app.get('/api/v1/users', requireAuth, loadUserContext, requireTenantContext, asy
   } catch (error) {
     next(error)
   }
+})
+
+app.post('/api/v1/users/invitations', requireAuth, loadUserContext, requireTenantContext, async (request, response, next) => {
+  try {
+    const tenantId = tenantIdFromRequest(request)
+    const input = inviteTenantUserSchema.parse(request.body)
+    const client = createUserSupabase(request.auth?.accessToken ?? '')
+    const { data, error } = await client.rpc('rpc_invite_tenant_user', {
+      p_tenant_id: tenantId,
+      p_full_name: input.fullName,
+      p_phone_e164: input.phone,
+      p_email: input.email,
+      p_role_code: input.role,
+    })
+    if (error) {
+      throwFinancialDatabaseError(error, 'TENANT_USER_INVITE_FAILED')
+    }
+    response.status(201).json({ data: jsonRecord(data) })
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.post('/api/v1/users/invitations/:invitationId/resend', requireAuth, loadUserContext, requireTenantContext, async (request, response, next) => {
+  try {
+    const tenantId = tenantIdFromRequest(request)
+    const invitationId = uuidParamSchema.parse(request.params['invitationId'])
+    const client = createUserSupabase(request.auth?.accessToken ?? '')
+    const { data, error } = await client.rpc('rpc_resend_tenant_invitation', { p_tenant_id: tenantId, p_invitation_id: invitationId })
+    if (error) {
+      throwFinancialDatabaseError(error, 'TENANT_INVITATION_RESEND_FAILED')
+    }
+    response.json({ data: jsonRecord(data) })
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.patch('/api/v1/users/:tenantUserId/role', requireAuth, loadUserContext, requireTenantContext, async (request, response, next) => {
+  try {
+    const tenantId = tenantIdFromRequest(request)
+    const tenantUserId = uuidParamSchema.parse(request.params['tenantUserId'])
+    const input = updateTenantUserRoleSchema.parse(request.body)
+    const client = createUserSupabase(request.auth?.accessToken ?? '')
+    const { data, error } = await client.rpc('rpc_update_tenant_user_role', { p_tenant_id: tenantId, p_tenant_user_id: tenantUserId, p_role_code: input.role })
+    if (error) {
+      throwFinancialDatabaseError(error, 'TENANT_USER_ROLE_UPDATE_FAILED')
+    }
+    response.json({ data: jsonRecord(data) })
+  } catch (error) {
+    next(error)
+  }
+})
+
+async function setTenantUserStatus(request: express.Request, response: express.Response, next: express.NextFunction, status: 'ACTIVE' | 'SUSPENDED' | 'REMOVED') {
+  try {
+    const tenantId = tenantIdFromRequest(request)
+    const tenantUserId = uuidParamSchema.parse(request.params['tenantUserId'])
+    const client = createUserSupabase(request.auth?.accessToken ?? '')
+    const { data, error } = await client.rpc('rpc_set_tenant_user_status', { p_tenant_id: tenantId, p_tenant_user_id: tenantUserId, p_status: status })
+    if (error) {
+      throwFinancialDatabaseError(error, `TENANT_USER_${status}_FAILED`)
+    }
+    response.json({ data: jsonRecord(data) })
+  } catch (error) {
+    next(error)
+  }
+}
+
+app.post('/api/v1/users/:tenantUserId/suspend', requireAuth, loadUserContext, requireTenantContext, (request, response, next) => {
+  void setTenantUserStatus(request, response, next, 'SUSPENDED')
+})
+
+app.post('/api/v1/users/:tenantUserId/reactivate', requireAuth, loadUserContext, requireTenantContext, (request, response, next) => {
+  void setTenantUserStatus(request, response, next, 'ACTIVE')
+})
+
+app.post('/api/v1/users/:tenantUserId/remove', requireAuth, loadUserContext, requireTenantContext, (request, response, next) => {
+  void setTenantUserStatus(request, response, next, 'REMOVED')
 })
 
 app.get('/api/v1/settings-summary', requireAuth, loadUserContext, requireTenantContext, async (request, response, next) => {

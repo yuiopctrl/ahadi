@@ -5,6 +5,7 @@ import {
   FileText,
   Gauge,
   Home,
+  KeyRound,
   LifeBuoy,
   Menu,
   MessageSquareText,
@@ -19,6 +20,7 @@ import { NavLink } from 'react-router-dom'
 import { useMemo, useState } from 'react'
 import { EventContextDisplay } from './components/ui'
 import type { EventSummary } from '@ahadi/types'
+import { useSessionStore } from './stores/session-store'
 
 function mobileNav(event: EventSummary | null) {
   const eventBase = event ? `/app/events/${event.id}` : '/app/events'
@@ -30,7 +32,7 @@ function mobileNav(event: EventSummary | null) {
   ]
 }
 
-function overflowNav(event: EventSummary | null, showPlatformLink = false) {
+function overflowNav(event: EventSummary | null, showPlatformLink = false, canManageUsers = false) {
   const eventBase = event ? `/app/events/${event.id}` : '/app/events'
   return [
     ...(showPlatformLink ? [{ to: '/platform', label: 'Platform Console', icon: ShieldCheck }] : []),
@@ -40,13 +42,14 @@ function overflowNav(event: EventSummary | null, showPlatformLink = false) {
     { to: event ? `/app/messages?eventId=${event.id}` : '/app/messages', label: 'Messages', icon: MessageSquareText },
     { to: event ? `${eventBase}/reports` : '/app/reports', label: 'Reports', icon: FileText },
     { to: '/app/settings/billing', label: 'Billing', icon: CreditCard },
-    { to: '/app/users', label: 'Users', icon: Users },
+    ...(canManageUsers ? [{ to: '/app/users', label: 'Users & Roles', icon: Users }] : []),
+    { to: '/app/change-pin', label: 'Change PIN', icon: KeyRound },
     { to: '/app/help', label: 'Help', icon: LifeBuoy },
     { to: '/app/settings', label: 'Settings', icon: Settings },
   ]
 }
 
-function desktopNav(event: EventSummary | null) {
+function desktopNav(event: EventSummary | null, canManageUsers = false) {
   const eventBase = event ? `/app/events/${event.id}` : '/app/events'
   return [
     { to: event ? eventBase : '/app', label: 'Dashboard', icon: Gauge, end: true },
@@ -60,7 +63,8 @@ function desktopNav(event: EventSummary | null) {
     { to: event ? `/app/messages?eventId=${event.id}` : '/app/messages', label: 'Messages', icon: MessageSquareText },
     { to: event ? `${eventBase}/reports` : '/app/reports', label: 'Reports', icon: PieChart },
     { to: '/app/settings/billing', label: 'Billing', icon: CreditCard },
-    { to: '/app/users', label: 'Users', icon: Users },
+    ...(canManageUsers ? [{ to: '/app/users', label: 'Users & Roles', icon: Users }] : []),
+    { to: '/app/change-pin', label: 'Change PIN', icon: KeyRound },
     { to: '/app/help', label: 'Help', icon: LifeBuoy },
     { to: '/app/settings', label: 'Settings', icon: Settings },
   ]
@@ -75,8 +79,11 @@ interface TenantNavProps {
 
 export function MobileBottomNav({ event, showPlatformLink = false }: { event: EventSummary | null; showPlatformLink?: boolean }) {
   const [open, setOpen] = useState(false)
+  const session = useSessionStore()
+  const permissions = new Set(session.selectedTenantContext?.permissions ?? [])
+  const canManageUsers = permissions.has('users.invite') || permissions.has('users.manage_roles') || permissions.has('users.suspend')
   const primaryItems = useMemo(() => mobileNav(event), [event])
-  const overflowItems = useMemo(() => overflowNav(event, showPlatformLink), [event, showPlatformLink])
+  const overflowItems = useMemo(() => overflowNav(event, showPlatformLink, canManageUsers), [canManageUsers, event, showPlatformLink])
 
   return (
     <>
@@ -114,6 +121,10 @@ export function MobileBottomNav({ event, showPlatformLink = false }: { event: Ev
 }
 
 export function DesktopSidebar({ event, events = [], showPlatformLink = false, onEventChange }: TenantNavProps) {
+  const session = useSessionStore()
+  const permissions = new Set(session.selectedTenantContext?.permissions ?? [])
+  const canManageUsers = permissions.has('users.invite') || permissions.has('users.manage_roles') || permissions.has('users.suspend')
+  const items = useMemo(() => desktopNav(event, canManageUsers), [canManageUsers, event])
   return (
     <aside className="desktop-sidebar">
       <div className="sidebar-brand">
@@ -131,7 +142,7 @@ export function DesktopSidebar({ event, events = [], showPlatformLink = false, o
             Platform Console
           </NavLink>
         ) : null}
-        {desktopNav(event).map(({ to, label, icon: Icon, end }) => (
+        {items.map(({ to, label, icon: Icon, end }) => (
           <NavLink key={label} to={to} end={end}>
             <Icon size={18} aria-hidden />
             {label}

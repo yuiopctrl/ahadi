@@ -7,6 +7,7 @@ import {
   Copy,
   CreditCard,
   FileText,
+  KeyRound,
   MessageCircle,
   Pencil,
   Plus,
@@ -20,6 +21,7 @@ import { useEffect, useMemo, useState } from 'react'
 import type { FormEvent, ReactNode } from 'react'
 import { Link, NavLink, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import type { EventSummary } from '@ahadi/types'
+import { PinEntry, canSubmitPin } from '../components/pin-entry'
 import { DataTable, EmptyState, ErrorState, LoadingState, PageContainer, PageHeader, SearchInput, StatCard, StatusBadge } from '../components/ui'
 import type { DataTableColumn } from '../components/ui'
 import { api, ApiClientError } from '../lib/api'
@@ -87,6 +89,20 @@ const defaultWhatsappSummarySources = [
   { valueSource: 'OTHER_RECEIVED', label: 'Other Received' },
 ]
 const eventTypes = ['WEDDING', 'SENDOFF', 'FUNERAL', 'FUNDRAISER', 'BIRTHDAY', 'GRADUATION', 'RELIGIOUS', 'OTHER']
+const tenantRoleOptions = [
+  { value: 'EVENT_ADMIN', label: 'Event Admin' },
+  { value: 'TREASURER', label: 'Treasurer' },
+  { value: 'COLLECTOR', label: 'Collector' },
+  { value: 'VIEWER', label: 'Viewer' },
+  { value: 'TENANT_OWNER', label: 'Owner' },
+]
+const tenantRoleLabels: Record<string, string> = {
+  TENANT_OWNER: 'Owner',
+  EVENT_ADMIN: 'Event Admin',
+  TREASURER: 'Treasurer',
+  COLLECTOR: 'Collector',
+  VIEWER: 'Viewer',
+}
 const reportCards = [
   { type: 'summary', title: 'Collection Summary', description: 'Targets, pledged totals, collections, coverage and member status counts.' },
   { type: 'pledges', title: 'Pledge Report', description: 'Member pledge balances, due dates, payment progress and pledge status.' },
@@ -145,6 +161,27 @@ function displayValue(value: unknown, fallback = 'Not set') {
   if (typeof value === 'number' && Number.isFinite(value)) return String(value)
   if (typeof value === 'boolean') return value ? 'Yes' : 'No'
   return fallback
+}
+
+function roleLabel(value: unknown) {
+  return tenantRoleLabels[asString(value)] ?? asString(value, 'No role')
+}
+
+function userRoles(value: unknown) {
+  return Array.isArray(value) ? value.map(String).filter(Boolean) : []
+}
+
+function userRoleText(value: unknown) {
+  const roles = userRoles(value)
+  return roles.length ? roles.map(roleLabel).join(', ') : 'No role'
+}
+
+function tenantUserStatusLabel(value: unknown) {
+  const status = asString(value, 'ACTIVE')
+  if (status === 'INVITED') return 'Invited'
+  if (status === 'SUSPENDED') return 'Suspended'
+  if (status === 'REMOVED') return 'Removed'
+  return status === 'ACTIVE' ? 'Active' : titleCaseMemberName(status, 'Inactive')
 }
 
 function asDate(value: unknown) {
@@ -2885,9 +2922,49 @@ function RetrySmsButton({ tenantId, outboxId, onDone }: { tenantId: string; outb
 
 export function TenantUsersPage() {
   const session = useSessionStore()
+  const queryClient = useQueryClient()
   const tenantId = session.selectedTenantId
   const permissions = new Set(session.selectedTenantContext?.permissions ?? [])
+  const currentRoles = session.selectedTenantContext?.roles ?? []
+  const canGrantOwner = currentRoles.includes('TENANT_OWNER')
+  const canInvite = permissions.has('users.invite')
+  const canManageRoles = permissions.has('users.manage_roles')
+  const canSuspend = permissions.has('users.suspend')
+  const [inviteOpen, setInviteOpen] = useState(false)
+  const [inviteFullName, setInviteFullName] = useState('')
+  const [invitePhone, setInvitePhone] = useState('')
+  const [inviteEmail, setInviteEmail] = useState('')
+  const [inviteRole, setInviteRole] = useState('VIEWER')
+  const [roleDrafts, setRoleDrafts] = useState<Record<string, string>>({})
   const users = useQuery({ queryKey: ['tenant-users', tenantId], queryFn: async () => (await api.tenantUsers(tenantId ?? '')).data, enabled: Boolean(tenantId) })
+  const roleOptions = tenantRoleOptions.filter((option) => option.value !== 'TENANT_OWNER' || canGrantOwner)
+
+  function refreshUsers() {
+    void queryClient.invalidateQueries({ queryKey: ['tenant-users', tenantId] })
+    if (tenantId) {
+      void session.selectTenant(tenantId)
+    }
+  }
+
+  const invite = useMutation({
+    mutationFn: async () => api.inviteTenantUser(tenantId ?? '', { fullName: inviteFullName, phone: invitePhone, email: inviteEmail || null, role: inviteRole }),
+    onSuccess: () => {
+      setInviteFullName('')
+      setInvitePhone('')
+      setInviteEmail('')
+      setInviteRole('VIEWER')
+      setInviteOpen(false)
+      refreshUsers()
+    },
+  })
+  const updateRole = useMutation({
+    mutationFn: async ({ tenantUserId, role }: { tenantUserId: string; role: string }) => api.updateTenantUserRole(tenantId ?? '', tenantUserId, role),
+    onSuccess: refreshUsers,
+  })
+  const suspend = useMutation({ mutationFn: async (tenantUserId: string) => api.suspendTenantUser(tenantId ?? '', tenantUserId), onSuccess: refreshUsers })
+  const reactivate = useMutation({ mutationFn: async (tenantUserId: string) => api.reactivateTenantUser(tenantId ?? '', tenantUserId), onSuccess: refreshUsers })
+  const remove = useMutation({ mutationFn: async (tenantUserId: string) => api.removeTenantUser(tenantId ?? '', tenantUserId), onSuccess: refreshUsers })
+  const resend = useMutation({ mutationFn: async (invitationId: string) => api.resendTenantInvitation(tenantId ?? '', invitationId), onSuccess: refreshUsers })
 
   if (!tenantId) return <ErrorState title="Unable to load users" message="Select a tenant first." />
   if (!permissions.has('users.view')) return <ErrorState title="Users access denied" message="Your tenant role does not include user management access." />
@@ -2895,32 +2972,157 @@ export function TenantUsersPage() {
   if (users.isError) return <ErrorState title="Unable to load users" message={errorMessage(users.error, 'Tenant users could not be loaded.')} />
 
   const rows = users.data ?? []
+  const pendingAction = updateRole.isPending || suspend.isPending || reactivate.isPending || remove.isPending || resend.isPending
+
+  function tenantUserId(row: Row) {
+    return asString(row.tenant_user_id)
+  }
+
+  function invitationId(row: Row) {
+    return asString(row.invitation_id)
+  }
+
+  function currentRole(row: Row) {
+    return userRoles(row.roles)[0] ?? 'VIEWER'
+  }
+
+  function displayName(row: Row) {
+    return asString(row.full_name, asString(row.email, asString(row.phone_e164, 'User')))
+  }
+
+  function saveRole(row: Row) {
+    const id = tenantUserId(row)
+    const nextRole = roleDrafts[id] ?? currentRole(row)
+    if (id && nextRole !== currentRole(row)) {
+      updateRole.mutate({ tenantUserId: id, role: nextRole })
+    }
+  }
+
+  function removeUser(row: Row) {
+    const id = tenantUserId(row)
+    if (id && window.confirm(`Remove ${displayName(row)} from this organization?`)) {
+      remove.mutate(id)
+    }
+  }
+
+  function renderActions(row: Row) {
+    const id = tenantUserId(row)
+    const inviteId = invitationId(row)
+    const status = asString(row.status, 'ACTIVE')
+    if (inviteId && !id) {
+      return <div className="inline-actions">{canInvite ? <button type="button" disabled={pendingAction} onClick={() => resend.mutate(inviteId)}>Resend Invitation</button> : null}</div>
+    }
+    return (
+      <div className="inline-actions">
+        {canManageRoles && id ? (
+          <>
+            <select aria-label={`Role for ${displayName(row)}`} value={roleDrafts[id] ?? currentRole(row)} disabled={pendingAction} onChange={(event) => setRoleDrafts((current) => ({ ...current, [id]: event.target.value }))}>
+              {roleOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+            </select>
+            <button type="button" disabled={pendingAction || (roleDrafts[id] ?? currentRole(row)) === currentRole(row)} onClick={() => saveRole(row)}>Save</button>
+          </>
+        ) : null}
+        {canSuspend && id && status === 'ACTIVE' ? <button type="button" disabled={pendingAction} onClick={() => suspend.mutate(id)}>Suspend</button> : null}
+        {canSuspend && id && status === 'SUSPENDED' ? <button type="button" disabled={pendingAction} onClick={() => reactivate.mutate(id)}>Reactivate</button> : null}
+        {canManageRoles && id ? <button type="button" disabled={pendingAction} onClick={() => removeUser(row)}>Remove</button> : null}
+      </div>
+    )
+  }
+
   return (
     <PageContainer>
       <PageHeader
-        title="Users"
-        description="Tenant team members, tenant roles and event assignments."
-        action={permissions.has('users.invite') ? <button className="desktop-primary-button" type="button" disabled>Invite User</button> : null}
+        title="Users & Roles"
+        description="People who can access this organization and their tenant roles."
+        action={canInvite ? <button className="desktop-primary-button" type="button" onClick={() => setInviteOpen((current) => !current)}><Plus size={18} aria-hidden /> Invite User</button> : null}
       />
+      {inviteOpen ? (
+        <form className="mobile-sheet form-grid" onSubmit={(event) => { event.preventDefault(); invite.mutate() }}>
+          <label>Full Name<input value={inviteFullName} onChange={(event) => setInviteFullName(event.target.value)} required /></label>
+          <label>Phone Number<input value={invitePhone} inputMode="tel" onChange={(event) => setInvitePhone(event.target.value)} placeholder="+255..." required /></label>
+          <label>Email<input value={inviteEmail} type="email" onChange={(event) => setInviteEmail(event.target.value)} /></label>
+          <label>Role<select value={inviteRole} onChange={(event) => setInviteRole(event.target.value)}>{roleOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
+          {invite.data?.data?.alreadyPending ? <p className="field-error">An invitation is already pending for this phone number. Use Resend Invitation from the table.</p> : null}
+          {invite.error ? <p className="field-error">{errorMessage(invite.error, 'Invitation could not be created.')}</p> : null}
+          <div className="sheet-actions">
+            <button type="button" onClick={() => setInviteOpen(false)}>Cancel</button>
+            <button className="primary-button" type="submit" disabled={invite.isPending || !inviteFullName.trim() || !invitePhone.trim()}>{invite.isPending ? 'Inviting...' : 'Invite User'}</button>
+          </div>
+        </form>
+      ) : null}
+      {updateRole.error ? <p className="field-error">{errorMessage(updateRole.error, 'Role could not be updated.')}</p> : null}
+      {suspend.error ? <p className="field-error">{errorMessage(suspend.error, 'User could not be suspended.')}</p> : null}
+      {reactivate.error ? <p className="field-error">{errorMessage(reactivate.error, 'User could not be reactivated.')}</p> : null}
+      {remove.error ? <p className="field-error">{errorMessage(remove.error, 'User could not be removed.')}</p> : null}
+      {resend.error ? <p className="field-error">{errorMessage(resend.error, 'Invitation could not be resent.')}</p> : null}
       <DataTable
-        title="Tenant Users"
+        title="Organization Users"
         rows={rows}
         columns={[
-          { key: 'user', header: 'User', render: (user) => <strong>{asString(user.full_name, 'User')}<small>{asString(user.email, 'No email')}</small></strong>, sortValue: (user) => asString(user.full_name) },
+          { key: 'name', header: 'Name', render: (user) => <strong>{displayName(user)}{asString(user.email) ? <small>{asString(user.email)}</small> : null}</strong>, sortValue: (user) => displayName(user) },
           { key: 'phone', header: 'Phone', render: (user) => <span>{asString(user.phone_e164, 'No phone')}</span>, sortValue: (user) => asString(user.phone_e164) },
-          { key: 'role', header: 'Role', render: (user) => <span>{Array.isArray(user.roles) ? user.roles.map(String).join(', ') || 'No role' : 'No role'}</span>, sortValue: (user) => Array.isArray(user.roles) ? user.roles.map(String).join(', ') : '' },
-          { key: 'events', header: 'Assigned Events', render: (user) => {
-            const assignedEvents = Array.isArray(user.assigned_events) ? user.assigned_events.map(jsonRecord) : []
-            return <span>{assignedEvents.map((event) => asString(event.name)).filter(Boolean).join(', ') || 'All permitted events'}</span>
-          }, sortValue: (user) => Array.isArray(user.assigned_events) ? user.assigned_events.length : 0 },
-          { key: 'status', header: 'Status', render: (user) => <StatusBadge tone={statusTone(user.status)}>{asString(user.status, 'ACTIVE')}</StatusBadge>, sortValue: (user) => asString(user.status) },
-          { key: 'lastSeen', header: 'Last Seen', render: (user) => <span>{asDateTime(user.last_seen_at ?? user.updated_at ?? user.joined_at)}</span>, sortValue: (user) => asString(user.last_seen_at ?? user.updated_at ?? user.joined_at) },
-          { key: 'actions', header: 'Actions', render: (user) => <div className="inline-actions">{permissions.has('users.manage_roles') ? <button type="button" disabled>Roles</button> : null}{permissions.has('users.suspend') && !(Array.isArray(user.roles) && user.roles.map(String).includes('TENANT_OWNER')) ? <button type="button" disabled>Suspend</button> : null}</div>, align: 'right' },
+          { key: 'role', header: 'Role', render: (user) => <span>{userRoleText(user.roles)}</span>, sortValue: (user) => userRoleText(user.roles) },
+          { key: 'status', header: 'Status', render: (user) => <StatusBadge tone={statusTone(user.status)}>{tenantUserStatusLabel(user.status)}</StatusBadge>, sortValue: (user) => asString(user.status) },
+          { key: 'lastSeen', header: 'Last Active', render: (user) => <span>{asDateTime(user.last_seen_at ?? user.updated_at ?? user.joined_at)}</span>, sortValue: (user) => asString(user.last_seen_at ?? user.updated_at ?? user.joined_at) },
+          { key: 'actions', header: 'Actions', render: renderActions, align: 'right' },
         ]}
-        getRowKey={(user) => asString(user.tenant_user_id)}
+        getRowKey={(user) => asString(user.row_id, asString(user.tenant_user_id, asString(user.invitation_id)))}
         emptyTitle="No tenant users found."
         emptyMessage="Tenant owners appear here after onboarding and invitations."
+        mobileRender={(user) => (
+          <>
+            <div><span>Name</span><strong>{displayName(user)}</strong></div>
+            <div><span>Phone</span><strong>{asString(user.phone_e164, 'No phone')}</strong></div>
+            <div><span>Role</span><strong>{userRoleText(user.roles)}</strong></div>
+            <div><span>Status</span><strong>{tenantUserStatusLabel(user.status)}</strong></div>
+            <div>{renderActions(user)}</div>
+          </>
+        )}
       />
+    </PageContainer>
+  )
+}
+
+export function TenantChangePinPage() {
+  const [currentPin, setCurrentPin] = useState('')
+  const [newPin, setNewPin] = useState('')
+  const [confirmNewPin, setConfirmNewPin] = useState('')
+  const [successMessage, setSuccessMessage] = useState('')
+  const mutation = useMutation({
+    mutationFn: async () => api.changePin(currentPin, newPin, confirmNewPin),
+    onSuccess: () => {
+      setCurrentPin('')
+      setNewPin('')
+      setConfirmNewPin('')
+      setSuccessMessage('PIN changed successfully')
+    },
+  })
+  const ready = canSubmitPin({ pin: currentPin, isPending: mutation.isPending, isSubmitting: false })
+    && canSubmitPin({ pin: newPin, confirmPin: confirmNewPin, isPending: mutation.isPending, isSubmitting: false })
+    && newPin === confirmNewPin
+
+  function submit(event?: FormEvent) {
+    event?.preventDefault()
+    setSuccessMessage('')
+    if (ready) {
+      mutation.mutate()
+    }
+  }
+
+  return (
+    <PageContainer>
+      <PageHeader title="Change PIN" description="Update the 4-digit PIN used with your phone number." />
+      <form className="mobile-sheet form-grid" onSubmit={submit}>
+        <PinEntry label="Current PIN" value={currentPin} disabled={mutation.isPending} autoFocus onChange={setCurrentPin} onEnterComplete={() => submit()} />
+        <PinEntry label="New PIN" value={newPin} disabled={mutation.isPending} onChange={setNewPin} onEnterComplete={() => submit()} />
+        <PinEntry label="Confirm New PIN" value={confirmNewPin} disabled={mutation.isPending} onChange={setConfirmNewPin} onComplete={() => submit()} onEnterComplete={() => submit()} />
+        {newPin && confirmNewPin && newPin !== confirmNewPin ? <p className="field-error">PINs do not match.</p> : null}
+        {successMessage ? <p className="success-message"><KeyRound size={16} aria-hidden /> {successMessage}</p> : null}
+        {mutation.error ? <p className="field-error">{errorMessage(mutation.error, 'PIN could not be changed.')}</p> : null}
+        <div className="sheet-actions">
+          <button className="primary-button" type="submit" disabled={!ready}>{mutation.isPending ? 'Changing...' : 'Change PIN'}</button>
+        </div>
+      </form>
     </PageContainer>
   )
 }
