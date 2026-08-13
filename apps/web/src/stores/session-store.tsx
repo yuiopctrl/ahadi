@@ -225,13 +225,15 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const signOut = useCallback(async () => {
+    await queryClient.cancelQueries()
     await api.logout().catch(() => undefined)
     await supabase.auth.signOut()
     clearTenant()
     setSession(null)
     setUserContext(null)
+    queryClient.clear()
     resetLockState()
-  }, [clearTenant, resetLockState])
+  }, [clearTenant, queryClient, resetLockState])
 
   const restoreTenantSelection = useCallback(async (context: UserContext) => {
     const activeMemberships = context.tenantMemberships.filter((membership) => membership.membershipStatus === 'ACTIVE')

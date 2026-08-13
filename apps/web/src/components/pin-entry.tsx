@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 import type { KeyboardEvent } from 'react'
 
 export const pinLength = 4

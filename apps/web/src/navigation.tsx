@@ -15,10 +15,10 @@ import {
   Users,
   X,
 } from 'lucide-react'
-import { Link, NavLink } from 'react-router-dom'
+import { NavLink } from 'react-router-dom'
 import { useMemo, useState } from 'react'
-import { EventContextDisplay, TenantSwitcherDisplay } from './components/ui'
-import type { EventSummary, TenantMembershipContext } from '@ahadi/types'
+import { EventContextDisplay } from './components/ui'
+import type { EventSummary } from '@ahadi/types'
 
 function mobileNav(event: EventSummary | null) {
   const eventBase = event ? `/app/events/${event.id}` : '/app/events'
@@ -67,41 +67,10 @@ function desktopNav(event: EventSummary | null) {
 }
 
 interface TenantNavProps {
-  tenant: TenantMembershipContext | null
-  memberships?: TenantMembershipContext[]
-  selectedTenantId?: string | null
   event: EventSummary | null
   events?: EventSummary[]
   showPlatformLink?: boolean
   onEventChange?: (eventId: string) => void
-  onTenantChange?: (tenantId: string) => void
-  onCreateTenant?: () => void
-}
-
-export function MobileTopBar({ tenant, memberships = [], selectedTenantId = null, showPlatformLink = false, onTenantChange, onCreateTenant }: TenantNavProps) {
-  return (
-    <header className="mobile-topbar">
-      <TenantSwitcherDisplay tenant={tenant} memberships={memberships} selectedTenantId={selectedTenantId} onSelect={onTenantChange} onCreate={onCreateTenant} />
-      {showPlatformLink ? (
-        <Link className="topbar-icon-link" to="/platform" aria-label="Open Platform Console">
-          <ShieldCheck size={18} aria-hidden />
-        </Link>
-      ) : null}
-    </header>
-  )
-}
-
-export function TenantTopNav({ tenant, memberships = [], selectedTenantId = null, showPlatformLink = false, onTenantChange, onCreateTenant }: TenantNavProps) {
-  return (
-    <header className="tenant-topnav">
-      <TenantSwitcherDisplay tenant={tenant} memberships={memberships} selectedTenantId={selectedTenantId} onSelect={onTenantChange} onCreate={onCreateTenant} />
-      {showPlatformLink ? (
-        <Link className="topbar-icon-link" to="/platform" aria-label="Open Platform Console">
-          <ShieldCheck size={18} aria-hidden />
-        </Link>
-      ) : null}
-    </header>
-  )
 }
 
 export function MobileBottomNav({ event, showPlatformLink = false }: { event: EventSummary | null; showPlatformLink?: boolean }) {

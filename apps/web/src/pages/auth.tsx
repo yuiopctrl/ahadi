@@ -208,6 +208,7 @@ function LoginPage({ title, subtitle }: Pick<AuthPageProps, 'title' | 'subtitle'
   const [phone, setPhone] = useState(localStorage.getItem(phoneDraftKey) ?? '')
   const [pin, setPin] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const [isSubmitting, setIsSubmitting] = useState(false)
   const submittingRef = useRef(false)
 
   function storePostAuthDestination() {
@@ -235,18 +236,20 @@ function LoginPage({ title, subtitle }: Pick<AuthPageProps, 'title' | 'subtitle'
     },
     onSuccess: async () => {
       submittingRef.current = false
+      setIsSubmitting(false)
       session.lockState.unlock()
       const context = await session.refreshContext()
       await routeAfterAuthentication({ context, navigate, session })
     },
     onError: (nextError) => {
       submittingRef.current = false
+      setIsSubmitting(false)
       setPin('')
       setError(errorMessage(nextError))
     },
   })
-  const loginPending = mutation.isPending || submittingRef.current
-  const loginReady = canSubmitPin({ pin, isPending: mutation.isPending, isSubmitting: submittingRef.current })
+  const loginPending = mutation.isPending || isSubmitting
+  const loginReady = canSubmitPin({ pin, isPending: mutation.isPending, isSubmitting })
 
   function submitLogin(nextPin = pin) {
     if (!canSubmitPin({ pin: nextPin, isPending: mutation.isPending, isSubmitting: submittingRef.current })) {
@@ -256,6 +259,7 @@ function LoginPage({ title, subtitle }: Pick<AuthPageProps, 'title' | 'subtitle'
       return
     }
     submittingRef.current = true
+    setIsSubmitting(true)
     setError(null)
     mutation.mutate({ phone, pin: nextPin })
   }
@@ -436,6 +440,7 @@ function ForgotPinPage({ title, subtitle }: Pick<AuthPageProps, 'title' | 'subti
   const [pin, setPin] = useState('')
   const [confirmPin, setConfirmPin] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const [isSubmitting, setIsSubmitting] = useState(false)
   const submittingRef = useRef(false)
 
   const requestMutation = useMutation({
@@ -447,12 +452,14 @@ function ForgotPinPage({ title, subtitle }: Pick<AuthPageProps, 'title' | 'subti
     },
     onSuccess: (normalized) => {
       submittingRef.current = false
+      setIsSubmitting(false)
       setPhone(normalized)
       setError(null)
       setStep('otp')
     },
     onError: (nextError) => {
       submittingRef.current = false
+      setIsSubmitting(false)
       setError(errorMessage(nextError))
     },
   })
@@ -468,11 +475,13 @@ function ForgotPinPage({ title, subtitle }: Pick<AuthPageProps, 'title' | 'subti
     },
     onSuccess: () => {
       submittingRef.current = false
+      setIsSubmitting(false)
       setError(null)
       setStep('pin')
     },
     onError: (nextError) => {
       submittingRef.current = false
+      setIsSubmitting(false)
       setToken('')
       setError(errorMessage(nextError))
     },
@@ -485,12 +494,14 @@ function ForgotPinPage({ title, subtitle }: Pick<AuthPageProps, 'title' | 'subti
     },
     onSuccess: async () => {
       submittingRef.current = false
+      setIsSubmitting(false)
       session.lockState.unlock()
       const context = await session.refreshContext()
       await routeAfterAuthentication({ context, navigate, session })
     },
     onError: (nextError) => {
       submittingRef.current = false
+      setIsSubmitting(false)
       setPin('')
       setConfirmPin('')
       setError(errorMessage(nextError))
@@ -500,6 +511,7 @@ function ForgotPinPage({ title, subtitle }: Pick<AuthPageProps, 'title' | 'subti
   function requestReset() {
     if (requestMutation.isPending || submittingRef.current) return
     submittingRef.current = true
+    setIsSubmitting(true)
     setError(null)
     requestMutation.mutate()
   }
@@ -507,6 +519,7 @@ function ForgotPinPage({ title, subtitle }: Pick<AuthPageProps, 'title' | 'subti
   function verifyReset(nextToken = token) {
     if (nextToken.length !== 6 || verifyMutation.isPending || submittingRef.current) return
     submittingRef.current = true
+    setIsSubmitting(true)
     setError(null)
     verifyMutation.mutate(nextToken)
   }
@@ -514,6 +527,7 @@ function ForgotPinPage({ title, subtitle }: Pick<AuthPageProps, 'title' | 'subti
   function submitPin(nextPin = pin, nextConfirmPin = confirmPin) {
     if (!canSubmitPin({ pin: nextPin, confirmPin: nextConfirmPin, isPending: pinMutation.isPending, isSubmitting: submittingRef.current })) return
     submittingRef.current = true
+    setIsSubmitting(true)
     setError(null)
     pinMutation.mutate({ pin: nextPin, confirmPin: nextConfirmPin })
   }
@@ -531,7 +545,7 @@ function ForgotPinPage({ title, subtitle }: Pick<AuthPageProps, 'title' | 'subti
             <input inputMode="tel" autoComplete="tel" placeholder="0712 345 678" value={phone} disabled={requestMutation.isPending} onChange={(event) => setPhone(event.target.value)} />
           </label>
           {error ? <p className="field-error">{error}</p> : null}
-          <button className="primary-button" type="button" disabled={requestMutation.isPending || submittingRef.current} onClick={requestReset}>
+          <button className="primary-button" type="button" disabled={requestMutation.isPending || isSubmitting} onClick={requestReset}>
             {requestMutation.isPending ? 'Sending...' : 'Send reset code'}
           </button>
         </>
@@ -558,24 +572,24 @@ function ForgotPinPage({ title, subtitle }: Pick<AuthPageProps, 'title' | 'subti
             />
           </label>
           {error ? <p className="field-error">{error}</p> : null}
-          <button className="primary-button" type="button" disabled={token.length !== 6 || verifyMutation.isPending || submittingRef.current} onClick={() => verifyReset()}>
+          <button className="primary-button" type="button" disabled={token.length !== 6 || verifyMutation.isPending || isSubmitting} onClick={() => verifyReset()}>
             {verifyMutation.isPending ? 'Verifying...' : 'Verify code'}
           </button>
         </>
       ) : null}
       {step === 'pin' ? (
         <>
-          <PinEntry label="New PIN" value={pin} disabled={pinMutation.isPending || submittingRef.current} autoFocus onChange={setPin} onEnterComplete={() => submitPin()} />
+          <PinEntry label="New PIN" value={pin} disabled={pinMutation.isPending || isSubmitting} autoFocus onChange={setPin} onEnterComplete={() => submitPin()} />
           <PinEntry
             label="Confirm new PIN"
             value={confirmPin}
-            disabled={pinMutation.isPending || submittingRef.current}
+            disabled={pinMutation.isPending || isSubmitting}
             onChange={setConfirmPin}
             onComplete={(nextConfirmPin) => submitPin(pin, nextConfirmPin)}
             onEnterComplete={() => submitPin()}
           />
           {error ? <p className="field-error">{error}</p> : null}
-          <button className="primary-button" type="button" disabled={!canSubmitPin({ pin, confirmPin, isPending: pinMutation.isPending, isSubmitting: submittingRef.current })} onClick={() => submitPin()}>
+          <button className="primary-button" type="button" disabled={!canSubmitPin({ pin, confirmPin, isPending: pinMutation.isPending, isSubmitting })} onClick={() => submitPin()}>
             {pinMutation.isPending ? 'Saving...' : 'Set PIN and Login'}
           </button>
         </>
@@ -596,6 +610,7 @@ function PinPage({ title, subtitle }: Pick<AuthPageProps, 'title' | 'subtitle'>)
   const [confirmPin, setConfirmPin] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [remaining, setRemaining] = useState<number | null>(null)
+  const [isSubmitting, setIsSubmitting] = useState(false)
   const submittingRef = useRef(false)
   const hasPinQuery = useQuery({
     queryKey: ['has-pin'],
@@ -614,6 +629,7 @@ function PinPage({ title, subtitle }: Pick<AuthPageProps, 'title' | 'subtitle'>)
     onSuccess: async (result) => {
       if (!result.ok) {
         submittingRef.current = false
+        setIsSubmitting(false)
         setPin('')
         setConfirmPin('')
         setRemaining(result.remainingAttempts ?? null)
@@ -629,18 +645,20 @@ function PinPage({ title, subtitle }: Pick<AuthPageProps, 'title' | 'subtitle'>)
     },
     onError: (nextError) => {
       submittingRef.current = false
+      setIsSubmitting(false)
       setPin('')
       setConfirmPin('')
       setError(errorMessage(nextError))
     },
   })
-  const pinSubmissionPending = mutation.isPending || submittingRef.current
+  const pinSubmissionPending = mutation.isPending || isSubmitting
 
   function submitPin(nextPin = pin, nextConfirmPin = confirmPin) {
     if (!canSubmitPin({ pin: nextPin, confirmPin: returningDevice ? undefined : nextConfirmPin, isPending: mutation.isPending, isSubmitting: submittingRef.current })) {
       return
     }
     submittingRef.current = true
+    setIsSubmitting(true)
     setError(null)
     setRemaining(null)
     mutation.mutate({ pin: nextPin, confirmPin: nextConfirmPin })
@@ -680,7 +698,7 @@ function PinPage({ title, subtitle }: Pick<AuthPageProps, 'title' | 'subtitle'>)
         />
       ) : null}
       {error ? <p className="field-error">{error}{remaining !== null ? ` (${remaining} attempts left)` : ''}</p> : null}
-      <button className="primary-button" type="button" disabled={!canSubmitPin({ pin, confirmPin: returningDevice ? undefined : confirmPin, isPending: mutation.isPending, isSubmitting: submittingRef.current })} onClick={() => submitPin()}>
+      <button className="primary-button" type="button" disabled={!canSubmitPin({ pin, confirmPin: returningDevice ? undefined : confirmPin, isPending: mutation.isPending, isSubmitting })} onClick={() => submitPin()}>
         {mutation.isPending ? 'Checking...' : returningDevice ? 'Unlock' : 'Continue'}
       </button>
     </form>
