@@ -16,6 +16,7 @@ export const router = createBrowserRouter([
         children: [
           { path: '/login', element: <AuthPage mode="login" title="Sign in to Ahadi" subtitle="For existing Ahadi users with an organization, platform role, or both." /> },
           { path: '/platform/login', element: <AuthPage mode="login" title="Ahadi Platform Administration" subtitle="Sign in to manage Ahadi tenants and platform operations." /> },
+          { path: '/forgot-pin', element: <AuthPage mode="forgotPin" title="Reset PIN" subtitle="Verify your phone number, set a new PIN, and continue to Ahadi." /> },
           { path: '/verify-otp', element: <AuthPage mode="otp" title="Verify OTP" subtitle="Enter the code sent to your phone." /> },
           { path: '/register', element: <AuthPage mode="register" title="Create your Ahadi organization" subtitle="Start a new organization for events, pledges and payments." /> },
         ],

@@ -4,6 +4,7 @@ import test from 'node:test'
 
 const tenantPage = readFileSync(new URL('./tenant.tsx', import.meta.url), 'utf8')
 const navigation = readFileSync(new URL('../navigation.tsx', import.meta.url), 'utf8')
+const ui = readFileSync(new URL('../components/ui.tsx', import.meta.url), 'utf8')
 const tenantLayout = readFileSync(new URL('../layouts/TenantAppLayout.tsx', import.meta.url), 'utf8')
 const sessionStore = readFileSync(new URL('../stores/session-store.tsx', import.meta.url), 'utf8')
 const styles = readFileSync(new URL('../index.css', import.meta.url), 'utf8')
@@ -14,6 +15,8 @@ const guards = readFileSync(new URL('../routes/guards.tsx', import.meta.url), 'u
 const access = readFileSync(new URL('../routes/access.ts', import.meta.url), 'utf8')
 const validation = readFileSync(new URL('../../../../packages/validation/src/index.ts', import.meta.url), 'utf8')
 const onboardingIntentMigration = readFileSync(new URL('../../../../supabase/migrations/053_additional_tenant_onboarding_intent.sql', import.meta.url), 'utf8')
+const phonePinMigration = readFileSync(new URL('../../../../supabase/migrations/054_phone_pin_login.sql', import.meta.url), 'utf8')
+const apiServer = readFileSync(new URL('../../../../apps/api/src/app.ts', import.meta.url), 'utf8')
 
 test('tenant workflow does not depend on hardcoded demo event ids', () => {
   assert.doesNotMatch(navigation, /event_001/)
@@ -31,7 +34,7 @@ test('tenant layout navigation follows the route event instead of the tenant def
   assert.doesNotMatch(tenantLayout, /<MobileActionBar/)
   assert.doesNotMatch(tenantLayout, /Switch active event/)
   assert.doesNotMatch(tenantLayout, /<MobileTopBar[^\\n]+onEventChange/)
-  assert.match(navigation, /export function MobileTopBar\(\{ tenant, showPlatformLink = false \}/)
+  assert.match(navigation, /export function MobileTopBar\(\{ tenant, memberships = \[\], selectedTenantId = null, showPlatformLink = false/)
   assert.doesNotMatch(navigation, /<EventContextDisplay event=\{event\} \/>/)
   assert.match(sessionStore, /selectedEventStorageKey\(tenantId: string\)/)
   assert.match(sessionStore, /selectedEventId: string \| null/)
@@ -64,7 +67,7 @@ test('mobile more opens an overflow menu instead of linking directly to settings
 })
 
 test('registration intent survives OTP and allows onboarding after tenant reset', () => {
-  assert.match(authPage, /location\.pathname === '\/register'/)
+  assert.match(authPage, /function OtpRequestPage/)
   assert.match(authPage, /localStorage\.setItem\(postAuthDestinationKey, '\/onboarding'\)/)
   assert.match(authPage, /routeAfterAuthentication/)
   assert.match(authPage, /getPostAuthDestination\(context, preferredDestination\)/)
@@ -122,9 +125,27 @@ test('auth entry points are explicit and dual-role generic login uses workspace 
   assert.match(authPage, /Organization[\s\S]+Manage events, contacts, pledges and payments/)
   assert.match(authPage, /Platform Administration[\s\S]+Manage Ahadi tenants and platform operations/)
   assert.match(authPage, /Create a new organization/)
-  assert.match(authPage, /Platform administration/)
+  assert.match(authPage, /Platform Administration/)
+  assert.match(authPage, /Forgot PIN\?/)
   assert.match(authPage, /I already have an account/)
   assert.match(authPage, /Create another organization/)
+})
+
+test('returning users log in with phone and PIN instead of normal-login OTP', () => {
+  const loginPage = authPage.slice(authPage.indexOf('function LoginPage'), authPage.indexOf('function OtpRequestPage'))
+  assert.match(routes, /path: '\/forgot-pin'.+mode="forgotPin"/)
+  assert.match(validation, /export const phonePinLoginSchema/)
+  assert.match(apiClient, /loginWithPin: \(phone: string, pin: string\)/)
+  assert.match(apiServer, /app\.post\('\/api\/v1\/auth\/login-pin', strictLimiter/)
+  assert.match(apiServer, /supabaseAdmin\.rpc\('rpc_verify_phone_pin'/)
+  assert.match(apiServer, /supabaseAdmin\.auth\.admin\.updateUserById/)
+  assert.match(apiServer, /supabasePublic\.auth\.signInWithPassword/)
+  assert.match(phonePinMigration, /create or replace function public\.rpc_verify_phone_pin\(p_phone text, p_pin text\)/)
+  assert.match(phonePinMigration, /auth_user\.phone_confirmed_at is not null/)
+  assert.match(phonePinMigration, /locked_until = case when failed_attempts \+ 1 >= 5/)
+  assert.match(loginPage, /api\.loginWithPin\(normalized, values\.pin\)/)
+  assert.match(loginPage, /onComplete=\{\(nextPin\) => submitLogin\(nextPin\)\}/)
+  assert.doesNotMatch(loginPage, /api\.requestOtp\(normalized\)/)
 })
 
 test('tenant guard does not use onboarding as the fallback for accounts without tenants', () => {
@@ -134,8 +155,13 @@ test('tenant guard does not use onboarding as the fallback for accounts without 
 })
 
 test('organization switcher exposes active tenant switching and creation from inside the app', () => {
-  assert.match(navigation, /Switch Organization/)
-  assert.match(navigation, /Create another organization/)
+  assert.match(navigation, /export function TenantTopNav/)
+  assert.match(tenantLayout, /<TenantTopNav/)
+  assert.match(tenantLayout, /await session\.selectTenant\(tenantId\)/)
+  assert.match(navigation, /<TenantSwitcherDisplay tenant=\{tenant\} memberships=\{memberships\} selectedTenantId=\{selectedTenantId\}/)
+  assert.match(styles, /\.tenant-topnav/)
+  assert.match(styles, /\.tenant-switcher-popover/)
+  assert.match(ui, /Create another organization/)
   assert.match(authPage, /membership\.tenantId === session\.selectedTenantId \? `✓ \$\{membership\.tenantName\}`/)
   assert.match(authPage, /navigate\(memberships\.length \? '\/organizations\/new' : '\/register'\)/)
   const tenantSelectionPage = authPage.slice(authPage.indexOf('function TenantSelectionPage'), authPage.indexOf('function Input'))

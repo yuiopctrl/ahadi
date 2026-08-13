@@ -12,6 +12,7 @@ export const apiEnvSchema = z.object({
   TRUST_PROXY_HOPS: z.coerce.number().int().nonnegative().default(0),
   SUPABASE_URL: z.string().url(),
   SUPABASE_PUBLISHABLE_KEY: z.string().min(1),
+  SUPABASE_SERVICE_ROLE_KEY: z.string().min(1).optional(),
   SEND_SMS_HOOK_SECRET: z
     .string()
     .trim()
@@ -72,4 +73,5 @@ const parsed = parseApiEnv(process.env)
 export const env = {
   ...parsed,
   supabasePublishableKey: parsed.SUPABASE_PUBLISHABLE_KEY,
+  supabaseServiceRoleKey: parsed.SUPABASE_SERVICE_ROLE_KEY,
 }

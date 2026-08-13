@@ -6,6 +6,7 @@ import {
   CircleDollarSign,
   Filter,
   Loader2,
+  Plus,
   Search,
   X,
 } from 'lucide-react'
@@ -203,13 +204,62 @@ export function AppDrawer({ title, children }: AppDrawerProps) {
   )
 }
 
-export function TenantSwitcherDisplay({ tenant }: { tenant: TenantMembershipContext | null }) {
+export function TenantSwitcherDisplay({
+  tenant,
+  memberships = tenant ? [tenant] : [],
+  selectedTenantId = tenant?.tenantId ?? null,
+  onSelect,
+  onCreate,
+}: {
+  tenant: TenantMembershipContext | null
+  memberships?: TenantMembershipContext[]
+  selectedTenantId?: string | null
+  onSelect?: (tenantId: string) => void
+  onCreate?: () => void
+}) {
+  const [open, setOpen] = useState(false)
+  const canOpen = Boolean(onSelect || onCreate)
+
+  function selectTenant(tenantId: string) {
+    setOpen(false)
+    onSelect?.(tenantId)
+  }
+
   return (
-    <button className="tenant-switcher" type="button" aria-label="Current tenant">
-      <span>{tenant?.tenantName ?? 'No tenant selected'}</span>
-      <small>{tenant?.subscription?.planName ?? 'Setup required'}</small>
-      <ChevronDown size={16} aria-hidden />
-    </button>
+    <div className="tenant-switcher-menu">
+      <button className="tenant-switcher" type="button" aria-label="Switch organization" aria-expanded={open} onClick={() => canOpen && setOpen((value) => !value)}>
+        <span>{tenant?.tenantName ?? 'No tenant selected'}</span>
+        <small>{tenant?.subscription?.planName ?? 'Setup required'}</small>
+        <ChevronDown size={16} aria-hidden />
+      </button>
+      {open ? (
+        <>
+          <button className="tenant-switcher-backdrop" type="button" aria-label="Close organization menu" onClick={() => setOpen(false)} />
+          <div className="tenant-switcher-popover" role="menu" aria-label="Organizations">
+            <strong>Organizations</strong>
+            <div className="tenant-switcher-list">
+              {memberships.map((membership) => {
+                const selected = membership.tenantId === selectedTenantId
+                return (
+                  <button className={selected ? 'selected' : ''} key={membership.tenantId} type="button" role="menuitemradio" aria-checked={selected} onClick={() => selectTenant(membership.tenantId)}>
+                    <CheckCircle2 size={17} aria-hidden />
+                    <span>{membership.tenantName}</span>
+                    <small>{membership.tenantCode} · {membership.subscription?.status ?? 'No subscription'}</small>
+                  </button>
+                )
+              })}
+            </div>
+            <button className="tenant-switcher-create" type="button" role="menuitem" onClick={() => {
+              setOpen(false)
+              onCreate?.()
+            }}>
+              <Plus size={17} aria-hidden />
+              Create another organization
+            </button>
+          </div>
+        </>
+      ) : null}
+    </div>
   )
 }
 

@@ -9,7 +9,6 @@ import {
   Menu,
   MessageSquareText,
   PieChart,
-  Plus,
   Settings,
   Share2,
   ShieldCheck,
@@ -40,8 +39,6 @@ function overflowNav(event: EventSummary | null, showPlatformLink = false) {
     { to: event ? `${eventBase}/share` : '/app/events', label: 'Share List', icon: Share2 },
     { to: event ? `/app/messages?eventId=${event.id}` : '/app/messages', label: 'Messages', icon: MessageSquareText },
     { to: event ? `${eventBase}/reports` : '/app/reports', label: 'Reports', icon: FileText },
-    { to: '/select-tenant', label: 'Switch Organization', icon: Users },
-    { to: '/organizations/new', label: 'Create another organization', icon: Plus },
     { to: '/app/settings/billing', label: 'Billing', icon: CreditCard },
     { to: '/app/users', label: 'Users', icon: Users },
     { to: '/app/help', label: 'Help', icon: LifeBuoy },
@@ -62,8 +59,6 @@ function desktopNav(event: EventSummary | null) {
     { to: event ? `${eventBase}/payments` : '/app/payments', label: 'Payments', icon: CreditCard },
     { to: event ? `/app/messages?eventId=${event.id}` : '/app/messages', label: 'Messages', icon: MessageSquareText },
     { to: event ? `${eventBase}/reports` : '/app/reports', label: 'Reports', icon: PieChart },
-    { to: '/select-tenant', label: 'Switch Organization', icon: Users },
-    { to: '/organizations/new', label: 'Create another organization', icon: Plus },
     { to: '/app/settings/billing', label: 'Billing', icon: CreditCard },
     { to: '/app/users', label: 'Users', icon: Users },
     { to: '/app/help', label: 'Help', icon: LifeBuoy },
@@ -73,16 +68,33 @@ function desktopNav(event: EventSummary | null) {
 
 interface TenantNavProps {
   tenant: TenantMembershipContext | null
+  memberships?: TenantMembershipContext[]
+  selectedTenantId?: string | null
   event: EventSummary | null
   events?: EventSummary[]
   showPlatformLink?: boolean
   onEventChange?: (eventId: string) => void
+  onTenantChange?: (tenantId: string) => void
+  onCreateTenant?: () => void
 }
 
-export function MobileTopBar({ tenant, showPlatformLink = false }: TenantNavProps) {
+export function MobileTopBar({ tenant, memberships = [], selectedTenantId = null, showPlatformLink = false, onTenantChange, onCreateTenant }: TenantNavProps) {
   return (
     <header className="mobile-topbar">
-      <TenantSwitcherDisplay tenant={tenant} />
+      <TenantSwitcherDisplay tenant={tenant} memberships={memberships} selectedTenantId={selectedTenantId} onSelect={onTenantChange} onCreate={onCreateTenant} />
+      {showPlatformLink ? (
+        <Link className="topbar-icon-link" to="/platform" aria-label="Open Platform Console">
+          <ShieldCheck size={18} aria-hidden />
+        </Link>
+      ) : null}
+    </header>
+  )
+}
+
+export function TenantTopNav({ tenant, memberships = [], selectedTenantId = null, showPlatformLink = false, onTenantChange, onCreateTenant }: TenantNavProps) {
+  return (
+    <header className="tenant-topnav">
+      <TenantSwitcherDisplay tenant={tenant} memberships={memberships} selectedTenantId={selectedTenantId} onSelect={onTenantChange} onCreate={onCreateTenant} />
       {showPlatformLink ? (
         <Link className="topbar-icon-link" to="/platform" aria-label="Open Platform Console">
           <ShieldCheck size={18} aria-hidden />
@@ -132,7 +144,7 @@ export function MobileBottomNav({ event, showPlatformLink = false }: { event: Ev
   )
 }
 
-export function DesktopSidebar({ tenant, event, events = [], showPlatformLink = false, onEventChange }: TenantNavProps) {
+export function DesktopSidebar({ event, events = [], showPlatformLink = false, onEventChange }: TenantNavProps) {
   return (
     <aside className="desktop-sidebar">
       <div className="sidebar-brand">
@@ -142,7 +154,6 @@ export function DesktopSidebar({ tenant, event, events = [], showPlatformLink = 
           <small>Pledge collections</small>
         </div>
       </div>
-      <TenantSwitcherDisplay tenant={tenant} />
       <EventContextDisplay event={event} events={events} onEventChange={onEventChange} />
       <nav aria-label="Tenant navigation">
         {showPlatformLink ? (

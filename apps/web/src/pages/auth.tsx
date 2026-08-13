@@ -11,7 +11,7 @@ import { getSingleActiveMembership, useSessionStore } from '../stores/session-st
 import { MoneyDisplay, StatusBadge } from '../components/ui'
 import { PinEntry, canSubmitPin } from '../components/pin-entry'
 
-type AuthMode = 'login' | 'otp' | 'pin' | 'register' | 'onboarding' | 'selectTenant' | 'workspace'
+type AuthMode = 'login' | 'forgotPin' | 'otp' | 'pin' | 'register' | 'onboarding' | 'selectTenant' | 'workspace'
 type OnboardingIntent = 'FIRST_TENANT' | 'CREATE_ADDITIONAL_TENANT'
 
 interface AuthPageProps {
@@ -176,6 +176,9 @@ async function routeAfterAuthentication({
 }
 
 export function AuthPage({ title, subtitle, mode }: AuthPageProps) {
+  if (mode === 'forgotPin') {
+    return <ForgotPinPage title={title} subtitle={subtitle} />
+  }
   if (mode === 'otp') {
     return <OtpPage title={title} subtitle={subtitle} />
   }
@@ -191,57 +194,112 @@ export function AuthPage({ title, subtitle, mode }: AuthPageProps) {
   if (mode === 'workspace') {
     return <WorkspaceChooserPage title={title} subtitle={subtitle} />
   }
-  return <LoginPage title={title} subtitle={mode === 'register' ? subtitle : subtitle} mode={mode} />
+  if (mode === 'register') {
+    return <OtpRequestPage title={title} subtitle={subtitle} />
+  }
+  return <LoginPage title={title} subtitle={subtitle} />
 }
 
-function LoginPage({ title, subtitle, mode }: Pick<AuthPageProps, 'title' | 'subtitle' | 'mode'>) {
+function LoginPage({ title, subtitle }: Pick<AuthPageProps, 'title' | 'subtitle'>) {
   const navigate = useNavigate()
   const location = useLocation()
   const routeState = location.state as { from?: { pathname?: string } } | null
+  const session = useSessionStore()
   const [phone, setPhone] = useState(localStorage.getItem(phoneDraftKey) ?? '')
+  const [pin, setPin] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const submittingRef = useRef(false)
+
+  function storePostAuthDestination() {
+    if (location.pathname.startsWith('/platform')) {
+      const requestedPlatformPath = routeState?.from?.pathname?.startsWith('/platform') ? routeState.from.pathname : '/platform'
+      localStorage.setItem(postAuthDestinationKey, requestedPlatformPath === '/platform/login' ? '/platform' : requestedPlatformPath)
+    } else if (routeState?.from?.pathname === '/organizations/new') {
+      localStorage.setItem(postAuthDestinationKey, '/organizations/new')
+    } else {
+      localStorage.removeItem(postAuthDestinationKey)
+    }
+  }
+
   const mutation = useMutation({
-    mutationFn: async () => {
-      const normalized = normalizeTanzaniaPhone(phone)
-      await api.requestOtp(normalized)
+    mutationFn: async (values: { phone: string; pin: string }) => {
+      const normalized = normalizeTanzaniaPhone(values.phone)
       localStorage.setItem(phoneDraftKey, normalized)
-      if (location.pathname.startsWith('/platform')) {
-        const requestedPlatformPath = routeState?.from?.pathname?.startsWith('/platform') ? routeState.from.pathname : '/platform'
-        localStorage.setItem(postAuthDestinationKey, requestedPlatformPath === '/platform/login' ? '/platform' : requestedPlatformPath)
-      } else if (routeState?.from?.pathname === '/organizations/new') {
-        localStorage.setItem(postAuthDestinationKey, '/organizations/new')
-      } else if (location.pathname === '/register') {
-        localStorage.setItem(postAuthDestinationKey, '/onboarding')
-      } else {
-        localStorage.removeItem(postAuthDestinationKey)
-      }
+      storePostAuthDestination()
+      const response = await api.loginWithPin(normalized, values.pin)
+      await supabase.auth.setSession({
+        access_token: response.session.access_token,
+        refresh_token: response.session.refresh_token,
+      })
       return normalized
     },
-    onSuccess: () => navigate('/verify-otp'),
-    onError: (nextError) => setError(errorMessage(nextError)),
+    onSuccess: async () => {
+      submittingRef.current = false
+      session.lockState.unlock()
+      const context = await session.refreshContext()
+      await routeAfterAuthentication({ context, navigate, session })
+    },
+    onError: (nextError) => {
+      submittingRef.current = false
+      setPin('')
+      setError(errorMessage(nextError))
+    },
   })
+  const loginPending = mutation.isPending || submittingRef.current
+  const loginReady = canSubmitPin({ pin, isPending: mutation.isPending, isSubmitting: submittingRef.current })
+
+  function submitLogin(nextPin = pin) {
+    if (!canSubmitPin({ pin: nextPin, isPending: mutation.isPending, isSubmitting: submittingRef.current })) {
+      return
+    }
+    if (mutation.isPending || submittingRef.current) {
+      return
+    }
+    submittingRef.current = true
+    setError(null)
+    mutation.mutate({ phone, pin: nextPin })
+  }
 
   return (
-    <form className="auth-form" onSubmit={(event) => event.preventDefault()}>
+    <form className="auth-form" onSubmit={(event) => {
+      event.preventDefault()
+      submitLogin()
+    }}>
       <div>
         <h1>{title}</h1>
         <p>{subtitle}</p>
       </div>
       <label>
         Phone number
-        <input inputMode="tel" placeholder="0712 345 678" value={phone} onChange={(event) => setPhone(event.target.value)} />
+        <input inputMode="tel" autoComplete="tel" placeholder="0712 345 678" value={phone} disabled={loginPending} onChange={(event) => setPhone(event.target.value)} />
       </label>
+      <PinEntry
+        label="PIN"
+        value={pin}
+        disabled={loginPending}
+        onChange={setPin}
+        onComplete={(nextPin) => submitLogin(nextPin)}
+        onEnterComplete={() => submitLogin()}
+      />
       {error ? <p className="field-error">{error}</p> : null}
-      <button className="primary-button" type="button" disabled={mutation.isPending} onClick={() => mutation.mutate()}>
-        {mutation.isPending ? 'Sending...' : 'Continue'}
+      {error?.includes('No verified Ahadi account') ? (
+        <button className="text-button" type="button" onClick={() => navigate('/register')}>
+          Create an organization
+        </button>
+      ) : null}
+      <button className="primary-button" type="submit" disabled={!loginReady}>
+        {mutation.isPending ? 'Signing in...' : 'Login'}
       </button>
-      {mode === 'login' && location.pathname === '/login' ? (
+      {location.pathname === '/login' ? (
         <>
+          <button className="text-button" type="button" onClick={() => navigate('/forgot-pin')}>
+            Forgot PIN?
+          </button>
           <button className="text-button" type="button" onClick={() => navigate('/register')}>
             Create a new organization
           </button>
           <button className="text-button" type="button" onClick={() => navigate('/platform/login')}>
-            Platform administration
+            Platform Administration
           </button>
         </>
       ) : null}
@@ -250,11 +308,47 @@ function LoginPage({ title, subtitle, mode }: Pick<AuthPageProps, 'title' | 'sub
           Existing Ahadi account login
         </button>
       ) : null}
-      {mode === 'register' ? (
-        <button className="text-button" type="button" onClick={() => navigate('/login')}>
-          I already have an account
-        </button>
-      ) : null}
+      <p className="privacy-note">We use your phone number only to secure your Ahadi account and send requested verification messages.</p>
+    </form>
+  )
+}
+
+function OtpRequestPage({ title, subtitle }: Pick<AuthPageProps, 'title' | 'subtitle'>) {
+  const navigate = useNavigate()
+  const [phone, setPhone] = useState(localStorage.getItem(phoneDraftKey) ?? '')
+  const [error, setError] = useState<string | null>(null)
+  const mutation = useMutation({
+    mutationFn: async () => {
+      const normalized = normalizeTanzaniaPhone(phone)
+      await api.requestOtp(normalized)
+      localStorage.setItem(phoneDraftKey, normalized)
+      localStorage.setItem(postAuthDestinationKey, '/onboarding')
+      return normalized
+    },
+    onSuccess: () => navigate('/verify-otp'),
+    onError: (nextError) => setError(errorMessage(nextError)),
+  })
+
+  return (
+    <form className="auth-form" onSubmit={(event) => {
+      event.preventDefault()
+      mutation.mutate()
+    }}>
+      <div>
+        <h1>{title}</h1>
+        <p>{subtitle}</p>
+      </div>
+      <label>
+        Phone number
+        <input inputMode="tel" autoComplete="tel" placeholder="0712 345 678" value={phone} disabled={mutation.isPending} onChange={(event) => setPhone(event.target.value)} />
+      </label>
+      {error ? <p className="field-error">{error}</p> : null}
+      <button className="primary-button" type="submit" disabled={mutation.isPending}>
+        {mutation.isPending ? 'Sending...' : 'Continue'}
+      </button>
+      <button className="text-button" type="button" onClick={() => navigate('/login')}>
+        I already have an account
+      </button>
       <p className="privacy-note">We use your phone number only to secure your Ahadi account and send requested verification messages.</p>
     </form>
   )
@@ -333,6 +427,166 @@ function OtpPage({ title, subtitle }: Pick<AuthPageProps, 'title' | 'subtitle'>)
   )
 }
 
+function ForgotPinPage({ title, subtitle }: Pick<AuthPageProps, 'title' | 'subtitle'>) {
+  const navigate = useNavigate()
+  const session = useSessionStore()
+  const [step, setStep] = useState<'phone' | 'otp' | 'pin'>('phone')
+  const [phone, setPhone] = useState(localStorage.getItem(phoneDraftKey) ?? '')
+  const [token, setToken] = useState('')
+  const [pin, setPin] = useState('')
+  const [confirmPin, setConfirmPin] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const submittingRef = useRef(false)
+
+  const requestMutation = useMutation({
+    mutationFn: async () => {
+      const normalized = normalizeTanzaniaPhone(phone)
+      await api.requestOtp(normalized)
+      localStorage.setItem(phoneDraftKey, normalized)
+      return normalized
+    },
+    onSuccess: (normalized) => {
+      submittingRef.current = false
+      setPhone(normalized)
+      setError(null)
+      setStep('otp')
+    },
+    onError: (nextError) => {
+      submittingRef.current = false
+      setError(errorMessage(nextError))
+    },
+  })
+
+  const verifyMutation = useMutation({
+    mutationFn: async (nextToken: string) => {
+      const normalized = normalizeTanzaniaPhone(phone)
+      const response = await api.verifyOtp(normalized, nextToken)
+      await supabase.auth.setSession({
+        access_token: response.session.access_token,
+        refresh_token: response.session.refresh_token,
+      })
+    },
+    onSuccess: () => {
+      submittingRef.current = false
+      setError(null)
+      setStep('pin')
+    },
+    onError: (nextError) => {
+      submittingRef.current = false
+      setToken('')
+      setError(errorMessage(nextError))
+    },
+  })
+
+  const pinMutation = useMutation({
+    mutationFn: async (values: { pin: string; confirmPin: string }) => {
+      setupPinSchema.parse(values)
+      await api.setPin(values.pin, values.confirmPin)
+    },
+    onSuccess: async () => {
+      submittingRef.current = false
+      session.lockState.unlock()
+      const context = await session.refreshContext()
+      await routeAfterAuthentication({ context, navigate, session })
+    },
+    onError: (nextError) => {
+      submittingRef.current = false
+      setPin('')
+      setConfirmPin('')
+      setError(errorMessage(nextError))
+    },
+  })
+
+  function requestReset() {
+    if (requestMutation.isPending || submittingRef.current) return
+    submittingRef.current = true
+    setError(null)
+    requestMutation.mutate()
+  }
+
+  function verifyReset(nextToken = token) {
+    if (nextToken.length !== 6 || verifyMutation.isPending || submittingRef.current) return
+    submittingRef.current = true
+    setError(null)
+    verifyMutation.mutate(nextToken)
+  }
+
+  function submitPin(nextPin = pin, nextConfirmPin = confirmPin) {
+    if (!canSubmitPin({ pin: nextPin, confirmPin: nextConfirmPin, isPending: pinMutation.isPending, isSubmitting: submittingRef.current })) return
+    submittingRef.current = true
+    setError(null)
+    pinMutation.mutate({ pin: nextPin, confirmPin: nextConfirmPin })
+  }
+
+  return (
+    <form className="auth-form" onSubmit={(event) => event.preventDefault()}>
+      <div>
+        <h1>{title}</h1>
+        <p>{subtitle}</p>
+      </div>
+      {step === 'phone' ? (
+        <>
+          <label>
+            Phone number
+            <input inputMode="tel" autoComplete="tel" placeholder="0712 345 678" value={phone} disabled={requestMutation.isPending} onChange={(event) => setPhone(event.target.value)} />
+          </label>
+          {error ? <p className="field-error">{error}</p> : null}
+          <button className="primary-button" type="button" disabled={requestMutation.isPending || submittingRef.current} onClick={requestReset}>
+            {requestMutation.isPending ? 'Sending...' : 'Send reset code'}
+          </button>
+        </>
+      ) : null}
+      {step === 'otp' ? (
+        <>
+          <p className="phone-summary">Code sent to {phone || 'your phone'}</p>
+          <label>
+            Six-digit code
+            <input
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              maxLength={6}
+              placeholder="123456"
+              value={token}
+              disabled={verifyMutation.isPending}
+              onChange={(event) => {
+                const nextToken = event.target.value.replace(/\D/g, '').slice(0, 6)
+                setToken(nextToken)
+                if (nextToken.length === 6) {
+                  verifyReset(nextToken)
+                }
+              }}
+            />
+          </label>
+          {error ? <p className="field-error">{error}</p> : null}
+          <button className="primary-button" type="button" disabled={token.length !== 6 || verifyMutation.isPending || submittingRef.current} onClick={() => verifyReset()}>
+            {verifyMutation.isPending ? 'Verifying...' : 'Verify code'}
+          </button>
+        </>
+      ) : null}
+      {step === 'pin' ? (
+        <>
+          <PinEntry label="New PIN" value={pin} disabled={pinMutation.isPending || submittingRef.current} autoFocus onChange={setPin} onEnterComplete={() => submitPin()} />
+          <PinEntry
+            label="Confirm new PIN"
+            value={confirmPin}
+            disabled={pinMutation.isPending || submittingRef.current}
+            onChange={setConfirmPin}
+            onComplete={(nextConfirmPin) => submitPin(pin, nextConfirmPin)}
+            onEnterComplete={() => submitPin()}
+          />
+          {error ? <p className="field-error">{error}</p> : null}
+          <button className="primary-button" type="button" disabled={!canSubmitPin({ pin, confirmPin, isPending: pinMutation.isPending, isSubmitting: submittingRef.current })} onClick={() => submitPin()}>
+            {pinMutation.isPending ? 'Saving...' : 'Set PIN and Login'}
+          </button>
+        </>
+      ) : null}
+      <button className="text-button" type="button" onClick={() => navigate('/login')}>
+        Back to Login
+      </button>
+    </form>
+  )
+}
+
 function PinPage({ title, subtitle }: Pick<AuthPageProps, 'title' | 'subtitle'>) {
   const navigate = useNavigate()
   const location = useLocation()
@@ -400,7 +654,7 @@ function PinPage({ title, subtitle }: Pick<AuthPageProps, 'title' | 'subtitle'>)
       </div>
       <div className="security-note">
         <LockKeyhole size={20} aria-hidden />
-        <span>PIN unlocks this device only. Full logout, session expiry, or a new device requires OTP again.</span>
+        <span>PIN protects account access. Full logout, session expiry, or a new device signs in with phone and PIN.</span>
       </div>
       <PinEntry
         label="PIN"

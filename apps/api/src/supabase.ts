@@ -8,6 +8,15 @@ export const supabasePublic = createClient(env.SUPABASE_URL, env.supabasePublish
   },
 })
 
+export const supabaseAdmin = env.supabaseServiceRoleKey
+  ? createClient(env.SUPABASE_URL, env.supabaseServiceRoleKey, {
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+      },
+    })
+  : null
+
 export function createUserSupabase(accessToken: string) {
   return createClient(env.SUPABASE_URL, env.supabasePublishableKey, {
     global: {

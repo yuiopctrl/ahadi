@@ -8,6 +8,7 @@ import { z, ZodError } from 'zod'
 import type { ApiErrorCode } from '@ahadi/types'
 import {
   onboardingPayloadSchema,
+  phonePinLoginSchema,
   requestOtpSchema,
   setupPinSchema,
   tenantContextHeaderSchema,
@@ -30,7 +31,7 @@ import {
   supportedExportFormats,
   type ReportExportFormat,
 } from './report-exports.js'
-import { createUserSupabase, supabasePublic } from './supabase.js'
+import { createUserSupabase, supabaseAdmin, supabasePublic } from './supabase.js'
 import { loadUserContext, requestIdMiddleware, requireAuth, requirePlatformPermission, requireTenantContext } from './middleware.js'
 
 export const app = express()
@@ -1689,6 +1690,67 @@ if (env.NODE_ENV === 'development') {
     })
   })
 }
+
+app.post('/api/v1/auth/login-pin', strictLimiter, async (request, response, next) => {
+  try {
+    if (!supabaseAdmin) {
+      throw new AppError('INTERNAL_ERROR', 'Phone and PIN login is not configured')
+    }
+
+    const input = phonePinLoginSchema.parse(request.body)
+    const { data, error } = await supabaseAdmin.rpc('rpc_verify_phone_pin', {
+      p_phone: input.phone,
+      p_pin: input.pin,
+    })
+    if (error) {
+      throw error
+    }
+
+    const verification = data as {
+      ok?: boolean
+      user_id?: string
+      phone?: string
+      locked_until?: string | null
+      remaining_attempts?: number
+      reason?: 'NO_VERIFIED_ACCOUNT' | 'PIN_REQUIRED' | 'PIN_INVALID' | 'PIN_LOCKED'
+    } | null
+
+    if (!verification?.ok) {
+      if (verification?.reason === 'PIN_LOCKED') {
+        throw new AppError('PIN_LOCKED', 'PIN is temporarily locked after too many attempts. Try again shortly.', 423)
+      }
+      const message = verification?.reason === 'NO_VERIFIED_ACCOUNT'
+        ? 'No verified Ahadi account was found for this number.'
+        : 'Phone number or PIN is incorrect.'
+      throw new AppError('PIN_INVALID', message, 401)
+    }
+
+    if (!verification.user_id) {
+      throw new AppError('INTERNAL_ERROR', 'Unable to complete phone and PIN login')
+    }
+
+    const sessionPassword = `${randomBytes(32).toString('base64url')}aA1!`
+    const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(verification.user_id, {
+      password: sessionPassword,
+      phone_confirm: true,
+    })
+    if (updateError) {
+      throw updateError
+    }
+
+    const { data: authData, error: signInError } = await supabasePublic.auth.signInWithPassword({
+      phone: verification.phone ?? input.phone,
+      password: sessionPassword,
+    })
+    if (signInError || !authData.session) {
+      throw signInError ?? new AppError('SESSION_REQUIRED', 'Unable to create session')
+    }
+
+    response.json({ session: authData.session, user: authData.user })
+  } catch (error) {
+    next(error)
+  }
+})
 
 app.post('/api/v1/auth/request-otp', strictLimiter, async (request, response, next) => {
   try {

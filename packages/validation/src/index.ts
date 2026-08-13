@@ -88,6 +88,11 @@ export const verifyPinSchema = z.object({
   pin: z.string().regex(/^[0-9]{4}$/),
 })
 
+export const phonePinLoginSchema = z.object({
+  phone: tanzaniaPhoneSchema,
+  pin: z.string().regex(/^[0-9]{4}$/),
+})
+
 export const organizationSchema = z.object({
   tenantName: z.string().trim().min(2).max(120),
   tenantPhone: tanzaniaPhoneSchema,

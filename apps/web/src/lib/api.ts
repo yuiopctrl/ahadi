@@ -83,6 +83,12 @@ async function apiDownload(path: string, options: RequestInit & { tenantId?: str
 
 export const api = {
   requestOtp: (phone: string) => apiFetch<{ ok: boolean }>('/auth/request-otp', { method: 'POST', auth: false, body: JSON.stringify({ phone }) }),
+  loginWithPin: (phone: string, pin: string) =>
+    apiFetch<{ session: { access_token: string; refresh_token: string }; user: unknown }>('/auth/login-pin', {
+      method: 'POST',
+      auth: false,
+      body: JSON.stringify({ phone, pin }),
+    }),
   verifyOtp: (phone: string, token: string) =>
     apiFetch<{ session: { access_token: string; refresh_token: string }; user: unknown }>('/auth/verify-otp', {
       method: 'POST',

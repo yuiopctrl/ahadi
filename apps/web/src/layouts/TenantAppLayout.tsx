@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import { CalendarDays, CheckCircle2, Clock3, Target } from 'lucide-react'
 import { Link, Outlet, useLocation, useMatch, useNavigate } from 'react-router-dom'
-import { MobileBottomNav, MobileTopBar, DesktopSidebar } from '../navigation'
+import { MobileBottomNav, MobileTopBar, DesktopSidebar, TenantTopNav } from '../navigation'
 import { useSessionStore } from '../stores/session-store'
 import { hasActivePlatformAccess } from '../routes/access'
 import type { EventSummary } from '@ahadi/types'
@@ -51,6 +51,7 @@ export function TenantAppLayout() {
   const eventRouteMatch = nestedEventRouteMatch ?? eventDetailRouteMatch
   const routeEventId = eventRouteMatch?.params.eventId
   const tenant = session.userContext?.tenantMemberships.find((membership) => membership.tenantId === session.selectedTenantId) ?? null
+  const memberships = session.userContext?.tenantMemberships.filter((membership) => membership.membershipStatus === 'ACTIVE' && (membership.tenantStatus === 'ACTIVE' || membership.tenantStatus === 'TRIAL')) ?? []
   const events = session.selectedTenantContext?.events ?? tenant?.accessibleEvents ?? []
   const fallbackEvent = events[0] ?? null
   const storedEvent = selectedEventId ? events.find((candidate) => candidate.id === selectedEventId) ?? null : null
@@ -74,11 +75,37 @@ export function TenantAppLayout() {
     }
   }
 
+  async function handleTenantChange(tenantId: string) {
+    await session.selectTenant(tenantId)
+    navigate('/app', { replace: false })
+  }
+
+  function handleCreateTenant() {
+    navigate('/organizations/new')
+  }
+
   return (
     <div className="tenant-layout">
-      <MobileTopBar tenant={tenant} event={event} showPlatformLink={hasActivePlatformAccess(session.userContext)} />
+      <MobileTopBar
+        tenant={tenant}
+        memberships={memberships}
+        selectedTenantId={session.selectedTenantId}
+        event={event}
+        showPlatformLink={hasActivePlatformAccess(session.userContext)}
+        onTenantChange={(tenantId) => void handleTenantChange(tenantId)}
+        onCreateTenant={handleCreateTenant}
+      />
       <DesktopSidebar tenant={tenant} event={event} events={events} onEventChange={handleEventChange} showPlatformLink={hasActivePlatformAccess(session.userContext)} />
       <div className="tenant-content-shell">
+        <TenantTopNav
+          tenant={tenant}
+          memberships={memberships}
+          selectedTenantId={session.selectedTenantId}
+          event={event}
+          showPlatformLink={hasActivePlatformAccess(session.userContext)}
+          onTenantChange={(tenantId) => void handleTenantChange(tenantId)}
+          onCreateTenant={handleCreateTenant}
+        />
         <EventSnapshotBar event={event} />
         <Outlet />
       </div>
