@@ -1,6 +1,7 @@
-import { CalendarDays, CheckCircle2, Clock3, LogOut, Menu, Settings, ShieldCheck, Target, User } from 'lucide-react'
+import { CalendarDays, CheckCircle2, Clock3, LogOut, Settings, Target, User } from 'lucide-react'
 import { useState } from 'react'
-import { Link, NavLink } from 'react-router-dom'
+import { Link } from 'react-router-dom'
+import type { User as SupabaseUser } from '@supabase/supabase-js'
 import type { EventSummary, TenantMembershipContext, UserContext } from '@ahadi/types'
 import { TenantSwitcherDisplay } from './ui'
 
@@ -13,17 +14,23 @@ function moneyText(value: number | null | undefined) {
   return new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(value ?? 0)
 }
 
-function initialsFor(context: UserContext | null) {
-  const name = context?.profile?.fullName?.trim()
-  if (name) {
-    const initials = name.split(/\s+/).map((part) => part[0]).join('').slice(0, 2)
-    return initials.toUpperCase()
-  }
-  return 'A'
+function metadataName(user: SupabaseUser | null, key: string) {
+  const value = user?.user_metadata?.[key] ?? user?.app_metadata?.[key]
+  return typeof value === 'string' ? value.trim() : ''
 }
 
-function displayNameFor(context: UserContext | null) {
-  return context?.profile?.fullName?.trim() || context?.profile?.phoneE164 || 'Ahadi user'
+function resolveDisplayName(context: UserContext | null, user: SupabaseUser | null) {
+  const fullName = context?.profile?.fullName?.trim() || metadataName(user, 'full_name')
+  const displayName = metadataName(user, 'display_name') || metadataName(user, 'displayName') || metadataName(user, 'name')
+  return fullName || displayName || context?.profile?.phoneE164 || user?.phone || context?.profile?.email || user?.email || 'User'
+}
+
+function initialsFor(name: string) {
+  const parts = name.match(/[A-Za-z0-9]+/g) ?? []
+  const first = parts[0] ?? ''
+  const second = parts[1] ?? ''
+  const initials = second ? `${first[0] ?? ''}${second[0] ?? ''}` : first.slice(0, 2)
+  return (initials || 'U').toUpperCase()
 }
 
 function roleFor(context: UserContext | null, tenant: TenantMembershipContext | null) {
@@ -41,25 +48,13 @@ function EventMetadata({ event }: { event: EventSummary | null }) {
   )
 }
 
-function EventNavigation({ event, compact = false }: { event: EventSummary | null; compact?: boolean }) {
-  if (!event) return null
-  const eventBase = `/app/events/${event.id}`
-  return (
-    <nav className={compact ? 'unified-header-event-nav compact' : 'unified-header-event-nav'} aria-label="Current event navigation">
-      <NavLink to={eventBase} end>Dashboard</NavLink>
-      <NavLink to={`${eventBase}/members`}>Members</NavLink>
-      <NavLink to={`${eventBase}/reports`}>Reports</NavLink>
-    </nav>
-  )
-}
-
 export function UnifiedTenantHeader({
   tenant,
   memberships,
   selectedTenantId,
   event,
   userContext,
-  showPlatformLink,
+  sessionUser,
   onTenantChange,
   onCreateTenant,
   onLogout,
@@ -69,21 +64,19 @@ export function UnifiedTenantHeader({
   selectedTenantId: string | null
   event: EventSummary | null
   userContext: UserContext | null
-  showPlatformLink: boolean
+  sessionUser: SupabaseUser | null
   onTenantChange: (tenantId: string) => void
   onCreateTenant: () => void
   onLogout: () => void
 }) {
   const [accountOpen, setAccountOpen] = useState(false)
   const [eventDetailsOpen, setEventDetailsOpen] = useState(false)
-  const [eventNavOpen, setEventNavOpen] = useState(false)
-  const name = displayNameFor(userContext)
+  const name = resolveDisplayName(userContext, sessionUser)
   const role = roleFor(userContext, tenant)
 
   function closeMenus() {
     setAccountOpen(false)
     setEventDetailsOpen(false)
-    setEventNavOpen(false)
   }
 
   return (
@@ -107,18 +100,9 @@ export function UnifiedTenantHeader({
       </div>
 
       <div className="unified-header-actions">
-        <EventNavigation event={event} />
-        {event ? (
-          <div className="unified-header-event-menu">
-            <button type="button" aria-label="Open event navigation" aria-expanded={eventNavOpen} onClick={() => setEventNavOpen((value) => !value)}>
-              <Menu size={18} aria-hidden />
-            </button>
-            {eventNavOpen ? <EventNavigation event={event} compact /> : null}
-          </div>
-        ) : null}
         <div className="account-menu">
           <button className="account-menu-trigger" type="button" aria-label="Open account menu" aria-expanded={accountOpen} onClick={() => setAccountOpen((value) => !value)}>
-            <span className="account-avatar">{initialsFor(userContext)}</span>
+            <span className="account-avatar">{initialsFor(name)}</span>
             <span className="account-copy">
               <strong>{name}</strong>
               <small>{role}</small>
@@ -130,7 +114,6 @@ export function UnifiedTenantHeader({
               <div className="account-menu-popover" role="menu" aria-label="Account">
                 <Link to="/app/settings" role="menuitem" onClick={() => setAccountOpen(false)}><User size={17} aria-hidden /> My Profile</Link>
                 <Link to="/app/settings" role="menuitem" onClick={() => setAccountOpen(false)}><Settings size={17} aria-hidden /> Account Settings</Link>
-                {showPlatformLink ? <Link to="/platform" role="menuitem" onClick={() => setAccountOpen(false)}><ShieldCheck size={17} aria-hidden /> Platform Console</Link> : null}
                 <button type="button" role="menuitem" onClick={() => {
                   setAccountOpen(false)
                   onLogout()

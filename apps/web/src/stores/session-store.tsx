@@ -51,7 +51,7 @@ interface SessionStore {
   refreshContext: () => Promise<UserContext | null>
   selectTenant: (tenantId: string) => Promise<TenantContext>
   selectEvent: (eventId: string | null) => void
-  clearTenant: () => void
+  clearTenant: (clearStoredEvents?: boolean) => void
   signOut: () => Promise<void>
 }
 
@@ -62,6 +62,14 @@ const activePlatformRoles = new Set(['PLATFORM_OWNER', 'PLATFORM_ADMIN', 'PLATFO
 
 function selectedEventStorageKey(tenantId: string) {
   return `ahadi:selected-event-id:${tenantId}`
+}
+
+function clearStoredEventSelections() {
+  for (const key of Object.keys(localStorage)) {
+    if (key.startsWith('ahadi:selected-event-id:')) {
+      localStorage.removeItem(key)
+    }
+  }
 }
 
 function hasActivePlatformIdentity(context: UserContext | null) {
@@ -217,8 +225,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     }
   }, [selectedTenantId])
 
-  const clearTenant = useCallback(() => {
+  const clearTenant = useCallback((clearStoredEvents = false) => {
     localStorage.removeItem(selectedTenantStorageKey)
+    if (clearStoredEvents) {
+      clearStoredEventSelections()
+    }
     setSelectedTenantId(null)
     setSelectedEventId(null)
     setSelectedTenantContext(null)
@@ -228,7 +239,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     await queryClient.cancelQueries()
     await api.logout().catch(() => undefined)
     await supabase.auth.signOut()
-    clearTenant()
+    clearTenant(true)
     setSession(null)
     setUserContext(null)
     queryClient.clear()
@@ -273,7 +284,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         setSession(data.session)
         if (!data.session) {
           setUserContext(null)
-          clearTenant()
+          clearTenant(true)
           resetLockState()
           setBootstrapState('UNAUTHENTICATED')
           return
@@ -296,7 +307,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
           await supabase.auth.signOut().catch(() => undefined)
           setSession(null)
           setUserContext(null)
-          clearTenant()
+          clearTenant(true)
           resetLockState()
           setBootstrapState('UNAUTHENTICATED')
           return

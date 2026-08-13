@@ -63,7 +63,7 @@ export function TenantAppLayout() {
           selectedTenantId={session.selectedTenantId}
           event={event}
           userContext={session.userContext}
-          showPlatformLink={hasActivePlatformAccess(session.userContext)}
+          sessionUser={session.session?.user ?? null}
           onTenantChange={(tenantId) => void handleTenantChange(tenantId)}
           onCreateTenant={handleCreateTenant}
           onLogout={() => void handleLogout()}
