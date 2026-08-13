@@ -1694,7 +1694,7 @@ if (env.NODE_ENV === 'development') {
 app.post('/api/v1/auth/login-pin', strictLimiter, async (request, response, next) => {
   try {
     if (!supabaseAdmin) {
-      throw new AppError('INTERNAL_ERROR', 'Phone and PIN login is not configured')
+      throw new AppError('AUTH_CONFIGURATION_REQUIRED', 'Phone and PIN login requires SUPABASE_SERVICE_ROLE_KEY in the API environment')
     }
 
     const input = phonePinLoginSchema.parse(request.body)

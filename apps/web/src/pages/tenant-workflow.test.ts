@@ -15,7 +15,7 @@ const guards = readFileSync(new URL('../routes/guards.tsx', import.meta.url), 'u
 const access = readFileSync(new URL('../routes/access.ts', import.meta.url), 'utf8')
 const validation = readFileSync(new URL('../../../../packages/validation/src/index.ts', import.meta.url), 'utf8')
 const onboardingIntentMigration = readFileSync(new URL('../../../../supabase/migrations/053_additional_tenant_onboarding_intent.sql', import.meta.url), 'utf8')
-const phonePinMigration = readFileSync(new URL('../../../../supabase/migrations/054_phone_pin_login.sql', import.meta.url), 'utf8')
+const phonePinMigration = readFileSync(new URL('../../../../supabase/migrations/055_phone_pin_login_uses_auth_phone.sql', import.meta.url), 'utf8')
 const apiServer = readFileSync(new URL('../../../../apps/api/src/app.ts', import.meta.url), 'utf8')
 
 test('tenant workflow does not depend on hardcoded demo event ids', () => {
@@ -142,6 +142,8 @@ test('returning users log in with phone and PIN instead of normal-login OTP', ()
   assert.match(apiServer, /supabasePublic\.auth\.signInWithPassword/)
   assert.match(phonePinMigration, /create or replace function public\.rpc_verify_phone_pin\(p_phone text, p_pin text\)/)
   assert.match(phonePinMigration, /auth_user\.phone_confirmed_at is not null/)
+  assert.match(phonePinMigration, /regexp_replace\(coalesce\(auth_user\.phone, ''\), '\\D', '', 'g'\) = normalized_digits/)
+  assert.match(phonePinMigration, /insert into public\.profiles/)
   assert.match(phonePinMigration, /locked_until = case when failed_attempts \+ 1 >= 5/)
   assert.match(loginPage, /api\.loginWithPin\(normalized, values\.pin\)/)
   assert.match(loginPage, /onComplete=\{\(nextPin\) => submitLogin\(nextPin\)\}/)
