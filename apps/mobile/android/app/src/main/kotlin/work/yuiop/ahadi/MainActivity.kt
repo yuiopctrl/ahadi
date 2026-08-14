@@ -1,4 +1,4 @@
-package work.yuiop.ahadi_mobile
+package work.yuiop.ahadi
 
 import io.flutter.embedding.android.FlutterActivity
 
