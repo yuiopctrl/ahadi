@@ -348,10 +348,37 @@ class FakeAhadiApi implements AhadiApi {
         'due_date': '2026-08-24',
         'created_at': '2026-08-01',
       },
+      {
+        'pledge_id': 'pledge-b',
+        'event_member_id': 'em-b',
+        'member_name': 'Unpaid Contact',
+        'phone_e164': '+255712345679',
+        'pledged_amount': 80000,
+        'total_allocated': 0,
+        'outstanding_amount': 80000,
+        'pledge_status': 'PENDING',
+        'due_date': '2026-08-25',
+        'created_at': '2026-08-02',
+      },
+      {
+        'pledge_id': 'pledge-c',
+        'event_member_id': 'em-c',
+        'member_name': 'Done Contact',
+        'phone_e164': '+255712345680',
+        'pledged_amount': 50000,
+        'total_allocated': 50000,
+        'outstanding_amount': 0,
+        'pledgeStatus': 'PAID',
+        'due_date': '2026-08-26',
+        'created_at': '2026-08-03',
+      },
     ];
     final filtered = rows.where((row) {
-      final statusQuery = status?.toUpperCase() ?? 'ALL';
-      if (statusQuery != 'ALL' && row['status'] != statusQuery) return false;
+      final statusQuery = _normalizedPledgeStatus(status ?? 'ALL');
+      final rowStatus = _normalizedPledgeStatus(
+        '${row['status'] ?? row['pledge_status'] ?? row['pledgeStatus'] ?? ''}',
+      );
+      if (statusQuery != 'ALL' && rowStatus != statusQuery) return false;
       final query = search?.toLowerCase() ?? '';
       if (query.isEmpty) return true;
       return '${row['member_name'] ?? ''} ${row['full_name'] ?? ''} ${row['phone_e164'] ?? ''}'
@@ -430,6 +457,14 @@ class FakeAhadiApi implements AhadiApi {
       ),
     );
   }
+}
+
+String _normalizedPledgeStatus(String value) {
+  final status = value.trim().toUpperCase();
+  if (status == 'UNPAID') return 'PENDING';
+  if (status == 'PARTIAL') return 'PARTIALLY_PAID';
+  if (status == 'DONE') return 'PAID';
+  return status;
 }
 
 UserContext userWithMemberships(List<TenantMembership> memberships) {

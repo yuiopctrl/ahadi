@@ -647,6 +647,18 @@ const listPledgesQuerySchema = z.object({
   offset: z.coerce.number().int().min(0).optional().default(0),
 })
 
+function normalizedPledgeFilterStatus(value: string): string {
+  const status = value.trim().toUpperCase()
+  if (status === 'UNPAID') return 'PENDING'
+  if (status === 'PARTIAL') return 'PARTIALLY_PAID'
+  if (status === 'DONE') return 'PAID'
+  return status || 'ALL'
+}
+
+function pledgeRowStatus(row: Record<string, unknown>): string {
+  return String(row['status'] ?? row['pledge_status'] ?? row['pledgeStatus'] ?? '').toUpperCase()
+}
+
 const knownDatabaseCodes: ApiErrorCode[] = [
   'INVALID_INPUT',
   'SESSION_REQUIRED',
@@ -3254,9 +3266,9 @@ app.get('/api/v1/events/:eventId/pledges', requireAuth, loadUserContext, require
       throwFinancialDatabaseError(error, 'PLEDGES_LIST_FAILED')
     }
     const search = query.search.toLowerCase()
-    const status = query.status.toUpperCase()
+    const status = normalizedPledgeFilterStatus(query.status)
     const rows = jsonArray(data).filter((row) => {
-      const statusMatches = status === 'ALL' || String(row['status'] ?? '').toUpperCase() === status
+      const statusMatches = status === 'ALL' || pledgeRowStatus(row) === status
       if (!statusMatches) return false
       if (!search) return true
       return `${row['member_name'] ?? ''} ${row['full_name'] ?? ''} ${row['phone_e164'] ?? ''}`.toLowerCase().includes(search)

@@ -485,6 +485,28 @@ void main() {
     expect(api.lastPledgesLimit, 21);
     expect(api.lastPledgesOffset, 0);
     expect(api.lastPledgesStatus, 'ALL');
+    expect(find.text('Jane Contact'), findsOneWidget);
+    expect(find.text('Unpaid Contact'), findsOneWidget);
+    expect(find.text('Done Contact'), findsOneWidget);
+
+    await tester.tap(find.text('Unpaid'));
+    await tester.pumpAndSettle();
+    expect(api.lastPledgesStatus, 'PENDING');
+    expect(find.text('Unpaid Contact'), findsOneWidget);
+    expect(find.text('Jane Contact'), findsNothing);
+    expect(find.text('Done Contact'), findsNothing);
+
+    await tester.tap(find.text('Partial'));
+    await tester.pumpAndSettle();
+    expect(api.lastPledgesStatus, 'PARTIALLY_PAID');
+    expect(find.text('Jane Contact'), findsOneWidget);
+    expect(find.text('Unpaid Contact'), findsNothing);
+
+    await tester.tap(find.text('Done'));
+    await tester.pumpAndSettle();
+    expect(api.lastPledgesStatus, 'PAID');
+    expect(find.text('Done Contact'), findsOneWidget);
+    expect(find.text('Jane Contact'), findsNothing);
   });
 
   testWidgets('pledge details show financial values and edit pledge saves', (

@@ -106,8 +106,11 @@ class _PledgesScreenState extends State<PledgesScreen> {
               if (!snapshot.hasData) return const LoadingCards(count: 3);
               final data = snapshot.data!;
               final event = widget.controller.selectedEvent;
-              final visible = data.pledges.take(pageSize).toList();
-              final hasNext = data.pledges.length > pageSize;
+              final filtered = data.pledges
+                  .where(_matchesCurrentFilter)
+                  .toList();
+              final visible = filtered.take(pageSize).toList();
+              final hasNext = filtered.length > pageSize;
               if (event == null) {
                 return const Card(
                   child: Padding(
@@ -193,6 +196,32 @@ class _PledgesScreenState extends State<PledgesScreen> {
       ),
     );
   }
+
+  bool _matchesCurrentFilter(Map<String, dynamic> pledge) {
+    final status = _normalizedPledgeStatus(
+      stringFrom(
+        pledge,
+        'status',
+        stringFrom(pledge, 'pledge_status', stringFrom(pledge, 'pledgeStatus')),
+      ),
+    );
+    final statusMatches = filter == 'ALL' || status == filter;
+    if (!statusMatches) return false;
+    final normalizedQuery = query.trim().toLowerCase();
+    if (normalizedQuery.isEmpty) return true;
+    final haystack =
+        '${pledge['member_name'] ?? ''} ${pledge['full_name'] ?? ''} ${pledge['phone_e164'] ?? ''}'
+            .toLowerCase();
+    return haystack.contains(normalizedQuery);
+  }
+}
+
+String _normalizedPledgeStatus(String value) {
+  final status = value.trim().toUpperCase();
+  if (status == 'UNPAID') return 'PENDING';
+  if (status == 'PARTIAL') return 'PARTIALLY_PAID';
+  if (status == 'DONE') return 'PAID';
+  return status;
 }
 
 class _PledgePaginationControls extends StatelessWidget {

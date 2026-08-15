@@ -21,17 +21,26 @@ ThemeData ahadiTheme() {
     surface: AhadiColors.surface,
     error: AhadiColors.danger,
   );
+  final barColor = scheme.surfaceContainer;
   return ThemeData(
     useMaterial3: true,
     colorScheme: scheme,
     scaffoldBackgroundColor: AhadiColors.background,
     fontFamily: 'Roboto',
-    appBarTheme: const AppBarTheme(
-      backgroundColor: AhadiColors.surface,
+    appBarTheme: AppBarTheme(
+      backgroundColor: barColor,
       foregroundColor: AhadiColors.text,
       surfaceTintColor: Colors.transparent,
       centerTitle: false,
+      iconTheme: const IconThemeData(color: AhadiColors.text),
+      actionsIconTheme: const IconThemeData(color: AhadiColors.text),
+      titleTextStyle: const TextStyle(
+        color: AhadiColors.text,
+        fontSize: 20,
+        fontWeight: FontWeight.w700,
+      ),
     ),
+    navigationBarTheme: NavigationBarThemeData(backgroundColor: barColor),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
       fillColor: AhadiColors.surface,
