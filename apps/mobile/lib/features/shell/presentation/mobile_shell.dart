@@ -11,6 +11,7 @@ import '../../organizations/presentation/create_organization_screen.dart';
 import '../../organizations/presentation/organization_selection_screen.dart';
 import '../../pledges/presentation/pledges_screen.dart';
 import '../../profile/presentation/profile_screen.dart';
+import '../../reports/presentation/reports_screen.dart';
 import '../../users/presentation/users_roles_screen.dart';
 
 class MobileShell extends StatefulWidget {
@@ -373,6 +374,17 @@ class _MorePage extends StatelessWidget {
                 ),
                 const Divider(height: 1),
               ],
+              ListTile(
+                leading: const _MenuIcon(Icons.analytics_outlined),
+                title: const Text('Reports'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => ReportsScreen(controller: controller),
+                  ),
+                ),
+              ),
+              const Divider(height: 1),
               ListTile(
                 leading: const _MenuIcon(Icons.settings_outlined),
                 title: const Text('Settings'),

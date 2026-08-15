@@ -514,6 +514,35 @@ class FakeAhadiApi implements AhadiApi {
       }).toList();
       return _report(filtered, page, pageSize);
     }
+    if (reportType == 'pledges') {
+      final filtered = _pledgeReportRows.where((row) {
+        if (search.isEmpty) return true;
+        return _matchesNameOrPhone(
+          row,
+          search,
+          ['member', 'memberName'],
+          ['phone'],
+        );
+      }).toList();
+      return {
+        ..._report(filtered, page, pageSize),
+        'summary': {
+          'pledgeCount': filtered.length,
+          'totalPledged': filtered.fold<num>(
+            0,
+            (sum, row) => sum + (row['pledged'] as num),
+          ),
+          'totalPaid': filtered.fold<num>(
+            0,
+            (sum, row) => sum + (row['paid'] as num),
+          ),
+          'totalOutstanding': filtered.fold<num>(
+            0,
+            (sum, row) => sum + (row['outstanding'] as num),
+          ),
+        },
+      };
+    }
     if (reportType == 'outstanding') {
       final filtered = _outstandingRows.where((row) {
         if (search.isEmpty) return true;
@@ -1154,6 +1183,20 @@ final _outstandingRows = <Map<String, dynamic>>[
     'outstanding': 60000,
     'effectiveDueDate': '2026-08-24',
     'status': 'PARTIALLY_PAID',
+  },
+];
+
+final _pledgeReportRows = <Map<String, dynamic>>[
+  {
+    'pledgeId': 'pledge-a',
+    'eventMemberId': 'em-a',
+    'member': 'Jane Contact',
+    'phone': '+255712345678',
+    'pledged': 100000,
+    'paid': 40000,
+    'outstanding': 60000,
+    'status': 'PARTIALLY_PAID',
+    'effectiveDueDate': '2026-08-24',
   },
 ];
 
