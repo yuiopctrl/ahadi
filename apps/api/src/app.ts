@@ -35,6 +35,7 @@ import {
 } from './report-exports.js'
 import { createUserSupabase, supabaseAdmin, supabasePublic } from './supabase.js'
 import { loadUserContext, requestIdMiddleware, requireAuth, requirePlatformPermission, requireTenantContext } from './middleware.js'
+import { normalizeProfile } from './context-normalization.js'
 
 export const app = express()
 app.disable('etag')
@@ -1968,7 +1969,7 @@ app.patch('/api/v1/profile', requireAuth, loadUserContext, async (request, respo
     if (error) {
       throwFinancialDatabaseError(error, 'PROFILE_UPDATE_FAILED')
     }
-    response.json({ data })
+    response.json({ data: normalizeProfile(data) })
   } catch (error) {
     next(error)
   }
@@ -2112,6 +2113,26 @@ app.post('/api/v1/onboarding/complete', requireAuth, async (request, response, n
     }
     const resultRecord = jsonRecord(data)
     const tenantId = typeof resultRecord['tenant_id'] === 'string' ? resultRecord['tenant_id'] : typeof resultRecord['tenantId'] === 'string' ? resultRecord['tenantId'] : null
+    const adminUserId = request.auth?.user.id
+    if (adminUserId) {
+      const { data: profile, error: profileFetchError } = await client
+        .from('profiles')
+        .select('full_name')
+        .eq('id', adminUserId)
+        .single()
+      if (profileFetchError) {
+        throw profileFetchError
+      }
+      if (!String(profile?.full_name ?? '').trim()) {
+        const { error: profileUpdateError } = await client
+          .from('profiles')
+          .update({ full_name: input.adminFullName })
+          .eq('id', adminUserId)
+        if (profileUpdateError) {
+          throw profileUpdateError
+        }
+      }
+    }
     if (input.betaInvitationCode && tenantId) {
       const consume = await client.rpc('rpc_consume_beta_invitation', { p_code: input.betaInvitationCode, p_tenant_id: tenantId })
       if (consume.error) {
