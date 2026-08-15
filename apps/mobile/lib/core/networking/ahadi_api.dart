@@ -23,6 +23,11 @@ abstract class AhadiApi {
     String tenantId,
     Map<String, dynamic> payload,
   );
+  Future<Map<String, dynamic>> updateEvent(
+    String tenantId,
+    String eventId,
+    Map<String, dynamic> payload,
+  );
   Future<Map<String, dynamic>> eventFinancialSummary(
     String tenantId,
     String eventId,
@@ -31,7 +36,12 @@ abstract class AhadiApi {
     String tenantId,
     String eventId,
   );
-  Future<List<Map<String, dynamic>>> contacts(String tenantId);
+  Future<List<Map<String, dynamic>>> contacts(
+    String tenantId, {
+    String? search,
+    int? limit,
+    int? offset,
+  });
   Future<Map<String, dynamic>> contactDetail(String tenantId, String memberId);
   Future<Map<String, dynamic>> createContact(
     String tenantId,
@@ -69,8 +79,12 @@ abstract class AhadiApi {
   );
   Future<List<Map<String, dynamic>>> eventPledges(
     String tenantId,
-    String eventId,
-  );
+    String eventId, {
+    String? search,
+    String? status,
+    int? limit,
+    int? offset,
+  });
   Future<Map<String, dynamic>> upsertPledge(
     String tenantId,
     String eventId,

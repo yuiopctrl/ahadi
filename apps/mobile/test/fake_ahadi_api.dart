@@ -17,8 +17,16 @@ class FakeAhadiApi implements AhadiApi {
   int eventMembersCalls = 0;
   int eventPledgesCalls = 0;
   String? lastTenantId;
+  String? lastContactsSearch;
+  int? lastContactsLimit;
+  int? lastContactsOffset;
+  String? lastPledgesSearch;
+  String? lastPledgesStatus;
+  int? lastPledgesLimit;
+  int? lastPledgesOffset;
   Map<String, dynamic>? lastOnboardingPayload;
   Map<String, dynamic>? lastCreatedEvent;
+  Map<String, dynamic>? lastUpdatedEvent;
   Map<String, dynamic>? lastCreatedContact;
   Map<String, dynamic>? lastUpdatedContact;
   Map<String, dynamic>? lastPledgePayload;
@@ -35,6 +43,14 @@ class FakeAhadiApi implements AhadiApi {
     'tenant-b': makeTenantContext('tenant-b', 'Valentino Group'),
   };
   final eventSummaries = <String, Map<String, dynamic>>{};
+  List<Map<String, dynamic>> contactRows = [
+    {
+      'member_id': 'member-a',
+      'full_name': 'Jane Contact',
+      'phone_e164': '+255712345678',
+      'event_count': 1,
+    },
+  ];
 
   @override
   Future<Map<String, dynamic>> billingSummary(String tenantId) async => {
@@ -58,6 +74,56 @@ class FakeAhadiApi implements AhadiApi {
     lastTenantId = tenantId;
     lastCreatedEvent = payload;
     return {'eventId': 'event-new', ...payload};
+  }
+
+  @override
+  Future<Map<String, dynamic>> updateEvent(
+    String tenantId,
+    String eventId,
+    Map<String, dynamic> payload,
+  ) async {
+    lastTenantId = tenantId;
+    lastUpdatedEvent = payload;
+    final context = tenantContexts[tenantId];
+    if (context != null) {
+      tenantContexts[tenantId] = TenantContext(
+        tenantId: context.tenantId,
+        tenantName: context.tenantName,
+        events: context.events
+            .map(
+              (event) => event.id == eventId
+                  ? EventSummary(
+                      id: event.id,
+                      name: payload['name'] as String? ?? event.name,
+                      status: event.status,
+                      eventType:
+                          payload['eventType'] as String? ?? event.eventType,
+                      customEventType:
+                          payload['customEventType'] as String? ??
+                          event.customEventType,
+                      eventDate:
+                          payload['eventDate'] as String? ?? event.eventDate,
+                      venue: payload['venue'] as String? ?? event.venue,
+                      pledgeDeadline:
+                          payload['pledgeDeadline'] as String? ??
+                          event.pledgeDeadline,
+                      targetAmount:
+                          payload['targetAmount'] as num? ?? event.targetAmount,
+                      memberCount: event.memberCount,
+                      totalPledged: event.totalPledged,
+                      totalCollected: event.totalCollected,
+                      totalOutstanding: event.totalOutstanding,
+                    )
+                  : event,
+            )
+            .toList(),
+        permissions: context.permissions,
+        isOwner: context.isOwner,
+        accessState: context.accessState,
+        subscription: context.subscription,
+      );
+    }
+    return {'id': eventId, ...payload};
   }
 
   @override
@@ -85,6 +151,7 @@ class FakeAhadiApi implements AhadiApi {
     return {
       'contact': {
         'id': memberId,
+        'member_id': memberId,
         'full_name': 'Jane Contact',
         'phone_e164': '+255712345678',
       },
@@ -93,17 +160,26 @@ class FakeAhadiApi implements AhadiApi {
   }
 
   @override
-  Future<List<Map<String, dynamic>>> contacts(String tenantId) async {
+  Future<List<Map<String, dynamic>>> contacts(
+    String tenantId, {
+    String? search,
+    int? limit,
+    int? offset,
+  }) async {
     contactsCalls += 1;
     lastTenantId = tenantId;
-    return [
-      {
-        'member_id': 'member-a',
-        'full_name': 'Jane Contact',
-        'phone_e164': '+255712345678',
-        'event_count': 1,
-      },
-    ];
+    lastContactsSearch = search;
+    lastContactsLimit = limit;
+    lastContactsOffset = offset;
+    final rows = contactRows;
+    final filtered = rows.where((row) {
+      final query = search?.toLowerCase() ?? '';
+      if (query.isEmpty) return true;
+      return '${row['full_name'] ?? ''} ${row['phone_e164'] ?? ''}'
+          .toLowerCase()
+          .contains(query);
+    }).toList();
+    return filtered.skip(offset ?? 0).take(limit ?? filtered.length).toList();
   }
 
   @override
@@ -233,9 +309,13 @@ class FakeAhadiApi implements AhadiApi {
     return [
       {
         'event_member_id': 'em-a',
+        'member_id': 'member-a',
         'full_name': 'Jane Contact',
         'phone_e164': '+255712345678',
         'pledged_amount': 100000,
+        'total_allocated': 40000,
+        'outstanding_amount': 60000,
+        'pledge_status': 'PARTIALLY_PAID',
       },
     ];
   }
@@ -243,21 +323,42 @@ class FakeAhadiApi implements AhadiApi {
   @override
   Future<List<Map<String, dynamic>>> eventPledges(
     String tenantId,
-    String eventId,
-  ) async {
+    String eventId, {
+    String? search,
+    String? status,
+    int? limit,
+    int? offset,
+  }) async {
     eventPledgesCalls += 1;
     lastTenantId = tenantId;
-    return [
+    lastPledgesSearch = search;
+    lastPledgesStatus = status;
+    lastPledgesLimit = limit;
+    lastPledgesOffset = offset;
+    final rows = [
       {
         'pledge_id': 'pledge-a',
         'event_member_id': 'em-a',
         'member_name': 'Jane Contact',
+        'phone_e164': '+255712345678',
         'pledged_amount': 100000,
         'total_allocated': 40000,
         'outstanding_amount': 60000,
         'status': 'PARTIALLY_PAID',
+        'due_date': '2026-08-24',
+        'created_at': '2026-08-01',
       },
     ];
+    final filtered = rows.where((row) {
+      final statusQuery = status?.toUpperCase() ?? 'ALL';
+      if (statusQuery != 'ALL' && row['status'] != statusQuery) return false;
+      final query = search?.toLowerCase() ?? '';
+      if (query.isEmpty) return true;
+      return '${row['member_name'] ?? ''} ${row['full_name'] ?? ''} ${row['phone_e164'] ?? ''}'
+          .toLowerCase()
+          .contains(query);
+    }).toList();
+    return filtered.skip(offset ?? 0).take(limit ?? filtered.length).toList();
   }
 
   @override
@@ -373,6 +474,10 @@ TenantContext makeTenantContext(
       name: 'Main Event',
       status: 'ACTIVE',
       eventType: 'WEDDING',
+      eventDate: '2026-08-24',
+      totalPledged: 100000,
+      totalCollected: 40000,
+      totalOutstanding: 60000,
     ),
   ],
 }) {
@@ -383,9 +488,12 @@ TenantContext makeTenantContext(
     permissions: const [
       'events.view',
       'events.create',
+      'events.update',
       'members.create',
+      'members.update',
       'members.assign_event',
       'pledges.create',
+      'pledges.update',
     ],
     isOwner: true,
     accessState: 'ACTIVE',

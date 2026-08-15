@@ -6,7 +6,10 @@ import 'package:ahadi_mobile/features/auth/domain/auth_models.dart';
 import 'package:ahadi_mobile/features/auth/presentation/login_screen.dart';
 import 'package:ahadi_mobile/features/contacts/presentation/contacts_screen.dart';
 import 'package:ahadi_mobile/features/dashboard/presentation/dashboard_screen.dart';
+import 'package:ahadi_mobile/features/events/presentation/event_detail_screen.dart';
 import 'package:ahadi_mobile/features/events/presentation/events_screen.dart';
+import 'package:ahadi_mobile/features/pledges/presentation/pledge_form.dart';
+import 'package:ahadi_mobile/features/pledges/presentation/pledges_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -82,6 +85,44 @@ void main() {
     );
     expect(find.text('ACTIVE'), findsOneWidget);
     expect(find.text('Main Event'), findsOneWidget);
+    expect(find.text('Pledged'), findsOneWidget);
+    expect(find.text('Received'), findsOneWidget);
+    expect(find.text('TZS 100,000'), findsOneWidget);
+    expect(find.text('TZS 40,000'), findsOneWidget);
+  });
+
+  testWidgets('event details edit opens and saves supported fields', (
+    tester,
+  ) async {
+    final api = FakeAhadiApi();
+    final controller = SessionController(
+      api: api,
+      storage: MemorySessionStorage(),
+    );
+    controller.credentials = const SessionCredentials(
+      accessToken: 'a',
+      refreshToken: 'r',
+    );
+    controller.userContext = api.userContext;
+    controller.selectedTenantId = 'tenant-a';
+    controller.selectedTenantContext = makeTenantContext(
+      'tenant-a',
+      'Herosimini Committee',
+    );
+    final event = controller.selectedTenantContext!.events.first;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: EventDetailScreen(controller: controller, event: event),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Edit'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).first, 'Updated Event');
+    await tester.tap(find.text('Save Changes'));
+    await tester.pumpAndSettle();
+    expect(api.lastUpdatedEvent?['name'], 'Updated Event');
+    expect(find.text('Updated Event'), findsOneWidget);
   });
 
   testWidgets('contact search debounce filters list', (tester) async {
@@ -111,7 +152,96 @@ void main() {
     await tester.pump(const Duration(milliseconds: 299));
     expect(find.text('Jane Contact'), findsOneWidget);
     await tester.pump(const Duration(milliseconds: 2));
+    await tester.pumpAndSettle();
     expect(find.text('No contacts found.'), findsOneWidget);
+  });
+
+  testWidgets('contact list uses paged server results', (tester) async {
+    final api = FakeAhadiApi()
+      ..contactRows = List.generate(
+        22,
+        (index) => {
+          'member_id': 'member-$index',
+          'full_name': 'Contact $index',
+          'phone_e164': '+2557123456${index.toString().padLeft(2, '0')}',
+          'event_count': index,
+        },
+      );
+    final controller = SessionController(
+      api: api,
+      storage: MemorySessionStorage(),
+    );
+    controller.credentials = const SessionCredentials(
+      accessToken: 'a',
+      refreshToken: 'r',
+    );
+    controller.userContext = api.userContext;
+    controller.selectedTenantId = 'tenant-a';
+    controller.selectedTenantContext = makeTenantContext(
+      'tenant-a',
+      'Herosimini Committee',
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(body: ContactsScreen(controller: controller)),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Contact 0'), findsOneWidget);
+    expect(find.text('Contact 20'), findsNothing);
+    expect(api.lastContactsLimit, 21);
+    expect(api.lastContactsOffset, 0);
+    final secondPage = await controller.contacts(limit: 21, offset: 20);
+    expect(secondPage.first['full_name'], 'Contact 20');
+  });
+
+  testWidgets('contact details edit visibility follows permissions', (
+    tester,
+  ) async {
+    final api = FakeAhadiApi();
+    final controller = SessionController(
+      api: api,
+      storage: MemorySessionStorage(),
+    );
+    controller.credentials = const SessionCredentials(
+      accessToken: 'a',
+      refreshToken: 'r',
+    );
+    controller.userContext = api.userContext;
+    controller.selectedTenantId = 'tenant-a';
+    controller.selectedTenantContext = makeTenantContext(
+      'tenant-a',
+      'Herosimini Committee',
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ContactDetailScreen(
+          controller: controller,
+          contact: const {'member_id': 'member-a', 'full_name': 'Jane Contact'},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Edit Contact'), findsOneWidget);
+
+    controller.selectedTenantContext = const TenantContext(
+      tenantId: 'tenant-a',
+      tenantName: 'Read Only',
+      events: [],
+      permissions: [],
+      isOwner: false,
+      accessState: 'ACTIVE',
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ContactDetailScreen(
+          controller: controller,
+          contact: const {'member_id': 'member-a', 'full_name': 'Jane Contact'},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Edit Contact'), findsNothing);
   });
 
   testWidgets('permission-controlled create event action is disabled', (
@@ -284,6 +414,151 @@ void main() {
     expect(find.text('TZS 222,000'), findsOneWidget);
     expect(find.text('TZS 111,000'), findsWidgets);
     expect(find.text('5'), findsOneWidget);
+    expect(find.text('Received'), findsWidgets);
+  });
+
+  testWidgets('create pledge uses search-based member selection', (
+    tester,
+  ) async {
+    final api = FakeAhadiApi();
+    final controller = SessionController(
+      api: api,
+      storage: MemorySessionStorage(),
+    );
+    controller.credentials = const SessionCredentials(
+      accessToken: 'a',
+      refreshToken: 'r',
+    );
+    controller.userContext = api.userContext;
+    controller.selectedTenantId = 'tenant-a';
+    controller.selectedTenantContext = makeTenantContext(
+      'tenant-a',
+      'Herosimini Committee',
+    );
+    final event = controller.selectedTenantContext!.events.first;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: PledgeForm(
+            controller: controller,
+            event: event,
+            members: await controller.eventMembers(event.id),
+            onDone: () {},
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('Record Pledge'));
+    await tester.pumpAndSettle();
+    expect(find.text('Search name or phone'), findsOneWidget);
+    await tester.tap(find.text('Jane Contact'));
+    await tester.pumpAndSettle();
+    expect(find.text('SELECTED MEMBER'), findsOneWidget);
+    expect(find.text('Change'), findsOneWidget);
+  });
+
+  testWidgets('pledges screen requests paged selected-event pledges', (
+    tester,
+  ) async {
+    final api = FakeAhadiApi();
+    final controller = SessionController(
+      api: api,
+      storage: MemorySessionStorage(),
+    );
+    controller.credentials = const SessionCredentials(
+      accessToken: 'a',
+      refreshToken: 'r',
+    );
+    controller.userContext = api.userContext;
+    controller.selectedTenantId = 'tenant-a';
+    controller.selectedTenantContext = makeTenantContext(
+      'tenant-a',
+      'Herosimini Committee',
+    );
+    controller.selectedEventId = 'event-1';
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(body: PledgesScreen(controller: controller)),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(api.lastPledgesLimit, 21);
+    expect(api.lastPledgesOffset, 0);
+    expect(api.lastPledgesStatus, 'ALL');
+  });
+
+  testWidgets('pledge details show financial values and edit pledge saves', (
+    tester,
+  ) async {
+    final api = FakeAhadiApi();
+    final controller = SessionController(
+      api: api,
+      storage: MemorySessionStorage(),
+    );
+    controller.credentials = const SessionCredentials(
+      accessToken: 'a',
+      refreshToken: 'r',
+    );
+    controller.userContext = api.userContext;
+    controller.selectedTenantId = 'tenant-a';
+    controller.selectedTenantContext = makeTenantContext(
+      'tenant-a',
+      'Herosimini Committee',
+    );
+    final event = controller.selectedTenantContext!.events.first;
+    final pledge = (await controller.eventPledges(event.id)).first;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: PledgeDetailScreen(
+          controller: controller,
+          event: event,
+          pledge: pledge,
+          onChanged: () {},
+        ),
+      ),
+    );
+    expect(find.text('TZS 100,000'), findsWidgets);
+    expect(find.text('TZS 40,000'), findsOneWidget);
+    expect(find.text('TZS 60,000'), findsOneWidget);
+    await tester.tap(find.text('Edit').first);
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).first, '120000');
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+    expect(api.lastPledgePayload?['amount'], 120000);
+  });
+
+  testWidgets('member details show financial summary', (tester) async {
+    final api = FakeAhadiApi();
+    final controller = SessionController(
+      api: api,
+      storage: MemorySessionStorage(),
+    );
+    controller.credentials = const SessionCredentials(
+      accessToken: 'a',
+      refreshToken: 'r',
+    );
+    controller.userContext = api.userContext;
+    controller.selectedTenantId = 'tenant-a';
+    controller.selectedTenantContext = makeTenantContext(
+      'tenant-a',
+      'Herosimini Committee',
+    );
+    final event = controller.selectedTenantContext!.events.first;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: EventMemberDetailScreen(
+          controller: controller,
+          event: event,
+          eventMemberId: 'em-a',
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('FINANCIAL SUMMARY'), findsOneWidget);
+    expect(find.text('TZS 100,000'), findsWidgets);
+    expect(find.text('TZS 40,000'), findsOneWidget);
+    expect(find.text('TZS 60,000'), findsOneWidget);
   });
 
   test(

@@ -80,40 +80,74 @@ class _PledgeFormState extends State<PledgeForm> {
                   ?.copyWith(fontWeight: FontWeight.w800),
             ),
             const SizedBox(height: 12),
-            TextField(
-              controller: memberSearch,
-              onChanged: (_) => setState(() {}),
-              decoration: InputDecoration(
-                labelText: 'Search member',
-                prefixIcon: const Icon(Icons.search),
-                helperText: selectedMember == null
-                    ? 'Choose a member from this event.'
-                    : 'Selected: ${titleCaseName(selectedMember['full_name'])}',
+            if (selectedMember == null) ...[
+              TextField(
+                controller: memberSearch,
+                onChanged: (_) => setState(() {}),
+                decoration: const InputDecoration(
+                  labelText: 'Search name or phone',
+                  prefixIcon: Icon(Icons.search),
+                  helperText: 'Choose a member from this event.',
+                ),
               ),
-            ),
-            const SizedBox(height: 8),
-            if (matchingMembers.isEmpty)
-              const Text(
-                'No event members match your search.',
-                style: TextStyle(color: AhadiColors.muted),
-              )
-            else
-              ...matchingMembers.map((member) {
-                final id = stringFrom(member, 'event_member_id');
-                final selected = id == eventMemberId;
-                return ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: Text(titleCaseName(member['full_name'])),
-                  subtitle: Text(stringFrom(member, 'phone_e164', 'No phone')),
-                  trailing: selected
-                      ? const Icon(
-                          Icons.check_circle,
-                          color: AhadiColors.primary,
-                        )
-                      : const Icon(Icons.circle_outlined),
-                  onTap: () => setState(() => eventMemberId = id),
-                );
-              }),
+              const SizedBox(height: 8),
+              if (matchingMembers.isEmpty)
+                const Text(
+                  'No event members match your search.',
+                  style: TextStyle(color: AhadiColors.muted),
+                )
+              else
+                ...matchingMembers.map((member) {
+                  final id = stringFrom(member, 'event_member_id');
+                  return ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(titleCaseName(member['full_name'])),
+                    subtitle: Text(
+                      stringFrom(member, 'phone_e164', 'No phone'),
+                    ),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => setState(() => eventMemberId = id),
+                  );
+                }),
+            ] else
+              AhadiSectionCard(
+                title: 'Selected Member',
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              titleCaseName(selectedMember['full_name']),
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              stringFrom(
+                                selectedMember,
+                                'phone_e164',
+                                'No phone',
+                              ),
+                              style: const TextStyle(color: AhadiColors.muted),
+                            ),
+                          ],
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: () => setState(() {
+                          eventMemberId = null;
+                          memberSearch.clear();
+                        }),
+                        child: const Text('Change'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             const SizedBox(height: 12),
             TextField(
               controller: amount,

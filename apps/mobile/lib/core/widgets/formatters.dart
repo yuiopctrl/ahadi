@@ -116,6 +116,223 @@ class StatusPill extends StatelessWidget {
   }
 }
 
+class AhadiSectionCard extends StatelessWidget {
+  const AhadiSectionCard({
+    super.key,
+    this.title,
+    required this.children,
+    this.padding = const EdgeInsets.all(14),
+  });
+
+  final String? title;
+  final List<Widget> children;
+  final EdgeInsetsGeometry padding;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: padding,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (title != null) ...[
+              Text(
+                title!.toUpperCase(),
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  color: AhadiColors.muted,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 10),
+            ],
+            ...children,
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class AhadiInfoRow extends StatelessWidget {
+  const AhadiInfoRow({super.key, required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 7),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 118,
+            child: Text(
+              label,
+              style: const TextStyle(color: AhadiColors.muted),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              textAlign: TextAlign.end,
+              style: const TextStyle(fontWeight: FontWeight.w700),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class FinancialSummary extends StatelessWidget {
+  const FinancialSummary({
+    super.key,
+    required this.pledged,
+    required this.received,
+    required this.outstanding,
+  });
+
+  final Object? pledged;
+  final Object? received;
+  final Object? outstanding;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: _FinancialValue(label: 'Pledged', value: pledged),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: _FinancialValue(label: 'Received', value: received),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: _FinancialValue(label: 'Outstanding', value: outstanding),
+        ),
+      ],
+    );
+  }
+}
+
+class _FinancialValue extends StatelessWidget {
+  const _FinancialValue({required this.label, required this.value});
+
+  final String label;
+  final Object? value;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: AhadiColors.background,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AhadiColors.border),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(10),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              label,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: AhadiColors.muted,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              moneyText(value),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontWeight: FontWeight.w900),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class AhadiListRow extends StatelessWidget {
+  const AhadiListRow({
+    super.key,
+    required this.title,
+    this.subtitle,
+    this.status,
+    this.financialSummary,
+    this.meta,
+    this.onTap,
+  });
+
+  final String title;
+  final String? subtitle;
+  final String? status;
+  final Widget? financialSummary;
+  final String? meta;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          title,
+                          style: const TextStyle(fontWeight: FontWeight.w900),
+                        ),
+                        if (subtitle != null) ...[
+                          const SizedBox(height: 3),
+                          Text(
+                            subtitle!,
+                            style: const TextStyle(color: AhadiColors.muted),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                  if (status != null) StatusPill(status: status!),
+                  if (onTap != null) ...[
+                    const SizedBox(width: 6),
+                    const Icon(Icons.chevron_right, color: AhadiColors.muted),
+                  ],
+                ],
+              ),
+              if (financialSummary != null) ...[
+                const SizedBox(height: 10),
+                financialSummary!,
+              ],
+              if (meta != null) ...[
+                const SizedBox(height: 8),
+                Text(meta!, style: const TextStyle(color: AhadiColors.muted)),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class FilterTabs<T> extends StatelessWidget {
   const FilterTabs({
     super.key,

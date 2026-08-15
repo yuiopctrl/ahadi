@@ -17,7 +17,7 @@ class ContactsScreen extends StatefulWidget {
 }
 
 class _ContactsScreenState extends State<ContactsScreen> {
-  static const pageSize = 10;
+  static const pageSize = 20;
 
   late Future<List<Map<String, dynamic>>> future;
   final search = TextEditingController();
@@ -28,7 +28,7 @@ class _ContactsScreenState extends State<ContactsScreen> {
   @override
   void initState() {
     super.initState();
-    future = widget.controller.contacts();
+    future = _load();
   }
 
   @override
@@ -45,13 +45,22 @@ class _ContactsScreenState extends State<ContactsScreen> {
         setState(() {
           query = value;
           page = 0;
+          future = _load();
         });
       }
     });
   }
 
+  Future<List<Map<String, dynamic>>> _load() {
+    return widget.controller.contacts(
+      search: query,
+      limit: pageSize + 1,
+      offset: page * pageSize,
+    );
+  }
+
   Future<void> _refresh() async {
-    setState(() => future = widget.controller.contacts());
+    setState(() => future = _load());
     await future;
   }
 
@@ -78,110 +87,94 @@ class _ContactsScreenState extends State<ContactsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<List<Map<String, dynamic>>>(
-      future: future,
-      builder: (context, snapshot) {
-        final rows = snapshot.data ?? const <Map<String, dynamic>>[];
-        final canCreate =
-            widget.controller.selectedTenantContext?.isOwner == true ||
-            widget.controller.selectedTenantContext?.permissions.contains(
-                  'members.create',
-                ) ==
-                true;
-        final filtered = rows.where((row) {
-          final haystack =
-              '${row['full_name'] ?? ''} ${row['phone_e164'] ?? ''}'
-                  .toLowerCase();
-          return haystack.contains(query.toLowerCase());
-        }).toList();
-        final totalPages = filtered.isEmpty
-            ? 1
-            : ((filtered.length - 1) ~/ pageSize) + 1;
-        final effectivePage = page >= totalPages ? totalPages - 1 : page;
-        final visible = filtered
-            .skip(effectivePage * pageSize)
-            .take(pageSize)
-            .toList();
-        return RefreshIndicator(
-          onRefresh: _refresh,
-          child: ListView(
-            padding: const EdgeInsets.all(16),
-            children: [
-              Row(
-                children: [
-                  Expanded(
+    final canCreate =
+        widget.controller.selectedTenantContext?.isOwner == true ||
+        widget.controller.selectedTenantContext?.permissions.contains(
+              'members.create',
+            ) ==
+            true;
+    return Scaffold(
+      backgroundColor: AhadiColors.background,
+      appBar: AppBar(
+        title: const Text('Contacts'),
+        actions: [
+          IconButton.filled(
+            onPressed: canCreate ? _openAddContact : null,
+            icon: const Icon(Icons.person_add_alt),
+            tooltip: 'Add Contact',
+          ),
+          const SizedBox(width: 8),
+        ],
+      ),
+      body: FutureBuilder<List<Map<String, dynamic>>>(
+        future: future,
+        builder: (context, snapshot) {
+          final rows = snapshot.data ?? const <Map<String, dynamic>>[];
+          final visible = rows.take(pageSize).toList();
+          final hasNext = rows.length > pageSize;
+          return RefreshIndicator(
+            onRefresh: _refresh,
+            child: ListView(
+              padding: const EdgeInsets.all(16),
+              children: [
+                TextField(
+                  controller: search,
+                  onChanged: _onSearch,
+                  decoration: const InputDecoration(
+                    labelText: 'Search name or phone',
+                    prefixIcon: Icon(Icons.search),
+                  ),
+                ),
+                if (!canCreate)
+                  const Padding(
+                    padding: EdgeInsets.only(top: 8),
                     child: Text(
-                      'Contacts',
-                      style: Theme.of(context).textTheme.headlineSmall
-                          ?.copyWith(fontWeight: FontWeight.w800),
+                      'Your role does not include permission to add contacts.',
+                      style: TextStyle(color: AhadiColors.muted),
                     ),
                   ),
-                  IconButton.filled(
-                    onPressed: canCreate ? _openAddContact : null,
-                    icon: const Icon(Icons.person_add_alt),
-                    tooltip: 'Add Contact',
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: search,
-                onChanged: _onSearch,
-                decoration: const InputDecoration(
-                  labelText: 'Search name or phone',
-                  prefixIcon: Icon(Icons.search),
-                ),
-              ),
-              if (!canCreate)
-                const Padding(
-                  padding: EdgeInsets.only(top: 8),
-                  child: Text(
-                    'Your role does not include permission to add contacts.',
-                    style: TextStyle(color: AhadiColors.muted),
-                  ),
-                ),
-              const SizedBox(height: 12),
-              if (!snapshot.hasData)
-                const LoadingCards(count: 4)
-              else if (filtered.isEmpty)
-                const Card(
-                  child: Padding(
-                    padding: EdgeInsets.all(16),
-                    child: Text('No contacts found.'),
-                  ),
-                )
-              else ...[
-                ...visible.map(
-                  (contact) => Card(
-                    child: ListTile(
-                      title: Text(
-                        titleCaseName(contact['full_name']),
-                        style: const TextStyle(fontWeight: FontWeight.w800),
-                      ),
-                      subtitle: Text(
-                        '${stringFrom(contact, 'phone_e164', 'No phone')} · ${numberFrom(contact['event_count'])?.round() ?? 0} events',
-                      ),
-                      trailing: const Icon(Icons.chevron_right),
+                const SizedBox(height: 12),
+                if (!snapshot.hasData)
+                  const LoadingCards(count: 4)
+                else if (visible.isEmpty)
+                  const Card(
+                    child: Padding(
+                      padding: EdgeInsets.all(16),
+                      child: Text('No contacts found.'),
+                    ),
+                  )
+                else ...[
+                  ...visible.map(
+                    (contact) => AhadiListRow(
+                      title: titleCaseName(contact['full_name']),
+                      subtitle: stringFrom(contact, 'phone_e164', 'No phone'),
+                      meta:
+                          '${numberFrom(contact['event_count'])?.round() ?? 0} events',
                       onTap: () => _openContact(contact),
                     ),
                   ),
-                ),
-                _PaginationControls(
-                  page: effectivePage,
-                  totalPages: totalPages,
-                  totalRows: filtered.length,
-                  onPrevious: effectivePage == 0
-                      ? null
-                      : () => setState(() => page = effectivePage - 1),
-                  onNext: effectivePage >= totalPages - 1
-                      ? null
-                      : () => setState(() => page = effectivePage + 1),
-                ),
+                  _PaginationControls(
+                    page: page,
+                    hasNext: hasNext,
+                    onPrevious: page == 0
+                        ? null
+                        : () => setState(() {
+                            page -= 1;
+                            future = _load();
+                          }),
+                    onNext: !hasNext
+                        ? null
+                        : () => setState(() {
+                            page += 1;
+                            future = _load();
+                          }),
+                  ),
+                ],
               ],
-            ],
-          ),
-        );
-      },
+            ),
+          );
+        },
+      ),
     );
   }
 }
@@ -233,6 +226,7 @@ class _ContactFormScreenState extends State<ContactFormScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: AhadiColors.background,
       appBar: AppBar(title: Text(editing ? 'Edit Contact' : 'Add Contact')),
       body: ListView(
         padding: const EdgeInsets.all(16),
@@ -387,6 +381,7 @@ class _ContactDetailScreenState extends State<ContactDetailScreen> {
         if (!didPop) Navigator.of(context).pop(changed);
       },
       child: Scaffold(
+        backgroundColor: AhadiColors.background,
         appBar: AppBar(title: Text(titleCaseName(widget.contact['full_name']))),
         body: FutureBuilder<Map<String, dynamic>>(
           future: future,
@@ -409,34 +404,35 @@ class _ContactDetailScreenState extends State<ContactDetailScreen> {
             return ListView(
               padding: const EdgeInsets.all(16),
               children: [
-                Card(
-                  child: Column(
-                    children: [
-                      ListTile(
-                        title: const Text('Name'),
-                        subtitle: Text(titleCaseName(contact['full_name'])),
-                      ),
-                      ListTile(
-                        title: const Text('Phone'),
-                        subtitle: Text(
-                          stringFrom(contact, 'phone_e164', 'No phone'),
-                        ),
-                      ),
-                      ListTile(
-                        title: const Text('Email'),
-                        subtitle: Text(stringFrom(contact, 'email', 'Not set')),
-                      ),
-                      ListTile(
-                        title: const Text('Location'),
-                        subtitle: Text(
-                          stringFrom(contact, 'location', 'Not set'),
-                        ),
-                      ),
-                    ],
-                  ),
+                Text(
+                  titleCaseName(contact['full_name']),
+                  style: Theme.of(context).textTheme.headlineSmall
+                      ?.copyWith(fontWeight: FontWeight.w900),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  stringFrom(contact, 'phone_e164', 'No phone'),
+                  style: const TextStyle(color: AhadiColors.muted),
+                ),
+                const SizedBox(height: 16),
+                AhadiSectionCard(
+                  title: 'Contact Information',
+                  children: [
+                    AhadiInfoRow(
+                      label: 'Phone',
+                      value: stringFrom(contact, 'phone_e164', 'No phone'),
+                    ),
+                    AhadiInfoRow(
+                      label: 'Email',
+                      value: stringFrom(contact, 'email', 'Not set'),
+                    ),
+                    AhadiInfoRow(
+                      label: 'Location',
+                      value: stringFrom(contact, 'location', 'Not set'),
+                    ),
+                  ],
                 ),
                 if (canEdit) ...[
-                  const SizedBox(height: 12),
                   OutlinedButton.icon(
                     onPressed: () => _edit(contact),
                     icon: const Icon(Icons.edit_outlined),
@@ -461,19 +457,18 @@ class _ContactDetailScreenState extends State<ContactDetailScreen> {
                   )
                 else
                   ...events.map(
-                    (event) => Card(
-                      child: ListTile(
-                        title: Text(stringFrom(event, 'event_name')),
-                        subtitle: Text(
-                          '${moneyText(event['pledged_amount'])} pledged · ${moneyText(event['outstanding_amount'])} outstanding',
-                        ),
-                        trailing: StatusPill(
-                          status: stringFrom(
-                            event,
-                            'participation_status',
-                            'ACTIVE',
-                          ),
-                        ),
+                    (event) => AhadiListRow(
+                      title: stringFrom(event, 'event_name'),
+                      subtitle: stringFrom(event, 'event_type'),
+                      status: stringFrom(
+                        event,
+                        'participation_status',
+                        'ACTIVE',
+                      ),
+                      financialSummary: FinancialSummary(
+                        pledged: event['pledged_amount'],
+                        received: event['total_allocated'],
+                        outstanding: event['outstanding_amount'],
                       ),
                     ),
                   ),
@@ -489,38 +484,38 @@ class _ContactDetailScreenState extends State<ContactDetailScreen> {
 class _PaginationControls extends StatelessWidget {
   const _PaginationControls({
     required this.page,
-    required this.totalPages,
-    required this.totalRows,
+    required this.hasNext,
     required this.onPrevious,
     required this.onNext,
   });
 
   final int page;
-  final int totalPages;
-  final int totalRows;
+  final bool hasNext;
   final VoidCallback? onPrevious;
   final VoidCallback? onNext;
 
   @override
   Widget build(BuildContext context) {
-    if (totalRows <= _ContactsScreenState.pageSize) return const SizedBox();
+    if (page == 0 && !hasNext) return const SizedBox();
     return Padding(
       padding: const EdgeInsets.only(top: 8),
       child: Row(
         children: [
           IconButton.outlined(
+            key: const Key('contacts-previous-page'),
             onPressed: onPrevious,
             icon: const Icon(Icons.chevron_left),
             tooltip: 'Previous page',
           ),
           Expanded(
             child: Text(
-              'Page ${page + 1} of $totalPages · $totalRows contacts',
+              'Page ${page + 1}',
               textAlign: TextAlign.center,
               style: const TextStyle(color: AhadiColors.muted),
             ),
           ),
           IconButton.outlined(
+            key: const Key('contacts-next-page'),
             onPressed: onNext,
             icon: const Icon(Icons.chevron_right),
             tooltip: 'Next page',

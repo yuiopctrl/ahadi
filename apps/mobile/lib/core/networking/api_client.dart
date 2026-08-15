@@ -144,6 +144,21 @@ class ApiClient implements AhadiApi {
   }
 
   @override
+  Future<Map<String, dynamic>> updateEvent(
+    String tenantId,
+    String eventId,
+    Map<String, dynamic> payload,
+  ) async {
+    final json = await _request(
+      '/events/$eventId',
+      method: 'PATCH',
+      tenantId: tenantId,
+      body: payload,
+    );
+    return jsonMap(json['data']);
+  }
+
+  @override
   Future<Map<String, dynamic>> eventFinancialSummary(
     String tenantId,
     String eventId,
@@ -165,8 +180,23 @@ class ApiClient implements AhadiApi {
   }
 
   @override
-  Future<List<Map<String, dynamic>>> contacts(String tenantId) async {
-    final json = await _request('/contacts', tenantId: tenantId);
+  Future<List<Map<String, dynamic>>> contacts(
+    String tenantId, {
+    String? search,
+    int? limit,
+    int? offset,
+  }) async {
+    final query = Uri(
+      queryParameters: {
+        if (search != null && search.trim().isNotEmpty) 'search': search,
+        if (limit != null) 'limit': '$limit',
+        if (offset != null) 'offset': '$offset',
+      },
+    ).query;
+    final json = await _request(
+      query.isEmpty ? '/contacts' : '/contacts?$query',
+      tenantId: tenantId,
+    );
     return objectList(json['data']);
   }
 
@@ -282,9 +312,26 @@ class ApiClient implements AhadiApi {
   @override
   Future<List<Map<String, dynamic>>> eventPledges(
     String tenantId,
-    String eventId,
-  ) async {
-    final json = await _request('/events/$eventId/pledges', tenantId: tenantId);
+    String eventId, {
+    String? search,
+    String? status,
+    int? limit,
+    int? offset,
+  }) async {
+    final query = Uri(
+      queryParameters: {
+        if (search != null && search.trim().isNotEmpty) 'search': search,
+        if (status != null && status != 'ALL') 'status': status,
+        if (limit != null) 'limit': '$limit',
+        if (offset != null) 'offset': '$offset',
+      },
+    ).query;
+    final json = await _request(
+      query.isEmpty
+          ? '/events/$eventId/pledges'
+          : '/events/$eventId/pledges?$query',
+      tenantId: tenantId,
+    );
     return objectList(json['data']);
   }
 

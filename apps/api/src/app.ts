@@ -342,6 +342,11 @@ const createEventSchema = z.object({
     context.addIssue({ code: 'custom', path: ['customEventType'], message: 'Custom event type is required' })
   }
 })
+const updateEventSchema = createEventSchema.partial().superRefine((value, context) => {
+  if (value.eventType === 'OTHER' && !value.customEventType) {
+    context.addIssue({ code: 'custom', path: ['customEventType'], message: 'Custom event type is required' })
+  }
+})
 
 const createSubscriptionPaymentIntentSchema = z.object({
   provider: z.enum(['TEST', 'NMB']).default('TEST'),
@@ -630,6 +635,17 @@ const updateMemberSchema = z.object({
   smsEnabled: z.boolean().optional(),
   status: z.enum(['ACTIVE', 'INACTIVE', 'ARCHIVED']).optional(),
 })
+const listContactsQuerySchema = z.object({
+  search: z.string().trim().max(160).optional().default(''),
+  limit: z.coerce.number().int().min(1).max(100).optional().default(20),
+  offset: z.coerce.number().int().min(0).optional().default(0),
+})
+const listPledgesQuerySchema = z.object({
+  search: z.string().trim().max(160).optional().default(''),
+  status: z.string().trim().max(80).optional().default('ALL'),
+  limit: z.coerce.number().int().min(1).max(100).optional().default(20),
+  offset: z.coerce.number().int().min(0).optional().default(0),
+})
 
 const knownDatabaseCodes: ApiErrorCode[] = [
   'INVALID_INPUT',
@@ -876,6 +892,7 @@ function eventSlotSummary(value: unknown) {
 }
 
 type CreateEventInput = z.infer<typeof createEventSchema>
+type UpdateEventInput = z.infer<typeof updateEventSchema>
 
 function nullableTrimmed(value: string | null | undefined): string | null {
   const trimmed = value?.trim() ?? ''
@@ -891,6 +908,20 @@ function normalizeCreateEventInput(input: CreateEventInput) {
     pledgeDeadline: input.pledgeDeadline ?? null,
     targetAmount: input.targetAmount ?? null,
     venue: nullableTrimmed(input.venue),
+  }
+}
+
+function normalizeUpdateEventInput(input: UpdateEventInput) {
+  return {
+    ...(input.name !== undefined ? { name: input.name.trim() } : {}),
+    ...(input.eventType !== undefined ? { eventType: input.eventType } : {}),
+    ...(input.eventType !== undefined || input.customEventType !== undefined ? {
+      customEventType: input.eventType === 'OTHER' ? nullableTrimmed(input.customEventType) : null,
+    } : {}),
+    ...(input.eventDate !== undefined ? { eventDate: input.eventDate ?? null } : {}),
+    ...(input.pledgeDeadline !== undefined ? { pledgeDeadline: input.pledgeDeadline ?? null } : {}),
+    ...(input.targetAmount !== undefined ? { targetAmount: input.targetAmount ?? null } : {}),
+    ...(input.venue !== undefined ? { venue: nullableTrimmed(input.venue) } : {}),
   }
 }
 
@@ -2422,6 +2453,73 @@ app.post('/api/v1/events', requireAuth, loadUserContext, requireTenantContext, a
   }
 })
 
+app.patch('/api/v1/events/:eventId', requireAuth, loadUserContext, requireTenantContext, async (request, response, next) => {
+  try {
+    const tenantId = tenantIdFromRequest(request)
+    const eventId = uuidParamSchema.parse(request.params['eventId'])
+    const permissions = new Set(request.tenantContext?.permissions ?? [])
+    if (!permissions.has('events.update') && !request.tenantContext?.membership?.isOwner) {
+      throw new AppError('PERMISSION_DENIED', 'Missing permission: events.update')
+    }
+    if (request.tenantContext?.accessState === 'READ_ONLY') {
+      throw new AppError('SUBSCRIPTION_READ_ONLY', 'Subscription is read-only')
+    }
+    const parsedInput = updateEventSchema.safeParse(request.body)
+    if (!parsedInput.success) {
+      logValidationError(request.requestId, 'event-update', parsedInput.error)
+      throw parsedInput.error
+    }
+    const input = normalizeUpdateEventInput(parsedInput.data)
+    const update = {
+      ...(input.name !== undefined ? { name: input.name } : {}),
+      ...(input.eventType !== undefined ? { event_type: input.eventType } : {}),
+      ...(input.customEventType !== undefined ? { custom_event_type: input.customEventType } : {}),
+      ...(input.eventDate !== undefined ? { event_date: input.eventDate } : {}),
+      ...(input.venue !== undefined ? { venue: input.venue } : {}),
+      ...(input.targetAmount !== undefined ? { target_amount: input.targetAmount } : {}),
+      ...(input.pledgeDeadline !== undefined ? { pledge_deadline: input.pledgeDeadline } : {}),
+    }
+    if (!Object.keys(update).length) {
+      throw new AppError('INVALID_INPUT', 'No event fields were provided', 400, 'VALIDATION')
+    }
+    const client = createUserSupabase(request.auth?.accessToken ?? '')
+    const { data, error } = await client
+      .from('events')
+      .update(update)
+      .eq('tenant_id', tenantId)
+      .eq('id', eventId)
+      .select('id, code, name, event_type, custom_event_type, event_date, pledge_deadline, target_amount, venue, status')
+      .single()
+    if (error) {
+      throwFinancialDatabaseError(error, 'EVENT_UPDATE_FAILED')
+    }
+    const row = jsonRecord(data)
+    response.json({
+      data: {
+        id: stringField(row, 'id', eventId),
+        eventId: stringField(row, 'id', eventId),
+        event_id: stringField(row, 'id', eventId),
+        code: row['code'] ?? null,
+        name: stringField(row, 'name'),
+        eventType: stringField(row, 'event_type'),
+        event_type: stringField(row, 'event_type'),
+        customEventType: row['custom_event_type'] ?? null,
+        custom_event_type: row['custom_event_type'] ?? null,
+        eventDate: row['event_date'] ?? null,
+        event_date: row['event_date'] ?? null,
+        pledgeDeadline: row['pledge_deadline'] ?? null,
+        pledge_deadline: row['pledge_deadline'] ?? null,
+        targetAmount: row['target_amount'] ?? null,
+        target_amount: row['target_amount'] ?? null,
+        venue: row['venue'] ?? null,
+        status: stringField(row, 'status'),
+      },
+    })
+  } catch (error) {
+    next(error)
+  }
+})
+
 app.get('/api/v1/platform/dashboard', requireAuth, loadUserContext, requirePlatformPermission('platform.dashboard.view'), async (request, response, next) => {
   try {
     const client = createUserSupabase(request.auth?.accessToken ?? '')
@@ -2945,12 +3043,18 @@ app.get('/api/v1/events/:eventId/members', requireAuth, loadUserContext, require
 app.get('/api/v1/contacts', requireAuth, loadUserContext, requireTenantContext, async (request, response, next) => {
   try {
     const tenantId = tenantIdFromRequest(request)
+    const query = listContactsQuerySchema.parse(request.query)
     const client = createUserSupabase(request.auth?.accessToken ?? '')
     const { data, error } = await client.rpc('rpc_list_contacts', { p_tenant_id: tenantId })
     if (error) {
       throwFinancialDatabaseError(error, 'CONTACTS_LIST_FAILED')
     }
-    response.json({ data: jsonArray(data) })
+    const search = query.search.toLowerCase()
+    const rows = jsonArray(data).filter((row) => {
+      if (!search) return true
+      return `${row['full_name'] ?? ''} ${row['phone_e164'] ?? ''}`.toLowerCase().includes(search)
+    })
+    response.json({ data: rows.slice(query.offset, query.offset + query.limit) })
   } catch (error) {
     next(error)
   }
@@ -3143,12 +3247,21 @@ app.get('/api/v1/events/:eventId/pledges', requireAuth, loadUserContext, require
   try {
     const tenantId = tenantIdFromRequest(request)
     const eventId = uuidParamSchema.parse(request.params['eventId'])
+    const query = listPledgesQuerySchema.parse(request.query)
     const client = createUserSupabase(request.auth?.accessToken ?? '')
     const { data, error } = await client.rpc('rpc_list_event_pledges', { p_tenant_id: tenantId, p_event_id: eventId })
     if (error) {
       throwFinancialDatabaseError(error, 'PLEDGES_LIST_FAILED')
     }
-    response.json({ data: jsonArray(data) })
+    const search = query.search.toLowerCase()
+    const status = query.status.toUpperCase()
+    const rows = jsonArray(data).filter((row) => {
+      const statusMatches = status === 'ALL' || String(row['status'] ?? '').toUpperCase() === status
+      if (!statusMatches) return false
+      if (!search) return true
+      return `${row['member_name'] ?? ''} ${row['full_name'] ?? ''} ${row['phone_e164'] ?? ''}`.toLowerCase().includes(search)
+    })
+    response.json({ data: rows.slice(query.offset, query.offset + query.limit) })
   } catch (error) {
     next(error)
   }

@@ -278,6 +278,22 @@ class SessionController extends ChangeNotifier {
     return result;
   }
 
+  Future<EventSummary> updateEvent(
+    String eventId,
+    Map<String, dynamic> payload,
+  ) async {
+    final tenantId = _requireTenantId();
+    await _api.updateEvent(tenantId, eventId, payload);
+    await refreshTenantContext();
+    final refreshed = selectedTenantContext?.events
+        .where((event) => event.id == eventId)
+        .firstOrNull;
+    if (refreshed == null) {
+      throw StateError('Updated event is not available in this organization.');
+    }
+    return refreshed;
+  }
+
   Future<Map<String, dynamic>> eventFinancialSummary(String eventId) {
     return _api.eventFinancialSummary(_requireTenantId(), eventId);
   }
@@ -286,8 +302,17 @@ class SessionController extends ChangeNotifier {
     return _api.eventMembers(_requireTenantId(), eventId);
   }
 
-  Future<List<Map<String, dynamic>>> contacts() {
-    return _api.contacts(_requireTenantId());
+  Future<List<Map<String, dynamic>>> contacts({
+    String? search,
+    int? limit,
+    int? offset,
+  }) {
+    return _api.contacts(
+      _requireTenantId(),
+      search: search,
+      limit: limit,
+      offset: offset,
+    );
   }
 
   Future<Map<String, dynamic>> contactDetail(String memberId) {
@@ -362,8 +387,21 @@ class SessionController extends ChangeNotifier {
     });
   }
 
-  Future<List<Map<String, dynamic>>> eventPledges(String eventId) {
-    return _api.eventPledges(_requireTenantId(), eventId);
+  Future<List<Map<String, dynamic>>> eventPledges(
+    String eventId, {
+    String? search,
+    String? status,
+    int? limit,
+    int? offset,
+  }) {
+    return _api.eventPledges(
+      _requireTenantId(),
+      eventId,
+      search: search,
+      status: status,
+      limit: limit,
+      offset: offset,
+    );
   }
 
   Future<Map<String, dynamic>> upsertPledge(

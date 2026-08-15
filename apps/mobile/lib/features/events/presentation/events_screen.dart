@@ -5,6 +5,7 @@ import '../../../core/widgets/formatters.dart';
 import '../../auth/data/session_controller.dart';
 import '../../auth/domain/auth_models.dart';
 import 'event_detail_screen.dart';
+import 'event_summary_card.dart';
 
 class EventsScreen extends StatefulWidget {
   const EventsScreen({super.key, required this.controller});
@@ -82,90 +83,31 @@ class _EventsScreenState extends State<EventsScreen> {
           )
         else
           ...events.map(
-            (event) => _EventCard(
-              controller: widget.controller,
+            (event) => EventSummaryCard(
               event: event,
-              onSelected: () => setState(() {}),
+              selected: event.id == widget.controller.selectedEventId,
+              onTap: () async {
+                await widget.controller.selectEvent(event.id);
+                if (context.mounted) {
+                  final refreshed = await Navigator.of(context)
+                      .push<EventSummary>(
+                        MaterialPageRoute(
+                          builder: (_) => EventDetailScreen(
+                            controller: widget.controller,
+                            event: event,
+                          ),
+                        ),
+                      );
+                  if (context.mounted && refreshed != null) setState(() {});
+                }
+              },
+              onSelect: () async {
+                await widget.controller.selectEvent(event.id);
+                setState(() {});
+              },
             ),
           ),
       ],
-    );
-  }
-}
-
-class _EventCard extends StatelessWidget {
-  const _EventCard({
-    required this.controller,
-    required this.event,
-    required this.onSelected,
-  });
-
-  final SessionController controller;
-  final EventSummary event;
-  final VoidCallback onSelected;
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      child: InkWell(
-        onTap: () async {
-          await controller.selectEvent(event.id);
-          if (context.mounted) {
-            Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (_) =>
-                    EventDetailScreen(controller: controller, event: event),
-              ),
-            );
-          }
-        },
-        child: Padding(
-          padding: const EdgeInsets.all(14),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      event.name,
-                      style: const TextStyle(fontWeight: FontWeight.w800),
-                    ),
-                  ),
-                  StatusPill(status: event.status),
-                ],
-              ),
-              const SizedBox(height: 4),
-              Text(
-                '${event.eventType} · ${dateText(event.eventDate)}',
-                style: const TextStyle(color: AhadiColors.muted),
-              ),
-              const SizedBox(height: 10),
-              Row(
-                children: [
-                  Expanded(
-                    child: Text('Pledged\n${moneyText(event.totalPledged)}'),
-                  ),
-                  Expanded(
-                    child: Text('Received\n${moneyText(event.totalCollected)}'),
-                  ),
-                  TextButton(
-                    onPressed: () async {
-                      await controller.selectEvent(event.id);
-                      onSelected();
-                    },
-                    child: Text(
-                      event.id == controller.selectedEventId
-                          ? 'Current'
-                          : 'Set current',
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
     );
   }
 }

@@ -101,6 +101,7 @@ class EventSummary {
     required this.name,
     required this.status,
     required this.eventType,
+    this.customEventType,
     this.eventDate,
     this.venue,
     this.pledgeDeadline,
@@ -115,6 +116,7 @@ class EventSummary {
   final String name;
   final String status;
   final String eventType;
+  final String? customEventType;
   final String? eventDate;
   final String? venue;
   final String? pledgeDeadline;
@@ -133,6 +135,9 @@ class EventSummary {
           stringValue(json, 'eventType') ??
           stringValue(json, 'event_type') ??
           '',
+      customEventType:
+          stringValue(json, 'customEventType') ??
+          stringValue(json, 'custom_event_type'),
       eventDate:
           stringValue(json, 'eventDate') ?? stringValue(json, 'event_date'),
       venue: stringValue(json, 'venue'),

@@ -34,6 +34,7 @@ class _MobileShellState extends State<MobileShell> {
       _MorePage(controller: widget.controller),
     ];
     return Scaffold(
+      backgroundColor: AhadiColors.background,
       appBar: AppBar(
         titleSpacing: 8,
         title: Column(

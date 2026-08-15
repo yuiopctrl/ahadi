@@ -5,6 +5,7 @@ import '../../../core/widgets/formatters.dart';
 import '../../auth/data/session_controller.dart';
 import '../../auth/domain/auth_models.dart';
 import '../../events/presentation/event_detail_screen.dart';
+import '../../events/presentation/event_summary_card.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key, required this.controller});
@@ -150,33 +151,36 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 )
               else
                 ...events.map(
-                  (row) => Card(
-                    child: ListTile(
-                      title: Text(
-                        row.name,
-                        style: const TextStyle(fontWeight: FontWeight.w800),
-                      ),
-                      subtitle: Text(
-                        '${row.status}\nPledged ${moneyText(row.totalPledged)} · Received ${moneyText(row.totalCollected)}',
-                      ),
-                      isThreeLine: true,
-                      trailing: row.id == widget.controller.selectedEventId
-                          ? const Icon(Icons.check, color: AhadiColors.success)
-                          : const Icon(Icons.chevron_right),
-                      onTap: () async {
-                        await widget.controller.selectEvent(row.id);
-                        if (context.mounted) {
-                          Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (_) => EventDetailScreen(
-                                controller: widget.controller,
-                                event: row,
+                  (row) => EventSummaryCard(
+                    event: row,
+                    selected: row.id == widget.controller.selectedEventId,
+                    onTap: () async {
+                      await widget.controller.selectEvent(row.id);
+                      if (context.mounted) {
+                        final refreshed = await Navigator.of(context)
+                            .push<EventSummary>(
+                              MaterialPageRoute(
+                                builder: (_) => EventDetailScreen(
+                                  controller: widget.controller,
+                                  event: row,
+                                ),
                               ),
-                            ),
-                          );
+                            );
+                        if (mounted && refreshed != null) {
+                          setState(() {
+                            loadedEventId = widget.controller.selectedEventId;
+                            future = _load();
+                          });
                         }
-                      },
-                    ),
+                      }
+                    },
+                    onSelect: () async {
+                      await widget.controller.selectEvent(row.id);
+                      setState(() {
+                        loadedEventId = widget.controller.selectedEventId;
+                        future = _load();
+                      });
+                    },
                   ),
                 ),
             ],
