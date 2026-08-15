@@ -22,7 +22,6 @@ select
   r.receipt_number,
   p.event_member_id,
   m.full_name as member_name,
-  m.phone_e164,
   p.amount,
   public.payment_allocated_amount(p.id)::numeric(18,2) as allocated_amount,
   public.payment_unallocated_amount(p.id)::numeric(18,2) as unallocated_amount,
@@ -30,7 +29,8 @@ select
   p.transaction_reference,
   p.payment_date,
   p.status,
-  pr.full_name as received_by_name
+  pr.full_name as received_by_name,
+  m.phone_e164
 from public.payments p
 join public.event_members em on em.id = p.event_member_id
 join public.members m on m.id = em.member_id
