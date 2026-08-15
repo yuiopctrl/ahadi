@@ -10,6 +10,7 @@ import '../../messages/presentation/messages_screens.dart';
 import '../../organizations/presentation/create_organization_screen.dart';
 import '../../pledges/presentation/pledges_screen.dart';
 import '../../profile/presentation/profile_screen.dart';
+import '../../users/presentation/users_roles_screen.dart';
 
 class MobileShell extends StatefulWidget {
   const MobileShell({super.key, required this.controller});
@@ -247,6 +248,10 @@ class _MorePage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final canViewUsers =
+        controller.selectedTenantContext?.isOwner == true ||
+        controller.selectedTenantContext?.permissions.contains('users.view') ==
+            true;
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
@@ -325,6 +330,19 @@ class _MorePage extends StatelessWidget {
                 ),
               ),
               const Divider(height: 1),
+              if (canViewUsers) ...[
+                ListTile(
+                  leading: const _MenuIcon(Icons.group_outlined),
+                  title: const Text('Users & Roles'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => UsersRolesScreen(controller: controller),
+                    ),
+                  ),
+                ),
+                const Divider(height: 1),
+              ],
               ListTile(
                 leading: const _MenuIcon(Icons.settings_outlined),
                 title: const Text('Settings'),

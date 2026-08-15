@@ -544,6 +544,76 @@ class SessionController extends ChangeNotifier {
     });
   }
 
+  Future<List<Map<String, dynamic>>> tenantUsers({
+    String? search,
+    int? limit,
+    int? offset,
+  }) {
+    return _api.tenantUsers(
+      _requireTenantId(),
+      search: search,
+      limit: limit,
+      offset: offset,
+    );
+  }
+
+  Future<Map<String, dynamic>> inviteTenantUser(Map<String, dynamic> payload) {
+    final normalized = Map<String, dynamic>.from(payload);
+    final phone = normalized['phone'];
+    if (phone is String && phone.trim().isNotEmpty) {
+      normalized['phone'] = normalizeTanzaniaPhone(phone);
+    }
+    return _api.inviteTenantUser(_requireTenantId(), normalized);
+  }
+
+  Future<Map<String, dynamic>> resendTenantInvitation(String invitationId) {
+    return _api.resendTenantInvitation(_requireTenantId(), invitationId);
+  }
+
+  Future<Map<String, dynamic>> updateTenantUserRole(
+    String tenantUserId,
+    String role,
+  ) {
+    return _api.updateTenantUserRole(_requireTenantId(), tenantUserId, {
+      'role': role,
+    });
+  }
+
+  Future<Map<String, dynamic>> suspendTenantUser(String tenantUserId) {
+    return _api.suspendTenantUser(_requireTenantId(), tenantUserId);
+  }
+
+  Future<Map<String, dynamic>> reactivateTenantUser(String tenantUserId) {
+    return _api.reactivateTenantUser(_requireTenantId(), tenantUserId);
+  }
+
+  Future<Map<String, dynamic>> removeTenantUser(String tenantUserId) {
+    return _api.removeTenantUser(_requireTenantId(), tenantUserId);
+  }
+
+  Future<void> updateProfile({
+    required String fullName,
+    required String email,
+  }) async {
+    if (isSubmitting) return;
+    isSubmitting = true;
+    errorMessage = null;
+    notifyListeners();
+    try {
+      await _api.updateProfile({
+        'fullName': fullName.trim(),
+        'email': email.trim().isEmpty ? null : email.trim(),
+      });
+      userContext = await _api.me();
+    } catch (error) {
+      errorMessage = _messageFor(error);
+      rethrow;
+    } finally {
+      isSubmitting = false;
+      notifyListeners();
+    }
+  }
+
   Future<void> createOrganization({
     required String planCode,
     required String tenantName,

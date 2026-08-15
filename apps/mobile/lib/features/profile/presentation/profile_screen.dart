@@ -49,6 +49,17 @@ class ProfileScreen extends StatelessWidget {
           child: Column(
             children: [
               ListTile(
+                leading: const Icon(Icons.edit_outlined),
+                title: const Text('Edit Profile'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => EditProfileScreen(controller: controller),
+                  ),
+                ),
+              ),
+              const Divider(height: 1),
+              ListTile(
                 leading: const Icon(Icons.pin_outlined),
                 title: const Text('Change PIN'),
                 trailing: const Icon(Icons.chevron_right),
@@ -76,6 +87,93 @@ class ProfileScreen extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class EditProfileScreen extends StatefulWidget {
+  const EditProfileScreen({super.key, required this.controller});
+
+  final SessionController controller;
+
+  @override
+  State<EditProfileScreen> createState() => _EditProfileScreenState();
+}
+
+class _EditProfileScreenState extends State<EditProfileScreen> {
+  late final TextEditingController fullName;
+  late final TextEditingController email;
+
+  @override
+  void initState() {
+    super.initState();
+    final profile = widget.controller.userContext?.profile;
+    fullName = TextEditingController(text: profile?.fullName ?? '');
+    email = TextEditingController(text: profile?.email ?? '');
+  }
+
+  @override
+  void dispose() {
+    fullName.dispose();
+    email.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    await widget.controller.updateProfile(
+      fullName: fullName.text,
+      email: email.text,
+    );
+    if (mounted) Navigator.of(context).pop();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final phone = widget.controller.userContext?.profile?.phoneE164 ?? '';
+    return AnimatedBuilder(
+      animation: widget.controller,
+      builder: (context, _) {
+        return Scaffold(
+          backgroundColor: AhadiColors.background,
+          appBar: AppBar(title: const Text('Edit Profile')),
+          body: ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              TextField(
+                controller: fullName,
+                textCapitalization: TextCapitalization.words,
+                decoration: const InputDecoration(labelText: 'Full Name'),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: email,
+                keyboardType: TextInputType.emailAddress,
+                decoration: const InputDecoration(labelText: 'Email'),
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                enabled: false,
+                initialValue: phone,
+                decoration: const InputDecoration(labelText: 'Phone Number'),
+              ),
+              if (widget.controller.errorMessage != null) ...[
+                const SizedBox(height: 12),
+                Text(
+                  widget.controller.errorMessage!,
+                  style: const TextStyle(color: AhadiColors.danger),
+                ),
+              ],
+              const SizedBox(height: 16),
+              FilledButton(
+                onPressed: widget.controller.isSubmitting ? null : _save,
+                child: Text(
+                  widget.controller.isSubmitting ? 'Saving...' : 'Save Profile',
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }
