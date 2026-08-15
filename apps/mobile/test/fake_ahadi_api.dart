@@ -13,11 +13,19 @@ class FakeAhadiApi implements AhadiApi {
   int logoutCalls = 0;
   int meCalls = 0;
   int tenantContextCalls = 0;
+  int contactsCalls = 0;
+  int eventMembersCalls = 0;
+  int eventPledgesCalls = 0;
   String? lastTenantId;
   Map<String, dynamic>? lastOnboardingPayload;
+  Map<String, dynamic>? lastCreatedEvent;
+  Map<String, dynamic>? lastCreatedContact;
+  Map<String, dynamic>? lastUpdatedContact;
+  Map<String, dynamic>? lastPledgePayload;
   Completer<LoginResult>? loginCompleter;
   Completer<TenantContext>? tenantCompleter;
   Object? meError;
+  Object? attachError;
 
   UserContext userContext = userWithMemberships([
     membership('tenant-a', 'Herosimini Committee'),
@@ -26,6 +34,7 @@ class FakeAhadiApi implements AhadiApi {
     'tenant-a': makeTenantContext('tenant-a', 'Herosimini Committee'),
     'tenant-b': makeTenantContext('tenant-b', 'Valentino Group'),
   };
+  final eventSummaries = <String, Map<String, dynamic>>{};
 
   @override
   Future<Map<String, dynamic>> billingSummary(String tenantId) async => {
@@ -42,6 +51,16 @@ class FakeAhadiApi implements AhadiApi {
   }
 
   @override
+  Future<Map<String, dynamic>> createEvent(
+    String tenantId,
+    Map<String, dynamic> payload,
+  ) async {
+    lastTenantId = tenantId;
+    lastCreatedEvent = payload;
+    return {'eventId': 'event-new', ...payload};
+  }
+
+  @override
   Future<Map<String, dynamic>> completeOnboarding(
     Map<String, dynamic> payload,
   ) async {
@@ -55,6 +74,57 @@ class FakeAhadiApi implements AhadiApi {
       payload['tenantName'] as String,
     );
     return {'tenant_id': 'tenant-new'};
+  }
+
+  @override
+  Future<Map<String, dynamic>> contactDetail(
+    String tenantId,
+    String memberId,
+  ) async {
+    lastTenantId = tenantId;
+    return {
+      'contact': {
+        'id': memberId,
+        'full_name': 'Jane Contact',
+        'phone_e164': '+255712345678',
+      },
+      'events': <Map<String, dynamic>>[],
+    };
+  }
+
+  @override
+  Future<List<Map<String, dynamic>>> contacts(String tenantId) async {
+    contactsCalls += 1;
+    lastTenantId = tenantId;
+    return [
+      {
+        'member_id': 'member-a',
+        'full_name': 'Jane Contact',
+        'phone_e164': '+255712345678',
+        'event_count': 1,
+      },
+    ];
+  }
+
+  @override
+  Future<Map<String, dynamic>> createContact(
+    String tenantId,
+    Map<String, dynamic> payload,
+  ) async {
+    lastTenantId = tenantId;
+    lastCreatedContact = payload;
+    return {'member_id': 'member-new', ...payload};
+  }
+
+  @override
+  Future<Map<String, dynamic>> updateContact(
+    String tenantId,
+    String memberId,
+    Map<String, dynamic> payload,
+  ) async {
+    lastTenantId = tenantId;
+    lastUpdatedContact = payload;
+    return {'member_id': memberId, ...payload};
   }
 
   @override
@@ -77,6 +147,117 @@ class FakeAhadiApi implements AhadiApi {
   @override
   Future<void> logout() async {
     logoutCalls += 1;
+  }
+
+  @override
+  Future<List<Map<String, dynamic>>> availableContactsForEvent(
+    String tenantId,
+    String eventId,
+  ) async {
+    lastTenantId = tenantId;
+    return [
+      {
+        'member_id': 'member-a',
+        'full_name': 'Jane Contact',
+        'phone_e164': '+255712345678',
+      },
+    ];
+  }
+
+  @override
+  Future<Map<String, dynamic>> attachEventMember(
+    String tenantId,
+    String eventId,
+    Map<String, dynamic> payload,
+  ) async {
+    lastTenantId = tenantId;
+    final error = attachError;
+    if (error != null) throw error;
+    return {'event_member_id': 'em-new', ...payload};
+  }
+
+  @override
+  Future<Map<String, dynamic>> eventMemberDetail(
+    String tenantId,
+    String eventId,
+    String eventMemberId,
+  ) async {
+    lastTenantId = tenantId;
+    return {
+      'member': {
+        'event_member_id': eventMemberId,
+        'full_name': 'Jane Contact',
+        'phone_e164': '+255712345678',
+        'pledged_amount': 100000,
+        'total_allocated': 40000,
+        'outstanding_amount': 60000,
+        'pledge_status': 'PARTIALLY_PAID',
+      },
+      'payments': <Map<String, dynamic>>[],
+    };
+  }
+
+  @override
+  Future<Map<String, dynamic>> createEventMember(
+    String tenantId,
+    String eventId,
+    Map<String, dynamic> payload,
+  ) async {
+    lastTenantId = tenantId;
+    return {'event_member_id': 'em-new', ...payload};
+  }
+
+  @override
+  Future<Map<String, dynamic>> eventFinancialSummary(
+    String tenantId,
+    String eventId,
+  ) async {
+    lastTenantId = tenantId;
+    final configured = eventSummaries[eventId];
+    if (configured != null) return configured;
+    return {
+      'totalPledged': 100000,
+      'totalAllocated': 40000,
+      'totalOutstanding': 60000,
+      'memberCount': 1,
+    };
+  }
+
+  @override
+  Future<List<Map<String, dynamic>>> eventMembers(
+    String tenantId,
+    String eventId,
+  ) async {
+    eventMembersCalls += 1;
+    lastTenantId = tenantId;
+    return [
+      {
+        'event_member_id': 'em-a',
+        'full_name': 'Jane Contact',
+        'phone_e164': '+255712345678',
+        'pledged_amount': 100000,
+      },
+    ];
+  }
+
+  @override
+  Future<List<Map<String, dynamic>>> eventPledges(
+    String tenantId,
+    String eventId,
+  ) async {
+    eventPledgesCalls += 1;
+    lastTenantId = tenantId;
+    return [
+      {
+        'pledge_id': 'pledge-a',
+        'event_member_id': 'em-a',
+        'member_name': 'Jane Contact',
+        'pledged_amount': 100000,
+        'total_allocated': 40000,
+        'outstanding_amount': 60000,
+        'status': 'PARTIALLY_PAID',
+      },
+    ];
   }
 
   @override
@@ -110,6 +291,29 @@ class FakeAhadiApi implements AhadiApi {
       return tenantCompleter!.future;
     }
     return tenantContexts[tenantId] ?? makeTenantContext(tenantId, tenantId);
+  }
+
+  @override
+  Future<Map<String, dynamic>> upsertPledge(
+    String tenantId,
+    String eventId,
+    Map<String, dynamic> payload, {
+    String? pledgeId,
+  }) async {
+    lastTenantId = tenantId;
+    lastPledgePayload = payload;
+    return {'pledge_id': pledgeId ?? 'pledge-new', ...payload};
+  }
+
+  @override
+  Future<Map<String, dynamic>> removeEventMember(
+    String tenantId,
+    String eventId,
+    String eventMemberId,
+    Map<String, dynamic> payload,
+  ) async {
+    lastTenantId = tenantId;
+    return {'event_member_id': eventMemberId, 'removed': true};
   }
 
   @override
@@ -149,20 +353,42 @@ TenantMembership membership(String id, String name) {
     roles: const ['TENANT_OWNER'],
     permissions: const ['events.view'],
     accessibleEvents: const [
-      EventSummary(id: 'event-1', name: 'Main Event', status: 'ACTIVE'),
+      EventSummary(
+        id: 'event-1',
+        name: 'Main Event',
+        status: 'ACTIVE',
+        eventType: 'WEDDING',
+      ),
     ],
     subscription: const SubscriptionSummary(status: 'TRIAL', planName: 'Basic'),
   );
 }
 
-TenantContext makeTenantContext(String id, String name) {
+TenantContext makeTenantContext(
+  String id,
+  String name, {
+  List<EventSummary> events = const [
+    EventSummary(
+      id: 'event-1',
+      name: 'Main Event',
+      status: 'ACTIVE',
+      eventType: 'WEDDING',
+    ),
+  ],
+}) {
   return TenantContext(
     tenantId: id,
     tenantName: name,
-    events: const [
-      EventSummary(id: 'event-1', name: 'Main Event', status: 'ACTIVE'),
+    events: events,
+    permissions: const [
+      'events.view',
+      'events.create',
+      'members.create',
+      'members.assign_event',
+      'pledges.create',
     ],
-    permissions: const ['events.view'],
+    isOwner: true,
+    accessState: 'ACTIVE',
     subscription: const SubscriptionSummary(status: 'TRIAL', planName: 'Basic'),
   );
 }

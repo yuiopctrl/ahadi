@@ -129,6 +129,183 @@ class ApiClient implements AhadiApi {
     return _request('/onboarding/complete', method: 'POST', body: payload);
   }
 
+  @override
+  Future<Map<String, dynamic>> createEvent(
+    String tenantId,
+    Map<String, dynamic> payload,
+  ) async {
+    final json = await _request(
+      '/events',
+      method: 'POST',
+      tenantId: tenantId,
+      body: payload,
+    );
+    return jsonMap(json['data']);
+  }
+
+  @override
+  Future<Map<String, dynamic>> eventFinancialSummary(
+    String tenantId,
+    String eventId,
+  ) async {
+    final json = await _request(
+      '/events/$eventId/financial-summary',
+      tenantId: tenantId,
+    );
+    return jsonMap(json['data']);
+  }
+
+  @override
+  Future<List<Map<String, dynamic>>> eventMembers(
+    String tenantId,
+    String eventId,
+  ) async {
+    final json = await _request('/events/$eventId/members', tenantId: tenantId);
+    return objectList(json['data']);
+  }
+
+  @override
+  Future<List<Map<String, dynamic>>> contacts(String tenantId) async {
+    final json = await _request('/contacts', tenantId: tenantId);
+    return objectList(json['data']);
+  }
+
+  @override
+  Future<Map<String, dynamic>> contactDetail(
+    String tenantId,
+    String memberId,
+  ) async {
+    final json = await _request('/contacts/$memberId', tenantId: tenantId);
+    return jsonMap(json['data']);
+  }
+
+  @override
+  Future<Map<String, dynamic>> createContact(
+    String tenantId,
+    Map<String, dynamic> payload,
+  ) async {
+    final json = await _request(
+      '/contacts',
+      method: 'POST',
+      tenantId: tenantId,
+      body: payload,
+    );
+    return jsonMap(json['data']);
+  }
+
+  @override
+  Future<Map<String, dynamic>> updateContact(
+    String tenantId,
+    String memberId,
+    Map<String, dynamic> payload,
+  ) async {
+    final json = await _request(
+      '/members/$memberId',
+      method: 'PATCH',
+      tenantId: tenantId,
+      body: payload,
+    );
+    return jsonMap(json['data']);
+  }
+
+  @override
+  Future<List<Map<String, dynamic>>> availableContactsForEvent(
+    String tenantId,
+    String eventId,
+  ) async {
+    final json = await _request(
+      '/events/$eventId/contacts/available',
+      tenantId: tenantId,
+    );
+    return objectList(json['data']);
+  }
+
+  @override
+  Future<Map<String, dynamic>> eventMemberDetail(
+    String tenantId,
+    String eventId,
+    String eventMemberId,
+  ) async {
+    final json = await _request(
+      '/events/$eventId/members/$eventMemberId',
+      tenantId: tenantId,
+    );
+    return jsonMap(json['data']);
+  }
+
+  @override
+  Future<Map<String, dynamic>> attachEventMember(
+    String tenantId,
+    String eventId,
+    Map<String, dynamic> payload,
+  ) async {
+    final json = await _request(
+      '/events/$eventId/members/attach',
+      method: 'POST',
+      tenantId: tenantId,
+      body: payload,
+    );
+    return jsonMap(json['data']);
+  }
+
+  @override
+  Future<Map<String, dynamic>> createEventMember(
+    String tenantId,
+    String eventId,
+    Map<String, dynamic> payload,
+  ) async {
+    final json = await _request(
+      '/events/$eventId/members',
+      method: 'POST',
+      tenantId: tenantId,
+      body: payload,
+    );
+    return jsonMap(json['data']);
+  }
+
+  @override
+  Future<Map<String, dynamic>> removeEventMember(
+    String tenantId,
+    String eventId,
+    String eventMemberId,
+    Map<String, dynamic> payload,
+  ) async {
+    final json = await _request(
+      '/events/$eventId/members/$eventMemberId/remove',
+      method: 'POST',
+      tenantId: tenantId,
+      body: payload,
+    );
+    return jsonMap(json['data']);
+  }
+
+  @override
+  Future<List<Map<String, dynamic>>> eventPledges(
+    String tenantId,
+    String eventId,
+  ) async {
+    final json = await _request('/events/$eventId/pledges', tenantId: tenantId);
+    return objectList(json['data']);
+  }
+
+  @override
+  Future<Map<String, dynamic>> upsertPledge(
+    String tenantId,
+    String eventId,
+    Map<String, dynamic> payload, {
+    String? pledgeId,
+  }) async {
+    final json = await _request(
+      pledgeId == null
+          ? '/events/$eventId/pledges'
+          : '/events/$eventId/pledges/$pledgeId',
+      method: pledgeId == null ? 'POST' : 'PATCH',
+      tenantId: tenantId,
+      body: payload,
+    );
+    return jsonMap(json['data']);
+  }
+
   Future<Map<String, dynamic>> _request(
     String path, {
     String method = 'GET',
@@ -136,13 +313,12 @@ class ApiClient implements AhadiApi {
     String? tenantId,
     Map<String, dynamic>? body,
   }) async {
-    final baseUrl = _config.apiBaseUrl
-    .toString()
-    .replaceAll(RegExp(r'/+$'), '');
-
-final cleanPath = path.replaceAll(RegExp(r'^/+'), '');
-
-final uri = Uri.parse('$baseUrl/$cleanPath');
+    final baseUrl = _config.apiBaseUrl.toString().replaceAll(
+      RegExp(r'/+$'),
+      '',
+    );
+    final cleanPath = path.replaceAll(RegExp(r'^/+'), '');
+    final uri = Uri.parse('$baseUrl/$cleanPath');
     late HttpClientRequest request;
     try {
       request = await _httpClient
@@ -170,55 +346,41 @@ final uri = Uri.parse('$baseUrl/$cleanPath');
       final text = await utf8
           .decodeStream(response)
           .timeout(const Duration(seconds: 20));
-      final contentType = response.headers.contentType?.mimeType;
-
-	print(
-	  'AHADI API status=${response.statusCode} '
-  	  'contentType=$contentType '
-  	 'bodyLength=${text.length}',
-	);
-
-	if (response.statusCode < 200 || response.statusCode >= 300) {
-  	 print(
-          'AHADI API ERROR BODY: '
-    	  '${text.length > 500 ? text.substring(0, 500) : text}',
-        );
-      }
       Object? decoded;
 
-if (text.isEmpty) {
-  decoded = <String, dynamic>{};
-} else {
-  try {
-    decoded = jsonDecode(text);
-  } on FormatException {
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw ApiFailure(
-        kind: _kindFor(response.statusCode, null),
-        message: 'Server returned HTTP ${response.statusCode}.',
-        statusCode: response.statusCode,
-        requestId: response.headers.value('X-Request-ID'),
-      );
-    }
+      if (text.isEmpty) {
+        decoded = <String, dynamic>{};
+      } else {
+        try {
+          decoded = jsonDecode(text);
+        } on FormatException {
+          if (response.statusCode < 200 || response.statusCode >= 300) {
+            throw ApiFailure(
+              kind: _kindFor(response.statusCode, null),
+              message: 'Server returned HTTP ${response.statusCode}.',
+              statusCode: response.statusCode,
+              requestId: response.headers.value('X-Request-ID'),
+            );
+          }
 
-    throw const ApiFailure(
-      kind: ApiFailureKind.server,
-      message: 'The server returned an invalid response.',
-    );
-  }
-}
+          throw const ApiFailure(
+            kind: ApiFailureKind.server,
+            message: 'The server returned an invalid response.',
+          );
+        }
+      }
 
-if (response.statusCode < 200 || response.statusCode >= 300) {
-  throw _failureFromResponse(response, decoded);
-}
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw _failureFromResponse(response, decoded);
+      }
 
-return jsonMap(decoded);
+      return jsonMap(decoded);
     } on ApiFailure {
       rethrow;
-    } on SocketException catch (error) {
-      throw ApiFailure(
+    } on SocketException {
+      throw const ApiFailure(
         kind: ApiFailureKind.networkUnavailable,
-        message: error.message,
+        message: 'No internet connection. Check your connection and try again.',
       );
     } on TimeoutException {
       throw const ApiFailure(

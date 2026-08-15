@@ -5,6 +5,7 @@ import '../../../core/widgets/brand_header.dart';
 import '../data/session_controller.dart';
 import 'forgot_pin_screen.dart';
 import 'pin_input.dart';
+import 'register_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key, required this.controller});
@@ -126,6 +127,27 @@ class _LoginScreenState extends State<LoginScreen> {
                                     );
                                   },
                             child: const Text('Forgot PIN?'),
+                          ),
+                          const Divider(height: 28),
+                          Center(
+                            child: Text(
+                              'New to Ahadi?',
+                              style: Theme.of(context).textTheme.bodyMedium
+                                  ?.copyWith(color: AhadiColors.muted),
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          OutlinedButton.icon(
+                            key: const Key('create-organization-signup'),
+                            onPressed: widget.controller.isSubmitting
+                                ? null
+                                : () => Navigator.of(context).push(
+                                    MaterialPageRoute(
+                                      builder: (_) => const RegisterScreen(),
+                                    ),
+                                  ),
+                            icon: const Icon(Icons.add_business_outlined),
+                            label: const Text('Create Organization'),
                           ),
                         ],
                       ),

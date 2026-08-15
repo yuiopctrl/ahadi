@@ -92,7 +92,10 @@ class _ReadyScreen extends StatelessWidget {
       );
     }
     if (controller.selectedTenantContext != null) {
-      return MobileShell(controller: controller);
+      return MobileShell(
+        key: ValueKey(controller.selectedTenantId),
+        controller: controller,
+      );
     }
     return OrganizationSelectionScreen(
       controller: controller,
@@ -143,7 +146,10 @@ class BootstrapErrorScreen extends StatelessWidget {
                 child: const Text('Try again'),
               ),
               TextButton(
-                onPressed: controller.signOut,
+                onPressed: () async {
+                  Navigator.of(context).popUntil((route) => route.isFirst);
+                  await controller.signOut();
+                },
                 child: const Text('Sign in again'),
               ),
             ],

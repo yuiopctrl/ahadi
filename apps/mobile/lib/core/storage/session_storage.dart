@@ -9,6 +9,9 @@ abstract class SessionStorage {
   Future<String?> readSelectedTenantId();
   Future<void> saveSelectedTenantId(String tenantId);
   Future<void> clearSelectedTenantId();
+  Future<String?> readSelectedEventId(String tenantId);
+  Future<void> saveSelectedEventId(String tenantId, String eventId);
+  Future<void> clearSelectedEventId(String tenantId);
 }
 
 class SecureSessionStorage implements SessionStorage {
@@ -61,11 +64,27 @@ class SecureSessionStorage implements SessionStorage {
   @override
   Future<void> clearSelectedTenantId() =>
       _storage.delete(key: _selectedTenantKey);
+
+  @override
+  Future<String?> readSelectedEventId(String tenantId) =>
+      _storage.read(key: _selectedEventKey(tenantId));
+
+  @override
+  Future<void> saveSelectedEventId(String tenantId, String eventId) =>
+      _storage.write(key: _selectedEventKey(tenantId), value: eventId);
+
+  @override
+  Future<void> clearSelectedEventId(String tenantId) =>
+      _storage.delete(key: _selectedEventKey(tenantId));
+
+  String _selectedEventKey(String tenantId) =>
+      'ahadi.selectedEventId.$tenantId';
 }
 
 class MemorySessionStorage implements SessionStorage {
   SessionCredentials? session;
   String? selectedTenantId;
+  final selectedEventIds = <String, String>{};
 
   @override
   Future<void> clearSelectedTenantId() async {
@@ -76,6 +95,7 @@ class MemorySessionStorage implements SessionStorage {
   Future<void> clearSession() async {
     session = null;
     selectedTenantId = null;
+    selectedEventIds.clear();
   }
 
   @override
@@ -92,5 +112,19 @@ class MemorySessionStorage implements SessionStorage {
   @override
   Future<void> saveSession(SessionCredentials credentials) async {
     session = credentials;
+  }
+
+  @override
+  Future<String?> readSelectedEventId(String tenantId) async =>
+      selectedEventIds[tenantId];
+
+  @override
+  Future<void> saveSelectedEventId(String tenantId, String eventId) async {
+    selectedEventIds[tenantId] = eventId;
+  }
+
+  @override
+  Future<void> clearSelectedEventId(String tenantId) async {
+    selectedEventIds.remove(tenantId);
   }
 }

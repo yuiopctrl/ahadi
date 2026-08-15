@@ -25,6 +25,15 @@ class ApiFailure implements Exception {
 
   bool get isSessionExpired => code == 'SESSION_REQUIRED' || statusCode == 401;
 
+  bool get isNetworkUnavailable => kind == ApiFailureKind.networkUnavailable;
+
+  String get friendlyMessage {
+    if (isNetworkUnavailable) {
+      return 'No internet connection. Check your connection and try again.';
+    }
+    return message;
+  }
+
   @override
-  String toString() => message;
+  String toString() => friendlyMessage;
 }

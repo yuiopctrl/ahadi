@@ -54,7 +54,10 @@ class ProfileScreen extends StatelessWidget {
               ListTile(
                 leading: const Icon(Icons.logout),
                 title: const Text('Sign out'),
-                onTap: controller.signOut,
+                onTap: () async {
+                  Navigator.of(context).popUntil((route) => route.isFirst);
+                  await controller.signOut();
+                },
               ),
             ],
           ),

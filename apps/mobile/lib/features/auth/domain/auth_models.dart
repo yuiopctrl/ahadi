@@ -100,17 +100,62 @@ class EventSummary {
     required this.id,
     required this.name,
     required this.status,
+    required this.eventType,
+    this.eventDate,
+    this.venue,
+    this.pledgeDeadline,
+    this.targetAmount,
+    this.memberCount,
+    this.totalPledged,
+    this.totalCollected,
+    this.totalOutstanding,
   });
 
   final String id;
   final String name;
   final String status;
+  final String eventType;
+  final String? eventDate;
+  final String? venue;
+  final String? pledgeDeadline;
+  final num? targetAmount;
+  final num? memberCount;
+  final num? totalPledged;
+  final num? totalCollected;
+  final num? totalOutstanding;
 
   factory EventSummary.fromJson(Map<String, dynamic> json) {
     return EventSummary(
       id: stringValue(json, 'id') ?? '',
       name: stringValue(json, 'name') ?? '',
       status: stringValue(json, 'status') ?? '',
+      eventType:
+          stringValue(json, 'eventType') ??
+          stringValue(json, 'event_type') ??
+          '',
+      eventDate:
+          stringValue(json, 'eventDate') ?? stringValue(json, 'event_date'),
+      venue: stringValue(json, 'venue'),
+      pledgeDeadline:
+          stringValue(json, 'pledgeDeadline') ??
+          stringValue(json, 'pledge_deadline'),
+      targetAmount:
+          numberValue(json, 'targetAmount') ??
+          numberValue(json, 'target_amount'),
+      memberCount:
+          numberValue(json, 'memberCount') ?? numberValue(json, 'member_count'),
+      totalPledged:
+          numberValue(json, 'totalPledged') ??
+          numberValue(json, 'total_pledged'),
+      totalCollected:
+          numberValue(json, 'totalCollected') ??
+          numberValue(json, 'totalCollected') ??
+          numberValue(json, 'total_collected') ??
+          numberValue(json, 'totalPaid') ??
+          numberValue(json, 'total_paid'),
+      totalOutstanding:
+          numberValue(json, 'totalOutstanding') ??
+          numberValue(json, 'total_outstanding'),
     );
   }
 }
@@ -212,6 +257,8 @@ class TenantContext {
     required this.tenantName,
     required this.events,
     required this.permissions,
+    required this.isOwner,
+    required this.accessState,
     this.subscription,
   });
 
@@ -219,12 +266,18 @@ class TenantContext {
   final String tenantName;
   final List<EventSummary> events;
   final List<String> permissions;
+  final bool isOwner;
+  final String accessState;
   final SubscriptionSummary? subscription;
 
   factory TenantContext.fromJson(Map<String, dynamic> json) {
     final tenant = json['tenant'];
     final tenantMap = tenant is Map<String, dynamic>
         ? tenant
+        : <String, dynamic>{};
+    final membership = json['membership'];
+    final membershipMap = membership is Map<String, dynamic>
+        ? membership
         : <String, dynamic>{};
     final subscriptionJson = json['subscription'];
     return TenantContext(
@@ -236,6 +289,9 @@ class TenantContext {
           '',
       events: objectList(json['events']).map(EventSummary.fromJson).toList(),
       permissions: stringList(json['permissions']),
+      isOwner:
+          membershipMap['isOwner'] == true || membershipMap['is_owner'] == true,
+      accessState: stringValue(json, 'accessState') ?? 'ACTIVE',
       subscription: subscriptionJson is Map<String, dynamic>
           ? SubscriptionSummary.fromJson(subscriptionJson)
           : null,
@@ -260,6 +316,13 @@ class SubscriptionPlan {
 String? stringValue(Map<String, dynamic> json, String key) {
   final value = json[key];
   return value is String ? value : null;
+}
+
+num? numberValue(Map<String, dynamic> json, String key) {
+  final value = json[key];
+  if (value is num) return value;
+  if (value is String) return num.tryParse(value);
+  return null;
 }
 
 List<String> stringList(Object? value) {

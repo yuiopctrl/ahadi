@@ -34,6 +34,7 @@ class SessionController extends ChangeNotifier {
   UserContext? userContext;
   TenantContext? selectedTenantContext;
   String? selectedTenantId;
+  String? selectedEventId;
   String? errorMessage;
   bool isSubmitting = false;
 
@@ -49,6 +50,15 @@ class SessionController extends ChangeNotifier {
       isAuthenticated &&
       selectedTenantContext == null &&
       activeMemberships.isEmpty;
+  EventSummary? get selectedEvent {
+    final eventId = selectedEventId;
+    if (eventId == null) return null;
+    final events = selectedTenantContext?.events ?? const <EventSummary>[];
+    for (final event in events) {
+      if (event.id == eventId) return event;
+    }
+    return null;
+  }
 
   Future<void> initialize() async {
     bootstrapState = BootstrapState.restoringSession;
@@ -192,14 +202,57 @@ class SessionController extends ChangeNotifier {
     selectedTenantId = tenantId;
     selectedTenantContext = context;
     await _storage.saveSelectedTenantId(tenantId);
+    await restoreEventForTenant();
     notifyListeners();
   }
 
   Future<void> switchTenant(String tenantId) async {
     selectedTenantContext = null;
     selectedTenantId = null;
+    selectedEventId = null;
     notifyListeners();
     await selectTenant(tenantId);
+  }
+
+  Future<void> selectEvent(String eventId) async {
+    final tenantId = _requireTenantId();
+    final events = selectedTenantContext?.events ?? const <EventSummary>[];
+    if (!events.any((event) => event.id == eventId)) {
+      throw StateError('Choose an event from the selected organization.');
+    }
+    selectedEventId = eventId;
+    await _storage.saveSelectedEventId(tenantId, eventId);
+    notifyListeners();
+  }
+
+  Future<void> clearSelectedEvent() async {
+    final tenantId = selectedTenantId;
+    if (tenantId != null) {
+      await _storage.clearSelectedEventId(tenantId);
+    }
+    selectedEventId = null;
+    notifyListeners();
+  }
+
+  Future<void> restoreEventForTenant() async {
+    final tenantId = selectedTenantId;
+    final events = selectedTenantContext?.events ?? const <EventSummary>[];
+    if (tenantId == null || events.isEmpty) {
+      selectedEventId = null;
+      return;
+    }
+    final stored = await _storage.readSelectedEventId(tenantId);
+    if (stored != null && events.any((event) => event.id == stored)) {
+      selectedEventId = stored;
+      return;
+    }
+    final active = events.where((event) => event.status == 'ACTIVE').toList();
+    if (active.length == 1) {
+      selectedEventId = active.first.id;
+      await _storage.saveSelectedEventId(tenantId, active.first.id);
+      return;
+    }
+    selectedEventId = null;
   }
 
   Future<List<SubscriptionPlan>> plans() => _api.plans();
@@ -208,6 +261,122 @@ class SessionController extends ChangeNotifier {
     final tenantId = selectedTenantId;
     if (tenantId == null) return Future.value(<String, dynamic>{});
     return _api.billingSummary(tenantId);
+  }
+
+  Future<void> refreshTenantContext() async {
+    final tenantId = selectedTenantId;
+    if (tenantId == null) return;
+    selectedTenantContext = await _api.tenantContext(tenantId);
+    await restoreEventForTenant();
+    notifyListeners();
+  }
+
+  Future<Map<String, dynamic>> createEvent(Map<String, dynamic> payload) async {
+    final tenantId = _requireTenantId();
+    final result = await _api.createEvent(tenantId, payload);
+    await refreshTenantContext();
+    return result;
+  }
+
+  Future<Map<String, dynamic>> eventFinancialSummary(String eventId) {
+    return _api.eventFinancialSummary(_requireTenantId(), eventId);
+  }
+
+  Future<List<Map<String, dynamic>>> eventMembers(String eventId) {
+    return _api.eventMembers(_requireTenantId(), eventId);
+  }
+
+  Future<List<Map<String, dynamic>>> contacts() {
+    return _api.contacts(_requireTenantId());
+  }
+
+  Future<Map<String, dynamic>> contactDetail(String memberId) {
+    return _api.contactDetail(_requireTenantId(), memberId);
+  }
+
+  Future<Map<String, dynamic>> createContact(Map<String, dynamic> payload) {
+    final normalized = Map<String, dynamic>.from(payload);
+    final phone = normalized['phone'];
+    if (phone is String && phone.trim().isNotEmpty) {
+      normalized['phone'] = normalizeTanzaniaPhone(phone);
+    }
+    final alternativePhone = normalized['alternativePhone'];
+    if (alternativePhone is String && alternativePhone.trim().isNotEmpty) {
+      normalized['alternativePhone'] = normalizeTanzaniaPhone(alternativePhone);
+    }
+    return _api.createContact(_requireTenantId(), normalized);
+  }
+
+  Future<Map<String, dynamic>> updateContact(
+    String memberId,
+    Map<String, dynamic> payload,
+  ) {
+    final normalized = Map<String, dynamic>.from(payload);
+    final phone = normalized['phoneE164'];
+    if (phone is String && phone.trim().isNotEmpty) {
+      normalized['phoneE164'] = normalizeTanzaniaPhone(phone);
+    }
+    final alternativePhone = normalized['alternativePhoneE164'];
+    if (alternativePhone is String && alternativePhone.trim().isNotEmpty) {
+      normalized['alternativePhoneE164'] = normalizeTanzaniaPhone(
+        alternativePhone,
+      );
+    }
+    return _api.updateContact(_requireTenantId(), memberId, normalized);
+  }
+
+  Future<List<Map<String, dynamic>>> availableContactsForEvent(String eventId) {
+    return _api.availableContactsForEvent(_requireTenantId(), eventId);
+  }
+
+  Future<Map<String, dynamic>> eventMemberDetail(
+    String eventId,
+    String eventMemberId,
+  ) {
+    return _api.eventMemberDetail(_requireTenantId(), eventId, eventMemberId);
+  }
+
+  Future<Map<String, dynamic>> attachEventMember(
+    String eventId,
+    String memberId,
+  ) {
+    return _api.attachEventMember(_requireTenantId(), eventId, {
+      'memberId': memberId,
+    });
+  }
+
+  Future<Map<String, dynamic>> createEventMember(
+    String eventId,
+    Map<String, dynamic> payload,
+  ) {
+    return _api.createEventMember(_requireTenantId(), eventId, payload);
+  }
+
+  Future<Map<String, dynamic>> removeEventMember(
+    String eventId,
+    String eventMemberId, {
+    String? reason,
+  }) {
+    return _api.removeEventMember(_requireTenantId(), eventId, eventMemberId, {
+      'reason': reason,
+    });
+  }
+
+  Future<List<Map<String, dynamic>>> eventPledges(String eventId) {
+    return _api.eventPledges(_requireTenantId(), eventId);
+  }
+
+  Future<Map<String, dynamic>> upsertPledge(
+    String eventId,
+    Map<String, dynamic> payload, {
+    String? pledgeId,
+  }) {
+    return _api.upsertPledge(
+      _requireTenantId(),
+      eventId,
+      payload,
+      pledgeId: pledgeId,
+    );
   }
 
   Future<void> createOrganization({
@@ -282,9 +451,18 @@ class SessionController extends ChangeNotifier {
     userContext = null;
     selectedTenantContext = null;
     selectedTenantId = null;
+    selectedEventId = null;
     await _storage.clearSession();
     bootstrapState = BootstrapState.unauthenticated;
     notifyListeners();
+  }
+
+  String _requireTenantId() {
+    final tenantId = selectedTenantId;
+    if (tenantId == null) {
+      throw StateError('Select an organization first.');
+    }
+    return tenantId;
   }
 
   Future<void> _resolveAccess({bool clearOnSessionExpiry = false}) async {
@@ -303,6 +481,7 @@ class SessionController extends ChangeNotifier {
         userContext = null;
         selectedTenantContext = null;
         selectedTenantId = null;
+        selectedEventId = null;
         await _storage.clearSession();
         bootstrapState = BootstrapState.unauthenticated;
         notifyListeners();
@@ -328,6 +507,7 @@ class SessionController extends ChangeNotifier {
         : null;
     if (tenantToSelect == null) {
       selectedTenantContext = null;
+      selectedEventId = null;
       if (selectedTenantId != null && !storedTenant) {
         selectedTenantId = null;
         await _storage.clearSelectedTenantId();
@@ -337,10 +517,11 @@ class SessionController extends ChangeNotifier {
     selectedTenantContext = await _api.tenantContext(tenantToSelect);
     selectedTenantId = tenantToSelect;
     await _storage.saveSelectedTenantId(tenantToSelect);
+    await restoreEventForTenant();
   }
 
   String _messageFor(Object error) {
-    if (error is ApiFailure) return error.message;
+    if (error is ApiFailure) return error.friendlyMessage;
     if (error is FormatException) return error.message;
     return 'Something went wrong. Please try again.';
   }
