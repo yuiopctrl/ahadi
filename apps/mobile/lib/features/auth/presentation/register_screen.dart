@@ -4,6 +4,7 @@ import '../../../core/theme/ahadi_theme.dart';
 import '../data/phone_normalization.dart';
 import '../data/session_controller.dart';
 import 'forgot_pin_screen.dart';
+import 'invitation_review_card.dart';
 import 'pin_input.dart';
 
 enum _RegisterStep { phone, existing, otp, pin, profile, invitations, welcome }
@@ -274,32 +275,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
             widget.controller.userContext?.pendingInvitations ?? const [];
         return [
           for (final invitation in invitations) ...[
-            Card(
-              child: ListTile(
-                title: Text(invitation.tenantName),
-                subtitle: Text(
-                  'Role ${invitation.roleCode.replaceAll('_', ' ')}',
-                ),
-                trailing: Wrap(
-                  spacing: 8,
-                  children: [
-                    TextButton(
-                      onPressed: busy
-                          ? null
-                          : () => _decline(invitation.invitationId),
-                      child: const Text('Decline'),
-                    ),
-                    FilledButton(
-                      onPressed: busy
-                          ? null
-                          : () => _join(invitation.invitationId),
-                      child: const Text('Join'),
-                    ),
-                  ],
-                ),
-              ),
+            InvitationReviewCard(
+              invitation: invitation,
+              busy: busy,
+              onDecline: () => _decline(invitation.invitationId),
+              onJoin: () => _join(invitation.invitationId),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 12),
           ],
         ];
       case _RegisterStep.welcome:

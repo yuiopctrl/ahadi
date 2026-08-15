@@ -575,20 +575,37 @@ function InvitationsPage({ title, subtitle }: Pick<AuthPageProps, 'title' | 'sub
         <h1>{invitations.length === 1 ? "You're Invited" : title}</h1>
         <p>{subtitle}</p>
       </div>
-      <div className="tenant-card-stack">
+      <div className="invitation-stack">
         {invitations.map((invitation) => (
-          <div className="review-card" key={invitation.invitationId}>
-            <CheckCircle2 size={18} aria-hidden />
-            <div>
-              <strong>{invitation.tenantName}</strong>
-              <span>Role {invitation.roleCode.replaceAll('_', ' ').toLowerCase()}</span>
+          <div className="invitation-card" key={invitation.invitationId}>
+            <div className="invitation-card-header">
+              <span className="invitation-icon" aria-hidden>
+                <CheckCircle2 size={22} />
+              </span>
+              <div>
+                <small>Organization</small>
+                <strong>{invitation.tenantName}</strong>
+                <span>You have been invited to join this organization.</span>
+              </div>
             </div>
-            <button type="button" disabled={accept.isPending || decline.isPending} onClick={() => decline.mutate(invitation.invitationId)}>
-              Decline
-            </button>
-            <button className="primary-button" type="button" disabled={accept.isPending || decline.isPending} onClick={() => accept.mutate(invitation)}>
-              Join Organization
-            </button>
+            <div className="invitation-detail">
+              <small>Role</small>
+              <strong>{invitation.roleCode.replaceAll('_', ' ').toLowerCase()}</strong>
+            </div>
+            {invitation.fullName ? (
+              <div className="invitation-detail">
+                <small>Name</small>
+                <strong>{invitation.fullName}</strong>
+              </div>
+            ) : null}
+            <div className="invitation-actions">
+              <button type="button" disabled={accept.isPending || decline.isPending} onClick={() => decline.mutate(invitation.invitationId)}>
+                Decline
+              </button>
+              <button className="primary-button" type="button" disabled={accept.isPending || decline.isPending} onClick={() => accept.mutate(invitation)}>
+                Join Organization
+              </button>
+            </div>
           </div>
         ))}
       </div>

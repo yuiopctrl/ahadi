@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../core/theme/ahadi_theme.dart';
 import '../../auth/data/session_controller.dart';
 import '../../auth/domain/auth_models.dart';
+import '../../auth/presentation/invitation_review_card.dart';
 import 'create_organization_screen.dart';
 
 class OrganizationSelectionScreen extends StatelessWidget {
@@ -138,7 +139,7 @@ class InvitationsReviewScreen extends StatelessWidget {
         ],
       ),
       body: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.fromLTRB(16, 18, 16, 24),
         children: [
           Text(
             invitations.length == 1 ? "You're Invited" : 'Invitations',
@@ -147,42 +148,21 @@ class InvitationsReviewScreen extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Text(
-            'Review organization invitations for your verified phone number.',
+            'Accept an invitation to join an existing Ahadi organization.',
             style: Theme.of(context).textTheme.bodyMedium
                 ?.copyWith(color: AhadiColors.muted),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 18),
           for (final invitation in invitations) ...[
-            Card(
-              child: ListTile(
-                title: Text(invitation.tenantName),
-                subtitle: Text(
-                  'Role ${invitation.roleCode.replaceAll('_', ' ')}',
-                ),
-                trailing: Wrap(
-                  spacing: 8,
-                  children: [
-                    TextButton(
-                      onPressed: controller.isSubmitting
-                          ? null
-                          : () => controller.declineInvitation(
-                              invitation.invitationId,
-                            ),
-                      child: const Text('Decline'),
-                    ),
-                    FilledButton(
-                      onPressed: controller.isSubmitting
-                          ? null
-                          : () => controller.acceptInvitation(
-                              invitation.invitationId,
-                            ),
-                      child: const Text('Join'),
-                    ),
-                  ],
-                ),
-              ),
+            InvitationReviewCard(
+              invitation: invitation,
+              busy: controller.isSubmitting,
+              onDecline: () =>
+                  controller.declineInvitation(invitation.invitationId),
+              onJoin: () =>
+                  controller.acceptInvitation(invitation.invitationId),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 12),
           ],
         ],
       ),

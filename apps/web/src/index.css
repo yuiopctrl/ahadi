@@ -302,6 +302,100 @@ a {
   gap: 10px;
 }
 
+.invitation-stack {
+  display: grid;
+  gap: 12px;
+}
+
+.invitation-card {
+  display: grid;
+  gap: 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: white;
+  padding: 16px;
+}
+
+.invitation-card-header {
+  display: grid;
+  grid-template-columns: 44px 1fr;
+  gap: 12px;
+  align-items: start;
+}
+
+.invitation-card-header strong,
+.invitation-card-header span,
+.invitation-detail strong,
+.invitation-detail small {
+  display: block;
+}
+
+.invitation-card-header small,
+.invitation-detail small {
+  color: var(--color-muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.invitation-card-header strong {
+  margin-top: 2px;
+  color: var(--color-text);
+  font-size: 18px;
+  line-height: 1.2;
+}
+
+.invitation-card-header span {
+  margin-top: 4px;
+  color: var(--color-muted);
+  font-size: 14px;
+  line-height: 1.35;
+}
+
+.invitation-icon {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  border: 1px solid var(--color-primary);
+  border-radius: 8px;
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+}
+
+.invitation-detail {
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-background);
+  padding: 12px;
+}
+
+.invitation-detail strong {
+  margin-top: 3px;
+  color: var(--color-text);
+  font-size: 14px;
+  line-height: 1.35;
+  text-transform: capitalize;
+}
+
+.invitation-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 10px;
+}
+
+.invitation-actions button {
+  min-height: 48px;
+  width: 100%;
+  border-radius: 8px;
+  font-weight: 800;
+}
+
+.invitation-actions button:not(.primary-button) {
+  border: 1px solid var(--color-border);
+  background: white;
+  color: var(--color-text);
+}
+
 .tenant-card {
   display: grid;
   min-height: 112px;
