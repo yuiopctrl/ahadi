@@ -16,6 +16,7 @@ export function TenantAppLayout() {
   const routeEventId = eventRouteMatch?.params.eventId
   const tenant = session.userContext?.tenantMemberships.find((membership) => membership.tenantId === session.selectedTenantId) ?? null
   const memberships = session.userContext?.tenantMemberships.filter((membership) => membership.membershipStatus === 'ACTIVE' && (membership.tenantStatus === 'ACTIVE' || membership.tenantStatus === 'TRIAL')) ?? []
+  const pendingInvitations = session.userContext?.pendingInvitations ?? []
   const events = session.selectedTenantContext?.events ?? tenant?.accessibleEvents ?? []
   const fallbackEvent = events[0] ?? null
   const storedEvent = selectedEventId ? events.find((candidate) => candidate.id === selectedEventId) ?? null : null
@@ -68,6 +69,13 @@ export function TenantAppLayout() {
           onCreateTenant={handleCreateTenant}
           onLogout={() => void handleLogout()}
         />
+        {pendingInvitations.length ? (
+          <button className="notice-banner" type="button" onClick={() => navigate('/invitations')}>
+            {pendingInvitations.length === 1
+              ? `Invitation from ${pendingInvitations[0]?.tenantName ?? 'an organization'}`
+              : `${pendingInvitations.length} organization invitations`}
+          </button>
+        ) : null}
         <Outlet />
       </div>
       <MobileBottomNav event={event} showPlatformLink={hasActivePlatformAccess(session.userContext)} />

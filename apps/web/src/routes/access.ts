@@ -68,6 +68,9 @@ export function hasActivePlatformRole(context: UserContext | null): boolean {
 
 function tenantDestination(context: UserContext | null): string {
   const accessibleMemberships = context?.tenantMemberships.filter(isAccessibleTenantMembership) ?? []
+  if (!accessibleMemberships.length && context?.pendingInvitations?.length) {
+    return '/invitations'
+  }
   if (!context?.onboardingCompleted && accessibleMemberships.length) {
     return '/onboarding'
   }
@@ -78,7 +81,7 @@ function tenantDestination(context: UserContext | null): string {
   if (accessibleMemberships.length) {
     return '/select-tenant'
   }
-  return '/select-tenant'
+  return '/invitations'
 }
 
 export function hasTenantWorkspaceAccess(context: UserContext | null): boolean {
@@ -93,7 +96,7 @@ function inferRequestedContext(path: string | null | undefined): RequestedAppCon
   const normalizedPath = path?.replace(/\/+$/, '') || null
   if (!normalizedPath) return 'default'
   if (normalizedPath === '/platform' || normalizedPath.startsWith('/platform/')) return 'platform'
-  if (normalizedPath === '/app' || normalizedPath.startsWith('/app/') || normalizedPath === '/onboarding' || normalizedPath === '/organizations/new' || normalizedPath === '/register') return 'tenant'
+  if (normalizedPath === '/app' || normalizedPath.startsWith('/app/') || normalizedPath === '/onboarding' || normalizedPath === '/organizations/new' || normalizedPath === '/register' || normalizedPath === '/register/profile' || normalizedPath === '/invitations') return 'tenant'
   return 'default'
 }
 
@@ -118,7 +121,7 @@ export function resolveAuthenticatedDestination({
   if (appContext === 'platform') {
     return platformDestination(normalizedRequestedPath)
   }
-  if (normalizedRequestedPath === '/onboarding' || normalizedRequestedPath === '/organizations/new') {
+  if (normalizedRequestedPath === '/onboarding' || normalizedRequestedPath === '/organizations/new' || normalizedRequestedPath === '/register/profile' || normalizedRequestedPath === '/invitations') {
     return normalizedRequestedPath
   }
   if (appContext === 'tenant') {
@@ -160,6 +163,9 @@ export function getPlatformRouteRedirect(context: UserContext | null, fallback =
 
 export function getTenantRouteRedirect(context: UserContext | null, selectedTenantId: string | null, selectedTenantBlocked: boolean): string | null {
   const accessibleMemberships = context?.tenantMemberships.filter(isAccessibleTenantMembership) ?? []
+  if (!accessibleMemberships.length && context?.pendingInvitations?.length) {
+    return '/invitations'
+  }
   if (!context?.onboardingCompleted && accessibleMemberships.length) {
     return hasActivePlatformRole(context) ? '/platform' : '/onboarding'
   }

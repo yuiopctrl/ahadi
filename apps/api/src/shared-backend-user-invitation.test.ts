@@ -12,6 +12,11 @@ test('authenticated context normalizes profile names and phone fields for /me co
   assert.match(normalization, /fullName: stringValue\(profile, 'fullName', 'full_name'\)/)
   assert.match(normalization, /phoneE164: stringValue\(profile, 'phoneE164', 'phone_e164'\)/)
   assert.match(normalization, /onboardingCompletedAt: nullableStringValue\(profile, 'onboardingCompletedAt', 'onboarding_completed_at'\)/)
+  assert.match(normalization, /pendingInvitations:/)
+})
+
+test('auth context loading does not auto-accept pending invitations', () => {
+  assert.doesNotMatch(middleware, /rpc_accept_my_tenant_invitations/)
 })
 
 test('onboarding persists adminFullName into the shared profile row without overwriting existing names', () => {

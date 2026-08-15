@@ -268,6 +268,20 @@ export interface TenantMembershipContext {
   accessibleEvents: EventSummary[]
 }
 
+export interface TenantInvitationContext {
+  invitationId: string
+  tenantId: string
+  tenantName: string
+  tenantCode: string
+  fullName: string
+  phoneE164: string
+  email: string | null
+  roleCode: string
+  status: 'INVITED'
+  invitedAt: string
+  lastSentAt: string | null
+}
+
 export interface UserContext {
   profile: UserProfile | null
   isPlatformUser: boolean
@@ -276,6 +290,7 @@ export interface UserContext {
   platformPermissions: string[]
   onboardingCompleted: boolean
   tenantMemberships: TenantMembershipContext[]
+  pendingInvitations: TenantInvitationContext[]
 }
 
 export interface TenantContext {

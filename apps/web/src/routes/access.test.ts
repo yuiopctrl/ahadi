@@ -12,6 +12,7 @@ function context(overrides: Partial<UserContext> = {}): UserContext {
     platformPermissions: [],
     onboardingCompleted: true,
     tenantMemberships: [],
+    pendingInvitations: [],
     ...overrides,
   }
 }
@@ -132,7 +133,7 @@ test('tenant context still sends unfinished tenant users to onboarding', () => {
 test('tenant-only unfinished account without tenant does not fall into onboarding from generic login', () => {
   const tenantOnly = context({ onboardingCompleted: false, tenantMemberships: [] })
   assert.equal(hasActivePlatformRole(tenantOnly), false)
-  assert.equal(getPostAuthDestination(tenantOnly, null), '/select-tenant')
+  assert.equal(getPostAuthDestination(tenantOnly, null), '/invitations')
   assert.equal(getPostAuthDestination(tenantOnly, '/onboarding'), '/onboarding')
 })
 

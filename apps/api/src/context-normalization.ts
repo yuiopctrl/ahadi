@@ -41,5 +41,7 @@ export function normalizeUserContext(value: unknown): UserContext {
   return {
     ...context,
     profile: normalizeProfile(context['profile']),
+    tenantMemberships: Array.isArray(context['tenantMemberships']) ? context['tenantMemberships'] : Array.isArray(context['tenant_memberships']) ? context['tenant_memberships'] : [],
+    pendingInvitations: Array.isArray(context['pendingInvitations']) ? context['pendingInvitations'] : Array.isArray(context['pending_invitations']) ? context['pending_invitations'] : [],
   } as unknown as UserContext
 }

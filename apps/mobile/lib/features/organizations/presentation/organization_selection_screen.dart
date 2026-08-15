@@ -117,3 +117,75 @@ class EmptyOrganizationsScreen extends StatelessWidget {
     );
   }
 }
+
+class InvitationsReviewScreen extends StatelessWidget {
+  const InvitationsReviewScreen({super.key, required this.controller});
+
+  final SessionController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final invitations = controller.userContext?.pendingInvitations ?? const [];
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Invitations'),
+        actions: [
+          IconButton(
+            onPressed: controller.signOut,
+            icon: const Icon(Icons.logout),
+            tooltip: 'Sign out',
+          ),
+        ],
+      ),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          Text(
+            invitations.length == 1 ? "You're Invited" : 'Invitations',
+            style: Theme.of(context).textTheme.headlineSmall
+                ?.copyWith(fontWeight: FontWeight.w800),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Review organization invitations for your verified phone number.',
+            style: Theme.of(context).textTheme.bodyMedium
+                ?.copyWith(color: AhadiColors.muted),
+          ),
+          const SizedBox(height: 16),
+          for (final invitation in invitations) ...[
+            Card(
+              child: ListTile(
+                title: Text(invitation.tenantName),
+                subtitle: Text(
+                  'Role ${invitation.roleCode.replaceAll('_', ' ')}',
+                ),
+                trailing: Wrap(
+                  spacing: 8,
+                  children: [
+                    TextButton(
+                      onPressed: controller.isSubmitting
+                          ? null
+                          : () => controller.declineInvitation(
+                              invitation.invitationId,
+                            ),
+                      child: const Text('Decline'),
+                    ),
+                    FilledButton(
+                      onPressed: controller.isSubmitting
+                          ? null
+                          : () => controller.acceptInvitation(
+                              invitation.invitationId,
+                            ),
+                      child: const Text('Join'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+          ],
+        ],
+      ),
+    );
+  }
+}

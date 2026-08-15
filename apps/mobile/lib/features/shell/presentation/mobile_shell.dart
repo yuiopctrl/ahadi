@@ -8,6 +8,7 @@ import '../../events/presentation/events_screen.dart';
 import '../../financial/presentation/financial_screens.dart';
 import '../../messages/presentation/messages_screens.dart';
 import '../../organizations/presentation/create_organization_screen.dart';
+import '../../organizations/presentation/organization_selection_screen.dart';
 import '../../pledges/presentation/pledges_screen.dart';
 import '../../profile/presentation/profile_screen.dart';
 import '../../users/presentation/users_roles_screen.dart';
@@ -95,7 +96,36 @@ class _MobileShellState extends State<MobileShell> {
           ),
         ],
       ),
-      body: pages[index],
+      body: Column(
+        children: [
+          if ((widget.controller.userContext?.pendingInvitations.length ?? 0) >
+              0)
+            Material(
+              color: AhadiColors.primary.withValues(alpha: 0.08),
+              child: ListTile(
+                dense: true,
+                leading: const Icon(
+                  Icons.mark_email_unread_outlined,
+                  color: AhadiColors.primary,
+                ),
+                title: Text(
+                  widget.controller.userContext!.pendingInvitations.length == 1
+                      ? 'Organization invitation available'
+                      : '${widget.controller.userContext!.pendingInvitations.length} organization invitations',
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) =>
+                        InvitationsReviewScreen(controller: widget.controller),
+                  ),
+                ),
+              ),
+            ),
+          Expanded(child: pages[index]),
+        ],
+      ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: index,
         onDestinationSelected: (value) => setState(() => index = value),

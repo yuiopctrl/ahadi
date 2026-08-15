@@ -82,6 +82,12 @@ async function apiDownload(path: string, options: RequestInit & { tenantId?: str
 }
 
 export const api = {
+  accountState: (phone: string) =>
+    apiFetch<{ data: { phone: string; state: 'EXISTING_VERIFIED_ACCOUNT' | 'NEW_PHONE'; existingVerifiedAccount: boolean } }>('/auth/account-state', {
+      method: 'POST',
+      auth: false,
+      body: JSON.stringify({ phone }),
+    }),
   requestOtp: (phone: string) => apiFetch<{ ok: boolean }>('/auth/request-otp', { method: 'POST', auth: false, body: JSON.stringify({ phone }) }),
   loginWithPin: (phone: string, pin: string) =>
     apiFetch<{ session: { access_token: string; refresh_token: string }; user: unknown }>('/auth/login-pin', {
@@ -109,6 +115,12 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(payload),
     }),
+  updateProfile: (payload: { fullName?: string; email?: string | null }) =>
+    apiFetch<{ data: NonNullable<UserContext['profile']> }>('/profile', { method: 'PATCH', body: JSON.stringify(payload) }),
+  acceptInvitation: (invitationId: string) =>
+    apiFetch<{ data: { ok: boolean; tenantId?: string; tenantUserId?: string } }>(`/invitations/${invitationId}/accept`, { method: 'POST' }),
+  declineInvitation: (invitationId: string) =>
+    apiFetch<{ data: { ok: boolean } }>(`/invitations/${invitationId}/decline`, { method: 'POST' }),
   me: () => apiFetch<{ data: UserContext }>('/me'),
   tenantContext: (tenantId: string) => apiFetch<{ data: TenantContext }>('/tenant-context', { tenantId }),
   features: (tenantId: string) => apiFetch<{ data: Record<string, unknown>[] }>('/features', { tenantId }),

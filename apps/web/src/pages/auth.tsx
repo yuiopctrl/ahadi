@@ -2,7 +2,7 @@ import { useMutation, useQuery } from '@tanstack/react-query'
 import { ArrowLeft, CheckCircle2, LockKeyhole } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import type { OnboardingPayload, SubscriptionPlan, TenantMembershipContext, UserContext } from '@ahadi/types'
+import type { OnboardingPayload, SubscriptionPlan, TenantInvitationContext, TenantMembershipContext, UserContext } from '@ahadi/types'
 import { normalizeTanzaniaPhone, onboardingPayloadSchema, setupPinSchema } from '@ahadi/validation'
 import { api, ApiClientError } from '../lib/api'
 import { supabase } from '../lib/supabase'
@@ -11,7 +11,7 @@ import { getSingleActiveMembership, useSessionStore } from '../stores/session-st
 import { MoneyDisplay, StatusBadge } from '../components/ui'
 import { PinEntry, canSubmitPin } from '../components/pin-entry'
 
-type AuthMode = 'login' | 'forgotPin' | 'otp' | 'pin' | 'register' | 'onboarding' | 'selectTenant' | 'workspace'
+type AuthMode = 'login' | 'forgotPin' | 'otp' | 'pin' | 'profile' | 'invitations' | 'register' | 'onboarding' | 'selectTenant' | 'workspace'
 type OnboardingIntent = 'FIRST_TENANT' | 'CREATE_ADDITIONAL_TENANT'
 
 interface AuthPageProps {
@@ -188,6 +188,12 @@ export function AuthPage({ title, subtitle, mode }: AuthPageProps) {
   if (mode === 'onboarding') {
     return <OnboardingPage />
   }
+  if (mode === 'profile') {
+    return <ProfileCompletionPage title={title} subtitle={subtitle} />
+  }
+  if (mode === 'invitations') {
+    return <InvitationsPage title={title} subtitle={subtitle} />
+  }
   if (mode === 'selectTenant') {
     return <TenantSelectionPage title={title} subtitle={subtitle} />
   }
@@ -288,7 +294,7 @@ function LoginPage({ title, subtitle }: Pick<AuthPageProps, 'title' | 'subtitle'
       {error ? <p className="field-error">{error}</p> : null}
       {error?.includes('No verified Ahadi account') ? (
         <button className="text-button" type="button" onClick={() => navigate('/register')}>
-          Create an organization
+          Create Account
         </button>
       ) : null}
       <button className="primary-button" type="submit" disabled={!loginReady}>
@@ -299,8 +305,9 @@ function LoginPage({ title, subtitle }: Pick<AuthPageProps, 'title' | 'subtitle'
           <button className="text-button" type="button" onClick={() => navigate('/forgot-pin')}>
             Forgot PIN?
           </button>
+          <p className="privacy-note">New to Ahadi?</p>
           <button className="text-button" type="button" onClick={() => navigate('/register')}>
-            Create a new organization
+            Create Account
           </button>
           <button className="text-button" type="button" onClick={() => navigate('/platform/login')}>
             Platform Administration
@@ -321,17 +328,51 @@ function OtpRequestPage({ title, subtitle }: Pick<AuthPageProps, 'title' | 'subt
   const navigate = useNavigate()
   const [phone, setPhone] = useState(localStorage.getItem(phoneDraftKey) ?? '')
   const [error, setError] = useState<string | null>(null)
+  const [existingAccount, setExistingAccount] = useState(false)
   const mutation = useMutation({
     mutationFn: async () => {
       const normalized = normalizeTanzaniaPhone(phone)
+      const state = await api.accountState(normalized)
+      if (state.data.existingVerifiedAccount) {
+        return { normalized, existingVerifiedAccount: true }
+      }
       await api.requestOtp(normalized)
       localStorage.setItem(phoneDraftKey, normalized)
-      localStorage.setItem(postAuthDestinationKey, '/onboarding')
-      return normalized
+      localStorage.setItem(postAuthDestinationKey, '/register/profile')
+      return { normalized, existingVerifiedAccount: false }
     },
-    onSuccess: () => navigate('/verify-otp'),
-    onError: (nextError) => setError(errorMessage(nextError)),
+    onSuccess: (result) => {
+      setPhone(result.normalized)
+      if (result.existingVerifiedAccount) {
+        localStorage.setItem(phoneDraftKey, result.normalized)
+        setExistingAccount(true)
+        setError(null)
+        return
+      }
+      navigate('/verify-otp')
+    },
+    onError: (nextError) => {
+      setExistingAccount(false)
+      setError(errorMessage(nextError))
+    },
   })
+
+  if (existingAccount) {
+    return (
+      <form className="auth-form" onSubmit={(event) => event.preventDefault()}>
+        <div>
+          <h1>This phone number already has an Ahadi account.</h1>
+          <p>Log in using your PIN.</p>
+        </div>
+        <button className="primary-button" type="button" onClick={() => navigate('/login')}>
+          Back to Login
+        </button>
+        <button className="text-button" type="button" onClick={() => navigate('/forgot-pin')}>
+          Forgot PIN?
+        </button>
+      </form>
+    )
+  }
 
   return (
     <form className="auth-form" onSubmit={(event) => {
@@ -351,7 +392,7 @@ function OtpRequestPage({ title, subtitle }: Pick<AuthPageProps, 'title' | 'subt
         {mutation.isPending ? 'Sending...' : 'Continue'}
       </button>
       <button className="text-button" type="button" onClick={() => navigate('/login')}>
-        I already have an account
+        Back to Login
       </button>
       <p className="privacy-note">We use your phone number only to secure your Ahadi account and send requested verification messages.</p>
     </form>
@@ -383,7 +424,8 @@ function OtpPage({ title, subtitle }: Pick<AuthPageProps, 'title' | 'subtitle'>)
       const context = await session.refreshContext()
       const hasPin = await api.hasPin()
       if (!hasPin.hasPin) {
-        navigate('/setup-pin', { replace: true })
+        const destination = localStorage.getItem(postAuthDestinationKey)
+        navigate('/setup-pin', { replace: true, state: destination ? { postAuthDestination: destination } : undefined })
         return
       }
       session.lockState.unlock()
@@ -427,6 +469,135 @@ function OtpPage({ title, subtitle }: Pick<AuthPageProps, 'title' | 'subtitle'>)
         Change phone
       </button>
       <p className="privacy-note">Resend available in {seconds}s. OTP is never stored by Ahadi.</p>
+    </form>
+  )
+}
+
+function ProfileCompletionPage({ title, subtitle }: Pick<AuthPageProps, 'title' | 'subtitle'>) {
+  const navigate = useNavigate()
+  const session = useSessionStore()
+  const firstInvitation = session.userContext?.pendingInvitations?.[0]
+  const [fullName, setFullName] = useState(session.userContext?.profile?.fullName || firstInvitation?.fullName || '')
+  const [email, setEmail] = useState(session.userContext?.profile?.email ?? firstInvitation?.email ?? '')
+  const [error, setError] = useState<string | null>(null)
+  const mutation = useMutation({
+    mutationFn: async () => {
+      if (fullName.trim().length < 2) {
+        throw new Error('Enter your full name.')
+      }
+      await api.updateProfile({ fullName: fullName.trim(), email: email.trim() || null })
+    },
+    onSuccess: async () => {
+      const context = await session.refreshContext()
+      navigate(context?.pendingInvitations?.length ? '/invitations' : '/invitations', { replace: true })
+    },
+    onError: (nextError) => setError(errorMessage(nextError)),
+  })
+
+  return (
+    <form className="auth-form" onSubmit={(event) => {
+      event.preventDefault()
+      mutation.mutate()
+    }}>
+      <div>
+        <h1>{title}</h1>
+        <p>{subtitle}</p>
+      </div>
+      <label>
+        Full Name
+        <input value={fullName} onChange={(event) => setFullName(event.target.value)} />
+      </label>
+      <label>
+        Email
+        <input type="email" value={email} onChange={(event) => setEmail(event.target.value)} />
+      </label>
+      {error ? <p className="field-error">{error}</p> : null}
+      <button className="primary-button" type="submit" disabled={mutation.isPending}>
+        {mutation.isPending ? 'Saving...' : 'Continue'}
+      </button>
+    </form>
+  )
+}
+
+function InvitationsPage({ title, subtitle }: Pick<AuthPageProps, 'title' | 'subtitle'>) {
+  const navigate = useNavigate()
+  const session = useSessionStore()
+  const [error, setError] = useState<string | null>(null)
+  const invitations = session.userContext?.pendingInvitations ?? []
+  const memberships = session.userContext?.tenantMemberships.filter((membership) => membership.membershipStatus === 'ACTIVE') ?? []
+  const accept = useMutation({
+    mutationFn: async (invitation: TenantInvitationContext) => {
+      const result = await api.acceptInvitation(invitation.invitationId)
+      const context = await session.refreshContext()
+      const tenantId = result.data.tenantId ?? invitation.tenantId
+      if (tenantId) {
+        await session.selectTenant(tenantId)
+      } else if (context) {
+        const singleTenant = getSingleActiveMembership(context)
+        if (singleTenant) await session.selectTenant(singleTenant.tenantId)
+      }
+      return tenantId
+    },
+    onSuccess: () => navigate('/app', { replace: true }),
+    onError: (nextError) => setError(errorMessage(nextError)),
+  })
+  const decline = useMutation({
+    mutationFn: async (invitationId: string) => {
+      await api.declineInvitation(invitationId)
+      await session.refreshContext()
+    },
+    onError: (nextError) => setError(errorMessage(nextError)),
+  })
+
+  if (!invitations.length) {
+    return (
+      <form className="auth-form" onSubmit={(event) => event.preventDefault()}>
+        <div>
+          <h1>Welcome to Ahadi</h1>
+          <p>You are not currently a member of an organization.</p>
+        </div>
+        {memberships.length ? (
+          <button className="primary-button" type="button" onClick={() => navigate('/select-tenant')}>
+            Continue
+          </button>
+        ) : (
+          <button className="primary-button" type="button" onClick={() => navigate('/organizations/new')}>
+            Create Organization
+          </button>
+        )}
+      </form>
+    )
+  }
+
+  return (
+    <form className="auth-form" onSubmit={(event) => event.preventDefault()}>
+      <div>
+        <h1>{invitations.length === 1 ? "You're Invited" : title}</h1>
+        <p>{subtitle}</p>
+      </div>
+      <div className="tenant-card-stack">
+        {invitations.map((invitation) => (
+          <div className="review-card" key={invitation.invitationId}>
+            <CheckCircle2 size={18} aria-hidden />
+            <div>
+              <strong>{invitation.tenantName}</strong>
+              <span>Role {invitation.roleCode.replaceAll('_', ' ').toLowerCase()}</span>
+            </div>
+            <button type="button" disabled={accept.isPending || decline.isPending} onClick={() => decline.mutate(invitation.invitationId)}>
+              Decline
+            </button>
+            <button className="primary-button" type="button" disabled={accept.isPending || decline.isPending} onClick={() => accept.mutate(invitation)}>
+              Join Organization
+            </button>
+          </div>
+        ))}
+      </div>
+      {error ? <p className="field-error">{error}</p> : null}
+      {memberships.length ? (
+        <button className="text-button" type="button" onClick={() => navigate('/app')}>
+          Continue to existing organization
+        </button>
+      ) : null}
     </form>
   )
 }

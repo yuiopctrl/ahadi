@@ -52,6 +52,17 @@ class ApiClient implements AhadiApi {
   }
 
   @override
+  Future<Map<String, dynamic>> accountState(String phone) async {
+    final json = await _request(
+      '/auth/account-state',
+      method: 'POST',
+      auth: false,
+      body: {'phone': phone},
+    );
+    return jsonMap(json['data']);
+  }
+
+  @override
   Future<LoginResult> verifyOtp({
     required String phone,
     required String token,
@@ -134,6 +145,26 @@ class ApiClient implements AhadiApi {
     Map<String, dynamic> payload,
   ) async {
     final json = await _request('/profile', method: 'PATCH', body: payload);
+    return jsonMap(json['data']);
+  }
+
+  @override
+  Future<Map<String, dynamic>> acceptInvitation(String invitationId) async {
+    final json = await _request(
+      '/invitations/$invitationId/accept',
+      method: 'POST',
+      body: const <String, dynamic>{},
+    );
+    return jsonMap(json['data']);
+  }
+
+  @override
+  Future<Map<String, dynamic>> declineInvitation(String invitationId) async {
+    final json = await _request(
+      '/invitations/$invitationId/decline',
+      method: 'POST',
+      body: const <String, dynamic>{},
+    );
     return jsonMap(json['data']);
   }
 

@@ -9,6 +9,9 @@ class FakeAhadiApi implements AhadiApi {
   int requestOtpCalls = 0;
   int verifyOtpCalls = 0;
   int setPinCalls = 0;
+  int accountStateCalls = 0;
+  int acceptInvitationCalls = 0;
+  int declineInvitationCalls = 0;
   int changePinCalls = 0;
   int logoutCalls = 0;
   int meCalls = 0;
@@ -219,6 +222,7 @@ class FakeAhadiApi implements AhadiApi {
       ),
       onboardingCompleted: userContext.onboardingCompleted,
       tenantMemberships: userContext.tenantMemberships,
+      pendingInvitations: userContext.pendingInvitations,
     );
     return {
       'full_name': userContext.profile?.fullName,
@@ -643,8 +647,63 @@ class FakeAhadiApi implements AhadiApi {
   }
 
   @override
+  Future<Map<String, dynamic>> accountState(String phone) async {
+    accountStateCalls += 1;
+    return {
+      'phone': phone,
+      'state': 'NEW_PHONE',
+      'existingVerifiedAccount': false,
+    };
+  }
+
+  @override
   Future<void> setPin({required String pin, required String confirmPin}) async {
     setPinCalls += 1;
+  }
+
+  @override
+  Future<Map<String, dynamic>> acceptInvitation(String invitationId) async {
+    acceptInvitationCalls += 1;
+    final invitation = userContext.pendingInvitations.firstWhere(
+      (item) => item.invitationId == invitationId,
+      orElse: () => const TenantInvitation(
+        invitationId: 'invitation-a',
+        tenantId: 'tenant-a',
+        tenantName: 'Herosimini Committee',
+        roleCode: 'VIEWER',
+        fullName: '',
+      ),
+    );
+    userContext = UserContext(
+      profile: userContext.profile,
+      onboardingCompleted: true,
+      tenantMemberships: [
+        ...userContext.tenantMemberships,
+        membership(invitation.tenantId, invitation.tenantName),
+      ],
+      pendingInvitations: userContext.pendingInvitations
+          .where((item) => item.invitationId != invitationId)
+          .toList(),
+    );
+    tenantContexts[invitation.tenantId] = makeTenantContext(
+      invitation.tenantId,
+      invitation.tenantName,
+    );
+    return {'ok': true, 'tenantId': invitation.tenantId};
+  }
+
+  @override
+  Future<Map<String, dynamic>> declineInvitation(String invitationId) async {
+    declineInvitationCalls += 1;
+    userContext = UserContext(
+      profile: userContext.profile,
+      onboardingCompleted: userContext.onboardingCompleted,
+      tenantMemberships: userContext.tenantMemberships,
+      pendingInvitations: userContext.pendingInvitations
+          .where((item) => item.invitationId != invitationId)
+          .toList(),
+    );
+    return {'ok': true};
   }
 
   @override
@@ -1115,6 +1174,7 @@ UserContext userWithMemberships(List<TenantMembership> memberships) {
     ),
     onboardingCompleted: true,
     tenantMemberships: memberships,
+    pendingInvitations: const [],
   );
 }
 

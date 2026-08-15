@@ -14,6 +14,7 @@ function contextWithMemberships(count: number): UserContext {
     platformStatus: null,
     platformPermissions: [],
     onboardingCompleted: true,
+    pendingInvitations: [],
     tenantMemberships: Array.from({ length: count }, (_, index) => ({
       tenantUserId: `tu_${index}`,
       tenantId: `tenant_${index}`,

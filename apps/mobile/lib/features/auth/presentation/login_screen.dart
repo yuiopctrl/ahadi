@@ -138,16 +138,18 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                           const SizedBox(height: 8),
                           OutlinedButton.icon(
-                            key: const Key('create-organization-signup'),
+                            key: const Key('create-account-signup'),
                             onPressed: widget.controller.isSubmitting
                                 ? null
                                 : () => Navigator.of(context).push(
                                     MaterialPageRoute(
-                                      builder: (_) => const RegisterScreen(),
+                                      builder: (_) => RegisterScreen(
+                                        controller: widget.controller,
+                                      ),
                                     ),
                                   ),
-                            icon: const Icon(Icons.add_business_outlined),
-                            label: const Text('Create Organization'),
+                            icon: const Icon(Icons.person_add_alt_1_outlined),
+                            label: const Text('Create Account'),
                           ),
                         ],
                       ),
