@@ -48,9 +48,7 @@ void main() {
     expect(failure.friendlyMessage, isNot(contains('Failed host lookup')));
   });
 
-  testWidgets('login includes create organization signup action', (
-    tester,
-  ) async {
+  testWidgets('login includes create account signup action', (tester) async {
     final controller = SessionController(
       api: FakeAhadiApi(),
       storage: MemorySessionStorage(),
@@ -58,8 +56,8 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(home: LoginScreen(controller: controller)),
     );
-    expect(find.byKey(const Key('create-organization-signup')), findsOneWidget);
-    expect(find.text('Create Organization'), findsOneWidget);
+    expect(find.byKey(const Key('create-account-signup')), findsOneWidget);
+    expect(find.text('Create Account'), findsOneWidget);
   });
 
   testWidgets('event status is rendered from backend value', (tester) async {

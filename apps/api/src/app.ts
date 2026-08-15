@@ -117,6 +117,9 @@ const updateProfileSchema = z.object({
   fullName: z.string().trim().min(2).max(160).optional(),
   email: z.union([z.email(), z.literal(''), z.null()]).optional().transform((value) => value || null),
 })
+const authAccountStateSchema = z.object({
+  phone: tanzaniaPhoneSchema,
+})
 
 const sendSmsHookLimiter = rateLimit({
   windowMs: 60_000,
@@ -1845,6 +1848,34 @@ app.post('/api/v1/auth/login-pin', strictLimiter, async (request, response, next
   }
 })
 
+app.post('/api/v1/auth/account-state', strictLimiter, async (request, response, next) => {
+  try {
+    if (!supabaseAdmin) {
+      throw new AppError('AUTH_CONFIGURATION_REQUIRED', 'Account lookup requires SUPABASE_SERVICE_ROLE_KEY in the API environment')
+    }
+    const input = authAccountStateSchema.parse(request.body)
+    const { data, error } = await supabaseAdmin
+      .from('profiles')
+      .select('id')
+      .eq('phone_e164', input.phone)
+      .eq('status', 'ACTIVE')
+      .limit(1)
+    if (error) {
+      throw error
+    }
+    const existingVerifiedAccount = Boolean(data?.length)
+    response.json({
+      data: {
+        phone: input.phone,
+        state: existingVerifiedAccount ? 'EXISTING_VERIFIED_ACCOUNT' : 'NEW_PHONE',
+        existingVerifiedAccount,
+      },
+    })
+  } catch (error) {
+    next(error)
+  }
+})
+
 app.post('/api/v1/auth/request-otp', strictLimiter, async (request, response, next) => {
   try {
     logOtpDiagnostic(console, 'OTP_REQUEST_RECEIVED', { requestId: request.requestId, route: '/api/v1/auth/request-otp' })
@@ -2155,6 +2186,34 @@ app.post('/api/v1/onboarding/complete', requireAuth, async (request, response, n
 
 app.get('/api/v1/me', requireAuth, loadUserContext, (request, response) => {
   response.json({ data: request.auth?.context })
+})
+
+app.post('/api/v1/invitations/:invitationId/accept', requireAuth, loadUserContext, async (request, response, next) => {
+  try {
+    const invitationId = uuidParamSchema.parse(request.params['invitationId'])
+    const client = createUserSupabase(request.auth?.accessToken ?? '')
+    const { data, error } = await client.rpc('rpc_accept_tenant_invitation', { p_invitation_id: invitationId })
+    if (error) {
+      throwFinancialDatabaseError(error, 'TENANT_INVITATION_ACCEPT_FAILED')
+    }
+    response.json({ data: jsonRecord(data) })
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.post('/api/v1/invitations/:invitationId/decline', requireAuth, loadUserContext, async (request, response, next) => {
+  try {
+    const invitationId = uuidParamSchema.parse(request.params['invitationId'])
+    const client = createUserSupabase(request.auth?.accessToken ?? '')
+    const { data, error } = await client.rpc('rpc_decline_tenant_invitation', { p_invitation_id: invitationId })
+    if (error) {
+      throwFinancialDatabaseError(error, 'TENANT_INVITATION_DECLINE_FAILED')
+    }
+    response.json({ data: jsonRecord(data) })
+  } catch (error) {
+    next(error)
+  }
 })
 
 app.get('/api/v1/tenant-context', requireAuth, loadUserContext, requireTenantContext, (request, response) => {

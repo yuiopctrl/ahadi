@@ -82,6 +82,9 @@ class _ReadyScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (controller.needsInvitationReview) {
+      return InvitationsReviewScreen(controller: controller);
+    }
     if (controller.needsOrganizationCreation) {
       return EmptyOrganizationsScreen(controller: controller);
     }

@@ -50,6 +50,11 @@ class SessionController extends ChangeNotifier {
       isAuthenticated &&
       selectedTenantContext == null &&
       activeMemberships.isEmpty;
+  bool get needsInvitationReview =>
+      isAuthenticated &&
+      selectedTenantContext == null &&
+      activeMemberships.isEmpty &&
+      (userContext?.pendingInvitations.isNotEmpty ?? false);
   EventSummary? get selectedEvent {
     final eventId = selectedEventId;
     if (eventId == null) return null;
@@ -110,6 +115,74 @@ class SessionController extends ChangeNotifier {
     notifyListeners();
     try {
       await _api.requestOtp(normalizeTanzaniaPhone(phone));
+    } catch (error) {
+      errorMessage = _messageFor(error);
+      rethrow;
+    } finally {
+      isSubmitting = false;
+      notifyListeners();
+    }
+  }
+
+  Future<Map<String, dynamic>> accountState(String phone) {
+    return _api.accountState(normalizeTanzaniaPhone(phone));
+  }
+
+  Future<void> requestRegistrationOtp(String phone) async {
+    if (isSubmitting) return;
+    isSubmitting = true;
+    errorMessage = null;
+    notifyListeners();
+    try {
+      final normalized = normalizeTanzaniaPhone(phone);
+      await _api.requestOtp(normalized);
+    } catch (error) {
+      errorMessage = _messageFor(error);
+      rethrow;
+    } finally {
+      isSubmitting = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> verifyRegistrationOtp({
+    required String phone,
+    required String token,
+  }) async {
+    if (isSubmitting) return;
+    isSubmitting = true;
+    errorMessage = null;
+    notifyListeners();
+    try {
+      final result = await _api.verifyOtp(
+        phone: normalizeTanzaniaPhone(phone),
+        token: token,
+      );
+      credentials = result.credentials;
+      await _storage.saveSession(result.credentials);
+      userContext = await _api.me();
+    } catch (error) {
+      errorMessage = _messageFor(error);
+      rethrow;
+    } finally {
+      isSubmitting = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> setRegistrationPin({
+    required String pin,
+    required String confirmPin,
+  }) async {
+    if (isSubmitting) return;
+    isSubmitting = true;
+    errorMessage = null;
+    notifyListeners();
+    try {
+      if (pin != confirmPin) throw const FormatException('PINs do not match.');
+      if (isWeakPin(pin)) throw const FormatException('Choose a stronger PIN.');
+      await _api.setPin(pin: pin, confirmPin: confirmPin);
+      userContext = await _api.me();
     } catch (error) {
       errorMessage = _messageFor(error);
       rethrow;
@@ -604,6 +677,48 @@ class SessionController extends ChangeNotifier {
         'fullName': fullName.trim(),
         'email': email.trim().isEmpty ? null : email.trim(),
       });
+      userContext = await _api.me();
+    } catch (error) {
+      errorMessage = _messageFor(error);
+      rethrow;
+    } finally {
+      isSubmitting = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> acceptInvitation(String invitationId) async {
+    if (isSubmitting) return;
+    isSubmitting = true;
+    errorMessage = null;
+    notifyListeners();
+    try {
+      final result = await _api.acceptInvitation(invitationId);
+      await _resolveAccess();
+      final tenantId = result['tenantId'] is String
+          ? result['tenantId'] as String
+          : result['tenant_id'] is String
+          ? result['tenant_id'] as String
+          : null;
+      if (tenantId != null) {
+        await selectTenant(tenantId);
+      }
+    } catch (error) {
+      errorMessage = _messageFor(error);
+      rethrow;
+    } finally {
+      isSubmitting = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> declineInvitation(String invitationId) async {
+    if (isSubmitting) return;
+    isSubmitting = true;
+    errorMessage = null;
+    notifyListeners();
+    try {
+      await _api.declineInvitation(invitationId);
       userContext = await _api.me();
     } catch (error) {
       errorMessage = _messageFor(error);

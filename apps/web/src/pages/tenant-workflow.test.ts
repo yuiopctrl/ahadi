@@ -91,7 +91,7 @@ test('mobile more opens an overflow menu instead of linking directly to settings
 
 test('registration intent survives OTP and allows onboarding after tenant reset', () => {
   assert.match(authPage, /function OtpRequestPage/)
-  assert.match(authPage, /localStorage\.setItem\(postAuthDestinationKey, '\/onboarding'\)/)
+  assert.match(authPage, /localStorage\.setItem\(postAuthDestinationKey, '\/register\/profile'\)/)
   assert.match(authPage, /routeAfterAuthentication/)
   assert.match(authPage, /getPostAuthDestination\(context, preferredDestination\)/)
   assert.match(authPage, /localStorage\.removeItem\(postAuthDestinationKey\)/)
@@ -112,7 +112,7 @@ test('existing users can explicitly create another organization without old tena
   assert.match(authPage, /additionalOrganizationDraftKey/)
   assert.match(authPage, /Create another organization/)
   assert.match(authPage, /This organization will have its own events, users, settings and subscription\./)
-  assert.match(access, /normalizedRequestedPath === '\/onboarding' \|\| normalizedRequestedPath === '\/organizations\/new'/)
+  assert.match(access, /normalizedRequestedPath === '\/onboarding' \|\| normalizedRequestedPath === '\/organizations\/new' \|\| normalizedRequestedPath === '\/register\/profile' \|\| normalizedRequestedPath === '\/invitations'/)
 })
 
 test('additional organization onboarding uses the same tenant transaction with explicit DB intent', () => {
@@ -142,15 +142,15 @@ test('platform auth routes preserve platform context instead of falling into ten
 test('auth entry points are explicit and dual-role generic login uses workspace chooser', () => {
   assert.match(routes, /path: '\/login', element: <AuthPage mode="login" title="Sign in to Ahadi"/)
   assert.match(routes, /path: '\/platform\/login', element: <AuthPage mode="login" title="Ahadi Platform Administration"/)
-  assert.match(routes, /path: '\/register', element: <AuthPage mode="register" title="Create your Ahadi organization"/)
+  assert.match(routes, /path: '\/register', element: <AuthPage mode="register" title="Create Account"/)
   assert.match(routes, /path: '\/choose-workspace'[\s\S]+mode="workspace"/)
   assert.match(authPage, /function WorkspaceChooserPage/)
   assert.match(authPage, /Organization[\s\S]+Manage events, contacts, pledges and payments/)
   assert.match(authPage, /Platform Administration[\s\S]+Manage Ahadi tenants and platform operations/)
-  assert.match(authPage, /Create a new organization/)
+  assert.match(authPage, /Create Account/)
   assert.match(authPage, /Platform Administration/)
   assert.match(authPage, /Forgot PIN\?/)
-  assert.match(authPage, /I already have an account/)
+  assert.match(authPage, /Back to Login/)
   assert.match(authPage, /Create another organization/)
 })
 

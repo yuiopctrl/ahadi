@@ -227,12 +227,14 @@ class UserContext {
   const UserContext({
     required this.onboardingCompleted,
     required this.tenantMemberships,
+    required this.pendingInvitations,
     this.profile,
   });
 
   final UserProfile? profile;
   final bool onboardingCompleted;
   final List<TenantMembership> tenantMemberships;
+  final List<TenantInvitation> pendingInvitations;
 
   List<TenantMembership> get activeMemberships {
     return tenantMemberships
@@ -252,6 +254,47 @@ class UserContext {
       tenantMemberships: objectList(
         json['tenantMemberships'] ?? json['tenant_memberships'],
       ).map(TenantMembership.fromJson).toList(),
+      pendingInvitations: objectList(
+        json['pendingInvitations'] ?? json['pending_invitations'],
+      ).map(TenantInvitation.fromJson).toList(),
+    );
+  }
+}
+
+class TenantInvitation {
+  const TenantInvitation({
+    required this.invitationId,
+    required this.tenantId,
+    required this.tenantName,
+    required this.roleCode,
+    required this.fullName,
+    this.email,
+  });
+
+  final String invitationId;
+  final String tenantId;
+  final String tenantName;
+  final String roleCode;
+  final String fullName;
+  final String? email;
+
+  factory TenantInvitation.fromJson(Map<String, dynamic> json) {
+    return TenantInvitation(
+      invitationId:
+          stringValue(json, 'invitationId') ??
+          stringValue(json, 'invitation_id') ??
+          '',
+      tenantId:
+          stringValue(json, 'tenantId') ?? stringValue(json, 'tenant_id') ?? '',
+      tenantName:
+          stringValue(json, 'tenantName') ??
+          stringValue(json, 'tenant_name') ??
+          '',
+      roleCode:
+          stringValue(json, 'roleCode') ?? stringValue(json, 'role_code') ?? '',
+      fullName:
+          stringValue(json, 'fullName') ?? stringValue(json, 'full_name') ?? '',
+      email: stringValue(json, 'email'),
     );
   }
 }

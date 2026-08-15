@@ -8,6 +8,7 @@ abstract class AhadiApi {
   Future<void> requestOtp(String phone);
   Future<LoginResult> verifyOtp({required String phone, required String token});
   Future<void> setPin({required String pin, required String confirmPin});
+  Future<Map<String, dynamic>> accountState(String phone);
   Future<void> changePin({
     required String currentPin,
     required String newPin,
@@ -20,6 +21,8 @@ abstract class AhadiApi {
   Future<Map<String, dynamic>> billingSummary(String tenantId);
   Future<Map<String, dynamic>> completeOnboarding(Map<String, dynamic> payload);
   Future<Map<String, dynamic>> updateProfile(Map<String, dynamic> payload);
+  Future<Map<String, dynamic>> acceptInvitation(String invitationId);
+  Future<Map<String, dynamic>> declineInvitation(String invitationId);
   Future<List<Map<String, dynamic>>> tenantUsers(
     String tenantId, {
     String? search,
