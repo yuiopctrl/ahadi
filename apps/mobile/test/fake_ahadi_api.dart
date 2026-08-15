@@ -24,6 +24,13 @@ class FakeAhadiApi implements AhadiApi {
   int sendPledgeRequestCalls = 0;
   int sendBalanceReminderCalls = 0;
   int retrySmsCalls = 0;
+  int tenantUsersCalls = 0;
+  int inviteTenantUserCalls = 0;
+  int resendTenantInvitationCalls = 0;
+  int updateTenantUserRoleCalls = 0;
+  int suspendTenantUserCalls = 0;
+  int reactivateTenantUserCalls = 0;
+  int removeTenantUserCalls = 0;
   String? lastTenantId;
   String? lastEventId;
   String? lastReportType;
@@ -46,6 +53,9 @@ class FakeAhadiApi implements AhadiApi {
   Map<String, dynamic>? lastShareSettingsPayload;
   Map<String, dynamic>? lastSmsPreviewPayload;
   Map<String, dynamic>? lastSmsSendPayload;
+  Map<String, dynamic>? lastProfilePayload;
+  Map<String, dynamic>? lastInvitePayload;
+  Map<String, dynamic>? lastRolePayload;
   Completer<LoginResult>? loginCompleter;
   Completer<TenantContext>? tenantCompleter;
   Object? meError;
@@ -65,6 +75,41 @@ class FakeAhadiApi implements AhadiApi {
       'full_name': 'Jane Contact',
       'phone_e164': '+255712345678',
       'event_count': 1,
+    },
+  ];
+  List<Map<String, dynamic>> tenantUserRows = [
+    {
+      'tenant_user_id': 'tu-owner',
+      'row_id': 'tu-owner',
+      'row_type': 'USER',
+      'full_name': 'Godfrey Mrema',
+      'phone_e164': '+255712345678',
+      'email': 'godfrey@example.com',
+      'status': 'ACTIVE',
+      'roles': ['TENANT_OWNER'],
+      'joined_at': '2026-08-01T08:00:00Z',
+    },
+    {
+      'tenant_user_id': 'tu-treasurer',
+      'row_id': 'tu-treasurer',
+      'row_type': 'USER',
+      'full_name': 'Mary Joseph',
+      'phone_e164': '+255713676401',
+      'email': 'mary@example.com',
+      'status': 'ACTIVE',
+      'roles': ['TREASURER'],
+      'joined_at': '2026-08-10T08:00:00Z',
+    },
+    {
+      'invitation_id': 'inv-collector',
+      'row_id': 'inv-collector',
+      'row_type': 'INVITATION',
+      'full_name': 'John Mushi',
+      'phone_e164': '+255754000111',
+      'email': null,
+      'status': 'INVITED',
+      'roles': ['COLLECTOR'],
+      'created_at': '2026-08-15T08:00:00Z',
     },
   ];
 
@@ -156,6 +201,127 @@ class FakeAhadiApi implements AhadiApi {
       payload['tenantName'] as String,
     );
     return {'tenant_id': 'tenant-new'};
+  }
+
+  @override
+  Future<Map<String, dynamic>> updateProfile(
+    Map<String, dynamic> payload,
+  ) async {
+    lastProfilePayload = payload;
+    userContext = UserContext(
+      profile: UserProfile(
+        fullName:
+            payload['fullName'] as String? ??
+            userContext.profile?.fullName ??
+            '',
+        phoneE164: userContext.profile?.phoneE164 ?? '+255712345678',
+        email: payload['email'] as String?,
+      ),
+      onboardingCompleted: userContext.onboardingCompleted,
+      tenantMemberships: userContext.tenantMemberships,
+    );
+    return {
+      'full_name': userContext.profile?.fullName,
+      'phone_e164': userContext.profile?.phoneE164,
+      'email': userContext.profile?.email,
+    };
+  }
+
+  @override
+  Future<List<Map<String, dynamic>>> tenantUsers(
+    String tenantId, {
+    String? search,
+    int? limit,
+    int? offset,
+  }) async {
+    tenantUsersCalls += 1;
+    lastTenantId = tenantId;
+    final query = (search ?? '').toLowerCase();
+    final filtered = tenantUserRows.where((row) {
+      if (query.isEmpty) return true;
+      return _matchesNameOrPhone(
+        row,
+        query,
+        ['full_name', 'fullName'],
+        ['phone_e164', 'phoneE164', 'phone'],
+      );
+    }).toList();
+    return filtered.skip(offset ?? 0).take(limit ?? filtered.length).toList();
+  }
+
+  @override
+  Future<Map<String, dynamic>> inviteTenantUser(
+    String tenantId,
+    Map<String, dynamic> payload,
+  ) async {
+    inviteTenantUserCalls += 1;
+    lastTenantId = tenantId;
+    lastInvitePayload = payload;
+    final row = {
+      'invitation_id': 'inv-new',
+      'row_id': 'inv-new',
+      'row_type': 'INVITATION',
+      'full_name': payload['fullName'],
+      'phone_e164': payload['phone'],
+      'email': payload['email'],
+      'status': 'INVITED',
+      'roles': [payload['role']],
+      'created_at': '2026-08-15T09:00:00Z',
+    };
+    tenantUserRows.add(row);
+    return {'kind': 'INVITATION', 'invitationId': 'inv-new'};
+  }
+
+  @override
+  Future<Map<String, dynamic>> resendTenantInvitation(
+    String tenantId,
+    String invitationId,
+  ) async {
+    resendTenantInvitationCalls += 1;
+    lastTenantId = tenantId;
+    return {'invitationId': invitationId, 'resent': true};
+  }
+
+  @override
+  Future<Map<String, dynamic>> updateTenantUserRole(
+    String tenantId,
+    String tenantUserId,
+    Map<String, dynamic> payload,
+  ) async {
+    updateTenantUserRoleCalls += 1;
+    lastTenantId = tenantId;
+    lastRolePayload = payload;
+    return {
+      'tenantUserId': tenantUserId,
+      'roles': [payload['role']],
+    };
+  }
+
+  @override
+  Future<Map<String, dynamic>> suspendTenantUser(
+    String tenantId,
+    String tenantUserId,
+  ) async {
+    suspendTenantUserCalls += 1;
+    return {'tenantUserId': tenantUserId, 'status': 'SUSPENDED'};
+  }
+
+  @override
+  Future<Map<String, dynamic>> reactivateTenantUser(
+    String tenantId,
+    String tenantUserId,
+  ) async {
+    reactivateTenantUserCalls += 1;
+    return {'tenantUserId': tenantUserId, 'status': 'ACTIVE'};
+  }
+
+  @override
+  Future<Map<String, dynamic>> removeTenantUser(
+    String tenantId,
+    String tenantUserId,
+  ) async {
+    removeTenantUserCalls += 1;
+    return {'tenantUserId': tenantUserId, 'status': 'REMOVED'};
   }
 
   @override
@@ -1005,6 +1171,10 @@ TenantContext makeTenantContext(
       'messages.view',
       'messages.send',
       'messages.manage_settings',
+      'users.view',
+      'users.invite',
+      'users.manage_roles',
+      'users.suspend',
     ],
     isOwner: true,
     accessState: 'ACTIVE',

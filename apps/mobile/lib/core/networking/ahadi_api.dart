@@ -19,6 +19,38 @@ abstract class AhadiApi {
   Future<List<SubscriptionPlan>> plans();
   Future<Map<String, dynamic>> billingSummary(String tenantId);
   Future<Map<String, dynamic>> completeOnboarding(Map<String, dynamic> payload);
+  Future<Map<String, dynamic>> updateProfile(Map<String, dynamic> payload);
+  Future<List<Map<String, dynamic>>> tenantUsers(
+    String tenantId, {
+    String? search,
+    int? limit,
+    int? offset,
+  });
+  Future<Map<String, dynamic>> inviteTenantUser(
+    String tenantId,
+    Map<String, dynamic> payload,
+  );
+  Future<Map<String, dynamic>> resendTenantInvitation(
+    String tenantId,
+    String invitationId,
+  );
+  Future<Map<String, dynamic>> updateTenantUserRole(
+    String tenantId,
+    String tenantUserId,
+    Map<String, dynamic> payload,
+  );
+  Future<Map<String, dynamic>> suspendTenantUser(
+    String tenantId,
+    String tenantUserId,
+  );
+  Future<Map<String, dynamic>> reactivateTenantUser(
+    String tenantId,
+    String tenantUserId,
+  );
+  Future<Map<String, dynamic>> removeTenantUser(
+    String tenantId,
+    String tenantUserId,
+  );
   Future<Map<String, dynamic>> createEvent(
     String tenantId,
     Map<String, dynamic> payload,

@@ -107,6 +107,15 @@ const inviteTenantUserSchema = z.object({
 const updateTenantUserRoleSchema = z.object({
   role: tenantRoleSchema,
 })
+const listTenantUsersQuerySchema = z.object({
+  search: z.string().trim().max(160).optional().default(''),
+  limit: z.coerce.number().int().min(1).max(100).optional().default(20),
+  offset: z.coerce.number().int().min(0).optional().default(0),
+})
+const updateProfileSchema = z.object({
+  fullName: z.string().trim().min(2).max(160).optional(),
+  email: z.union([z.email(), z.literal(''), z.null()]).optional().transform((value) => value || null),
+})
 
 const sendSmsHookLimiter = rateLimit({
   windowMs: 60_000,
@@ -1939,6 +1948,32 @@ app.post('/api/v1/auth/change-pin', strictLimiter, requireAuth, async (request, 
   }
 })
 
+app.patch('/api/v1/profile', requireAuth, loadUserContext, async (request, response, next) => {
+  try {
+    const input = updateProfileSchema.parse(request.body)
+    const update = {
+      ...(input.fullName !== undefined ? { full_name: input.fullName } : {}),
+      ...(input.email !== undefined ? { email: input.email } : {}),
+    }
+    if (Object.keys(update).length === 0) {
+      throw new AppError('INVALID_INPUT', 'Nothing to update.', 400, 'VALIDATION')
+    }
+    const client = createUserSupabase(request.auth?.accessToken ?? '')
+    const { data, error } = await client
+      .from('profiles')
+      .update(update)
+      .eq('id', request.auth?.user.id)
+      .select('id, full_name, phone_e164, email, status')
+      .single()
+    if (error) {
+      throwFinancialDatabaseError(error, 'PROFILE_UPDATE_FAILED')
+    }
+    response.json({ data })
+  } catch (error) {
+    next(error)
+  }
+})
+
 app.post('/api/v1/auth/verify-pin', strictLimiter, requireAuth, async (request, response, next) => {
   try {
     const input = verifyPinSchema.parse(request.body)
@@ -2953,12 +2988,16 @@ app.post('/api/v1/events/:eventId/reports/:reportType/export', requireAuth, load
 app.get('/api/v1/users', requireAuth, loadUserContext, requireTenantContext, async (request, response, next) => {
   try {
     const tenantId = tenantIdFromRequest(request)
+    const query = listTenantUsersQuerySchema.parse(request.query)
     const client = createUserSupabase(request.auth?.accessToken ?? '')
     const { data, error } = await client.rpc('rpc_list_tenant_users', { p_tenant_id: tenantId })
     if (error) {
       throwFinancialDatabaseError(error, 'TENANT_USERS_LIST_FAILED')
     }
-    response.json({ data: jsonArray(data) })
+    const rows = jsonArray(data).filter((row) =>
+      matchesNameOrPhoneSearch(row, query.search, ['full_name', 'fullName'], ['phone_e164', 'phoneE164', 'phone']),
+    )
+    response.json({ data: rows.slice(query.offset, query.offset + query.limit) })
   } catch (error) {
     next(error)
   }

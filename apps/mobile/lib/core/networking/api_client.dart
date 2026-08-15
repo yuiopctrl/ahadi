@@ -130,6 +130,116 @@ class ApiClient implements AhadiApi {
   }
 
   @override
+  Future<Map<String, dynamic>> updateProfile(
+    Map<String, dynamic> payload,
+  ) async {
+    final json = await _request('/profile', method: 'PATCH', body: payload);
+    return jsonMap(json['data']);
+  }
+
+  @override
+  Future<List<Map<String, dynamic>>> tenantUsers(
+    String tenantId, {
+    String? search,
+    int? limit,
+    int? offset,
+  }) async {
+    final params = <String, String>{};
+    if (search != null && search.trim().isNotEmpty) {
+      params['search'] = search.trim();
+    }
+    if (limit != null) params['limit'] = '$limit';
+    if (offset != null) params['offset'] = '$offset';
+    final path = Uri(
+      path: '/users',
+      queryParameters: params.isEmpty ? null : params,
+    ).toString();
+    final json = await _request(path, tenantId: tenantId);
+    return objectList(json['data']);
+  }
+
+  @override
+  Future<Map<String, dynamic>> inviteTenantUser(
+    String tenantId,
+    Map<String, dynamic> payload,
+  ) async {
+    final json = await _request(
+      '/users/invitations',
+      method: 'POST',
+      tenantId: tenantId,
+      body: payload,
+    );
+    return jsonMap(json['data']);
+  }
+
+  @override
+  Future<Map<String, dynamic>> resendTenantInvitation(
+    String tenantId,
+    String invitationId,
+  ) async {
+    final json = await _request(
+      '/users/invitations/$invitationId/resend',
+      method: 'POST',
+      tenantId: tenantId,
+      body: const <String, dynamic>{},
+    );
+    return jsonMap(json['data']);
+  }
+
+  @override
+  Future<Map<String, dynamic>> updateTenantUserRole(
+    String tenantId,
+    String tenantUserId,
+    Map<String, dynamic> payload,
+  ) async {
+    final json = await _request(
+      '/users/$tenantUserId/role',
+      method: 'PATCH',
+      tenantId: tenantId,
+      body: payload,
+    );
+    return jsonMap(json['data']);
+  }
+
+  @override
+  Future<Map<String, dynamic>> suspendTenantUser(
+    String tenantId,
+    String tenantUserId,
+  ) {
+    return _tenantUserStatusAction(tenantId, tenantUserId, 'suspend');
+  }
+
+  @override
+  Future<Map<String, dynamic>> reactivateTenantUser(
+    String tenantId,
+    String tenantUserId,
+  ) {
+    return _tenantUserStatusAction(tenantId, tenantUserId, 'reactivate');
+  }
+
+  @override
+  Future<Map<String, dynamic>> removeTenantUser(
+    String tenantId,
+    String tenantUserId,
+  ) {
+    return _tenantUserStatusAction(tenantId, tenantUserId, 'remove');
+  }
+
+  Future<Map<String, dynamic>> _tenantUserStatusAction(
+    String tenantId,
+    String tenantUserId,
+    String action,
+  ) async {
+    final json = await _request(
+      '/users/$tenantUserId/$action',
+      method: 'POST',
+      tenantId: tenantId,
+      body: const <String, dynamic>{},
+    );
+    return jsonMap(json['data']);
+  }
+
+  @override
   Future<Map<String, dynamic>> createEvent(
     String tenantId,
     Map<String, dynamic> payload,
