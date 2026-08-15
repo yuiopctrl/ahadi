@@ -4,6 +4,7 @@ import { uuidHeaderSchema } from '@ahadi/validation'
 import type { TenantContext, UserContext } from '@ahadi/types'
 import { AppError } from './errors.js'
 import { calculateTenantAccessState } from './access.js'
+import { normalizeUserContext } from './context-normalization.js'
 import { createUserSupabase, supabasePublic } from './supabase.js'
 
 const activePlatformRoles = new Set(['PLATFORM_OWNER', 'PLATFORM_ADMIN', 'PLATFORM_SUPPORT', 'PLATFORM_AUDITOR'])
@@ -94,7 +95,7 @@ export async function loadUserContext(request: Request, _response: Response, nex
     if (error) {
       throw error
     }
-    request.auth.context = data as unknown as UserContext
+    request.auth.context = normalizeUserContext(data)
     next()
   } catch (error) {
     next(error)
