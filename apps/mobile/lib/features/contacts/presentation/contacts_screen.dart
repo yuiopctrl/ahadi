@@ -100,7 +100,8 @@ class _ContactsScreenState extends State<ContactsScreen> {
         actions: [
           IconButton.filled(
             onPressed: canCreate ? _openAddContact : null,
-            icon: const Icon(Icons.person_add_alt),
+            style: IconButton.styleFrom(foregroundColor: Colors.white),
+            icon: const Icon(Icons.add),
             tooltip: 'Add Contact',
           ),
           const SizedBox(width: 8),

@@ -464,6 +464,148 @@ class ApiClient implements AhadiApi {
     return jsonMap(json['data']);
   }
 
+  @override
+  Future<List<Map<String, dynamic>>> messageHistory(String tenantId) async {
+    final json = await _request('/messages', tenantId: tenantId);
+    return objectList(json['data']);
+  }
+
+  @override
+  Future<Map<String, dynamic>> smsSettings(String tenantId) async {
+    final json = await _request('/messages/settings', tenantId: tenantId);
+    return jsonMap(json['data']);
+  }
+
+  @override
+  Future<Map<String, dynamic>> updateSmsSettings(
+    String tenantId,
+    Map<String, dynamic> payload,
+  ) async {
+    final json = await _request(
+      '/messages/settings',
+      method: 'PUT',
+      tenantId: tenantId,
+      body: payload,
+    );
+    return jsonMap(json['data']);
+  }
+
+  @override
+  Future<Map<String, dynamic>> smsProviderOptions(String tenantId) async {
+    final json = await _request(
+      '/settings/messages/providers',
+      tenantId: tenantId,
+    );
+    return jsonMap(json['data']);
+  }
+
+  @override
+  Future<List<Map<String, dynamic>>> smsTemplates(String tenantId) async {
+    final json = await _request('/messages/templates', tenantId: tenantId);
+    return objectList(json['data']);
+  }
+
+  @override
+  Future<Map<String, dynamic>> updateSmsTemplate(
+    String tenantId,
+    String code,
+    Map<String, dynamic> payload,
+  ) async {
+    final json = await _request(
+      '/messages/templates/$code',
+      method: 'PUT',
+      tenantId: tenantId,
+      body: payload,
+    );
+    return jsonMap(json['data']);
+  }
+
+  @override
+  Future<Map<String, dynamic>> resetSmsTemplate(
+    String tenantId,
+    String code,
+  ) async {
+    final json = await _request(
+      '/messages/templates/$code/reset',
+      method: 'POST',
+      tenantId: tenantId,
+      body: const <String, dynamic>{},
+    );
+    return jsonMap(json['data']);
+  }
+
+  @override
+  Future<List<Map<String, dynamic>>> noPledgeMessageRecipients(
+    String tenantId,
+    String eventId,
+  ) async {
+    final json = await _request(
+      '/events/$eventId/messages/no-pledge-members',
+      tenantId: tenantId,
+    );
+    return objectList(json['data']);
+  }
+
+  @override
+  Future<Map<String, dynamic>> smsBulkPreview(
+    String tenantId,
+    String eventId,
+    Map<String, dynamic> payload,
+  ) async {
+    final json = await _request(
+      '/events/$eventId/messages/preview/bulk',
+      method: 'POST',
+      tenantId: tenantId,
+      body: payload,
+    );
+    return jsonMap(json['data']);
+  }
+
+  @override
+  Future<Map<String, dynamic>> sendPledgeRequestBulk(
+    String tenantId,
+    String eventId,
+    Map<String, dynamic> payload,
+  ) async {
+    final json = await _request(
+      '/events/$eventId/messages/pledge-request/bulk',
+      method: 'POST',
+      tenantId: tenantId,
+      body: payload,
+    );
+    return jsonMap(json['data']);
+  }
+
+  @override
+  Future<Map<String, dynamic>> sendBalanceReminderBulk(
+    String tenantId,
+    String eventId,
+    Map<String, dynamic> payload,
+  ) async {
+    final json = await _request(
+      '/events/$eventId/reminders/balance/bulk',
+      method: 'POST',
+      tenantId: tenantId,
+      body: payload,
+    );
+    return jsonMap(json['data']);
+  }
+
+  @override
+  Future<Map<String, dynamic>> retrySms(
+    String tenantId,
+    String outboxId,
+    Map<String, dynamic> payload,
+  ) async {
+    final json = await _request(
+      '/messages/$outboxId/retry',
+      method: 'POST',
+      tenantId: tenantId,
+      body: payload,
+    );
+    return jsonMap(json['data']);
+  }
+
   Future<Map<String, dynamic>> _request(
     String path, {
     String method = 'GET',

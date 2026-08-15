@@ -6,6 +6,7 @@ import '../../contacts/presentation/contacts_screen.dart';
 import '../../dashboard/presentation/dashboard_screen.dart';
 import '../../events/presentation/events_screen.dart';
 import '../../financial/presentation/financial_screens.dart';
+import '../../messages/presentation/messages_screens.dart';
 import '../../organizations/presentation/create_organization_screen.dart';
 import '../../pledges/presentation/pledges_screen.dart';
 import '../../profile/presentation/profile_screen.dart';
@@ -84,7 +85,12 @@ class _MobileShellState extends State<MobileShell> {
           IconButton(
             tooltip: 'Account',
             onPressed: () => setState(() => index = 3),
-            icon: const Icon(Icons.account_circle_outlined),
+            style: IconButton.styleFrom(
+              shape: const CircleBorder(),
+              side: const BorderSide(color: AhadiColors.border),
+              foregroundColor: AhadiColors.primary,
+            ),
+            icon: const Icon(Icons.person_outline),
           ),
         ],
       ),
@@ -254,7 +260,18 @@ class _MorePage extends StatelessWidget {
           child: Column(
             children: [
               ListTile(
-                leading: const Icon(Icons.contacts_outlined),
+                leading: const _MenuIcon(Icons.sms_outlined),
+                title: const Text('Messages'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => MessagesScreen(controller: controller),
+                  ),
+                ),
+              ),
+              const Divider(height: 1),
+              ListTile(
+                leading: const _MenuIcon(Icons.contacts_outlined),
                 title: const Text('Contacts'),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () => Navigator.of(context).push(
@@ -265,7 +282,7 @@ class _MorePage extends StatelessWidget {
               ),
               const Divider(height: 1),
               ListTile(
-                leading: const Icon(Icons.volunteer_activism_outlined),
+                leading: const _MenuIcon(Icons.volunteer_activism_outlined),
                 title: const Text('Pledges'),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () => Navigator.of(context).push(
@@ -276,7 +293,7 @@ class _MorePage extends StatelessWidget {
               ),
               const Divider(height: 1),
               ListTile(
-                leading: const Icon(Icons.receipt_long_outlined),
+                leading: const _MenuIcon(Icons.receipt_long_outlined),
                 title: const Text('Receipts'),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () => Navigator.of(context).push(
@@ -287,7 +304,7 @@ class _MorePage extends StatelessWidget {
               ),
               const Divider(height: 1),
               ListTile(
-                leading: const Icon(Icons.trending_down_outlined),
+                leading: const _MenuIcon(Icons.trending_down_outlined),
                 title: const Text('Outstanding'),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () => Navigator.of(context).push(
@@ -298,7 +315,7 @@ class _MorePage extends StatelessWidget {
               ),
               const Divider(height: 1),
               ListTile(
-                leading: const Icon(Icons.ios_share),
+                leading: const _MenuIcon(Icons.share_outlined),
                 title: const Text('Share List'),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () => Navigator.of(context).push(
@@ -309,7 +326,18 @@ class _MorePage extends StatelessWidget {
               ),
               const Divider(height: 1),
               ListTile(
-                leading: const Icon(Icons.account_circle_outlined),
+                leading: const _MenuIcon(Icons.settings_outlined),
+                title: const Text('Settings'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => _SettingsScreen(controller: controller),
+                  ),
+                ),
+              ),
+              const Divider(height: 1),
+              ListTile(
+                leading: const _MenuIcon(Icons.person_outline, round: true),
                 title: const Text('Profile'),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () => Navigator.of(context).push(
@@ -323,7 +351,7 @@ class _MorePage extends StatelessWidget {
               ),
               const Divider(height: 1),
               ListTile(
-                leading: const Icon(Icons.logout),
+                leading: const _MenuIcon(Icons.logout_outlined),
                 title: const Text('Sign out'),
                 onTap: () async {
                   await controller.signOut();
@@ -339,6 +367,66 @@ class _MorePage extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _MenuIcon extends StatelessWidget {
+  const _MenuIcon(this.icon, {this.round = false});
+
+  final IconData icon;
+  final bool round;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: AhadiColors.primarySoft,
+        shape: round ? BoxShape.circle : BoxShape.rectangle,
+        borderRadius: round ? null : BorderRadius.circular(8),
+        border: Border.all(color: AhadiColors.border),
+      ),
+      child: SizedBox(
+        width: 36,
+        height: 36,
+        child: Icon(icon, size: 20, color: AhadiColors.primary),
+      ),
+    );
+  }
+}
+
+class _SettingsScreen extends StatelessWidget {
+  const _SettingsScreen({required this.controller});
+
+  final SessionController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: AhadiColors.background,
+      appBar: AppBar(title: const Text('Settings')),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          Card(
+            child: Column(
+              children: [
+                ListTile(
+                  leading: const _MenuIcon(Icons.sms_outlined),
+                  title: const Text('Messaging'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) =>
+                          MessagingSettingsScreen(controller: controller),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
