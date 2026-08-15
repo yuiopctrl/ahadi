@@ -1340,6 +1340,8 @@ class _ShareListScreenState extends State<ShareListScreen> {
       'includeWithoutPledges': true,
       'showPaymentInstructions': settings['showPaymentInstructions'],
       'paymentInstructions': settings['paymentInstructions'],
+      'headerText': settings['headerText'],
+      'footerText': settings['footerText'],
       'showAlama': settings['showAlama'],
       'alamaLabels': settings['alamaLabels'],
     });
@@ -1492,6 +1494,8 @@ class ShareSettingsScreen extends StatefulWidget {
 }
 
 class _ShareSettingsScreenState extends State<ShareSettingsScreen> {
+  final headerText = TextEditingController();
+  final footerText = TextEditingController();
   final paymentInstructions = TextEditingController();
   final completed = TextEditingController(text: 'Amemaliza');
   final partial = TextEditingController(text: 'Amepunguza');
@@ -1509,6 +1513,8 @@ class _ShareSettingsScreenState extends State<ShareSettingsScreen> {
 
   @override
   void dispose() {
+    headerText.dispose();
+    footerText.dispose();
     paymentInstructions.dispose();
     completed.dispose();
     partial.dispose();
@@ -1523,6 +1529,8 @@ class _ShareSettingsScreenState extends State<ShareSettingsScreen> {
     if (!mounted) return;
     final labels = jsonMap(settings['alamaLabels']);
     setState(() {
+      headerText.text = _text(settings, ['headerText']);
+      footerText.text = _text(settings, ['footerText']);
       paymentInstructions.text = _text(settings, ['paymentInstructions']);
       showPaymentInstructions = settings['showPaymentInstructions'] != false;
       showAlama = settings['showAlama'] != false;
@@ -1542,8 +1550,12 @@ class _ShareSettingsScreenState extends State<ShareSettingsScreen> {
     try {
       final existing = await widget.controller.whatsappShareSettings(event.id);
       await widget.controller.updateWhatsappShareSettings(event.id, {
-        'headerText': existing['headerText'],
-        'footerText': existing['footerText'],
+        'headerText': headerText.text.trim().isEmpty
+            ? null
+            : headerText.text.trim(),
+        'footerText': footerText.text.trim().isEmpty
+            ? null
+            : footerText.text.trim(),
         'includeEventName': existing['includeEventName'] ?? true,
         'includeEventDate': existing['includeEventDate'] ?? false,
         'includeEventPaymentInstructions':
@@ -1579,52 +1591,84 @@ class _ShareSettingsScreenState extends State<ShareSettingsScreen> {
     return Scaffold(
       backgroundColor: AhadiColors.background,
       appBar: AppBar(title: const Text('Share Settings')),
+      bottomNavigationBar: SafeArea(
+        minimum: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+        child: FilledButton(
+          key: const Key('share-settings-save-button'),
+          onPressed: saving ? null : _save,
+          child: Text(saving ? 'Saving...' : 'Save Settings'),
+        ),
+      ),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          SwitchListTile(
-            value: showPaymentInstructions,
-            onChanged: (value) =>
-                setState(() => showPaymentInstructions = value),
-            title: const Text('Payment Instructions'),
+          AhadiSectionCard(
+            title: 'Header & Footer',
+            children: [
+              TextField(
+                controller: headerText,
+                minLines: 2,
+                maxLines: 4,
+                decoration: const InputDecoration(labelText: 'Header'),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: footerText,
+                minLines: 2,
+                maxLines: 4,
+                decoration: const InputDecoration(labelText: 'Footer'),
+              ),
+            ],
           ),
-          TextField(
-            controller: paymentInstructions,
-            minLines: 3,
-            maxLines: 6,
-            decoration: const InputDecoration(
-              labelText: 'Payment Instructions',
-            ),
+          AhadiSectionCard(
+            title: 'Payment Instructions',
+            children: [
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                value: showPaymentInstructions,
+                onChanged: (value) =>
+                    setState(() => showPaymentInstructions = value),
+                title: const Text('Show payment instructions'),
+              ),
+              TextField(
+                controller: paymentInstructions,
+                minLines: 3,
+                maxLines: 6,
+                decoration: const InputDecoration(
+                  labelText: 'Payment Instructions',
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 12),
-          SwitchListTile(
-            value: showAlama,
-            onChanged: (value) => setState(() => showAlama = value),
-            title: const Text('Alama'),
-          ),
-          TextField(
-            controller: completed,
-            decoration: const InputDecoration(labelText: 'Completed label'),
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: partial,
-            decoration: const InputDecoration(labelText: 'Partial label'),
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: noPledge,
-            decoration: const InputDecoration(labelText: 'No pledge label'),
+          AhadiSectionCard(
+            title: 'Alama',
+            children: [
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                value: showAlama,
+                onChanged: (value) => setState(() => showAlama = value),
+                title: const Text('Show alama'),
+              ),
+              TextField(
+                controller: completed,
+                decoration: const InputDecoration(labelText: 'Completed label'),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: partial,
+                decoration: const InputDecoration(labelText: 'Partial label'),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: noPledge,
+                decoration: const InputDecoration(labelText: 'No pledge label'),
+              ),
+            ],
           ),
           if (error != null) ...[
             const SizedBox(height: 8),
             Text(error!, style: const TextStyle(color: AhadiColors.danger)),
           ],
-          const SizedBox(height: 12),
-          FilledButton(
-            onPressed: saving ? null : _save,
-            child: Text(saving ? 'Saving...' : 'Save Settings'),
-          ),
         ],
       ),
     );

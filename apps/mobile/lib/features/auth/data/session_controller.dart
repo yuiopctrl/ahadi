@@ -476,6 +476,74 @@ class SessionController extends ChangeNotifier {
     return _api.whatsappSharePreview(_requireTenantId(), eventId, payload);
   }
 
+  Future<List<Map<String, dynamic>>> messageHistory() {
+    return _api.messageHistory(_requireTenantId());
+  }
+
+  Future<Map<String, dynamic>> smsSettings() {
+    return _api.smsSettings(_requireTenantId());
+  }
+
+  Future<Map<String, dynamic>> updateSmsSettings(Map<String, dynamic> payload) {
+    return _api.updateSmsSettings(_requireTenantId(), payload);
+  }
+
+  Future<Map<String, dynamic>> smsProviderOptions() {
+    return _api.smsProviderOptions(_requireTenantId());
+  }
+
+  Future<List<Map<String, dynamic>>> smsTemplates() {
+    return _api.smsTemplates(_requireTenantId());
+  }
+
+  Future<Map<String, dynamic>> updateSmsTemplate(
+    String code,
+    Map<String, dynamic> payload,
+  ) {
+    return _api.updateSmsTemplate(_requireTenantId(), code, payload);
+  }
+
+  Future<Map<String, dynamic>> resetSmsTemplate(String code) {
+    return _api.resetSmsTemplate(_requireTenantId(), code);
+  }
+
+  Future<List<Map<String, dynamic>>> noPledgeMessageRecipients(String eventId) {
+    return _api.noPledgeMessageRecipients(_requireTenantId(), eventId);
+  }
+
+  Future<Map<String, dynamic>> smsBulkPreview(
+    String eventId,
+    Map<String, dynamic> payload,
+  ) {
+    return _api.smsBulkPreview(_requireTenantId(), eventId, payload);
+  }
+
+  Future<Map<String, dynamic>> sendPledgeRequestBulk(
+    String eventId,
+    List<String> eventMemberIds,
+  ) {
+    return _api.sendPledgeRequestBulk(_requireTenantId(), eventId, {
+      'eventMemberIds': eventMemberIds,
+      'idempotencyKey': _uuidV4(),
+    });
+  }
+
+  Future<Map<String, dynamic>> sendBalanceReminderBulk(
+    String eventId,
+    List<String> eventMemberIds,
+  ) {
+    return _api.sendBalanceReminderBulk(_requireTenantId(), eventId, {
+      'eventMemberIds': eventMemberIds,
+      'idempotencyKey': _uuidV4(),
+    });
+  }
+
+  Future<Map<String, dynamic>> retrySms(String outboxId) {
+    return _api.retrySms(_requireTenantId(), outboxId, {
+      'idempotencyKey': _uuidV4(),
+    });
+  }
+
   Future<void> createOrganization({
     required String planCode,
     required String tenantName,

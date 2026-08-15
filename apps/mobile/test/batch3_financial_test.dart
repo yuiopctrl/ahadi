@@ -259,6 +259,24 @@ void main() {
     expect(clipboard?.text, contains('© AHADI APP'));
   });
 
+  testWidgets('share settings saves header and footer text', (tester) async {
+    final api = FakeAhadiApi();
+    final controller = _readyController(api);
+    await tester.pumpWidget(
+      MaterialApp(home: ShareSettingsScreen(controller: controller)),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('HEADER & FOOTER'), findsOneWidget);
+    await tester.enterText(find.byType(TextField).at(0), 'Kamati ya Harusi');
+    await tester.enterText(find.byType(TextField).at(1), 'Ahsanteni sana');
+    await tester.tap(find.byKey(const Key('share-settings-save-button')));
+    await tester.pumpAndSettle();
+
+    expect(api.lastShareSettingsPayload?['headerText'], 'Kamati ya Harusi');
+    expect(api.lastShareSettingsPayload?['footerText'], 'Ahsanteni sana');
+  });
+
   testWidgets('event switch reloads financial screens with new event scope', (
     tester,
   ) async {

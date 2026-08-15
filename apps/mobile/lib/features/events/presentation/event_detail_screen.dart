@@ -470,7 +470,7 @@ class _MembersTabState extends State<_MembersTab> {
                 true)
           FilledButton.icon(
             onPressed: () => setState(() => pickerOpen = !pickerOpen),
-            icon: const Icon(Icons.person_add_alt_1),
+            icon: const Icon(Icons.add),
             label: const Text('Add Member'),
           ),
         if (pickerOpen)

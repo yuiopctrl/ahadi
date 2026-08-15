@@ -23,10 +23,18 @@ class ProfileScreen extends StatelessWidget {
         const SizedBox(height: 16),
         Card(
           child: ListTile(
-            leading: const CircleAvatar(
-              backgroundColor: AhadiColors.primary,
-              foregroundColor: Colors.white,
-              child: Icon(Icons.person_outline),
+            leading: Container(
+              width: 42,
+              height: 42,
+              decoration: BoxDecoration(
+                color: AhadiColors.surface,
+                shape: BoxShape.circle,
+                border: Border.all(color: AhadiColors.border),
+              ),
+              child: const Icon(
+                Icons.person_outline,
+                color: AhadiColors.primary,
+              ),
             ),
             title: Text(
               profile?.fullName.isNotEmpty == true
@@ -52,7 +60,7 @@ class ProfileScreen extends StatelessWidget {
               ),
               const Divider(height: 1),
               ListTile(
-                leading: const Icon(Icons.logout),
+                leading: const Icon(Icons.logout_outlined),
                 title: const Text('Sign out'),
                 onTap: () async {
                   await controller.signOut();

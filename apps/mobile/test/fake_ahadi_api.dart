@@ -20,6 +20,10 @@ class FakeAhadiApi implements AhadiApi {
   int recordPaymentCalls = 0;
   int reversePaymentCalls = 0;
   int whatsappPreviewCalls = 0;
+  int smsPreviewCalls = 0;
+  int sendPledgeRequestCalls = 0;
+  int sendBalanceReminderCalls = 0;
+  int retrySmsCalls = 0;
   String? lastTenantId;
   String? lastEventId;
   String? lastReportType;
@@ -39,6 +43,9 @@ class FakeAhadiApi implements AhadiApi {
   Map<String, dynamic>? lastReportPayload;
   Map<String, dynamic>? lastPaymentPayload;
   Map<String, dynamic>? lastReversePayload;
+  Map<String, dynamic>? lastShareSettingsPayload;
+  Map<String, dynamic>? lastSmsPreviewPayload;
+  Map<String, dynamic>? lastSmsSendPayload;
   Completer<LoginResult>? loginCompleter;
   Completer<TenantContext>? tenantCompleter;
   Object? meError;
@@ -574,6 +581,8 @@ class FakeAhadiApi implements AhadiApi {
   ) async {
     lastTenantId = tenantId;
     return {
+      'headerText': 'AHADI ZA HARUSI YA MAIN EVENT',
+      'footerText': '© AHADI APP',
       'showPaymentInstructions': true,
       'paymentInstructions': 'TUMA KWA:\nM-Pesa: 0712345678',
       'showAlama': true,
@@ -596,6 +605,7 @@ class FakeAhadiApi implements AhadiApi {
   ) async {
     lastTenantId = tenantId;
     lastEventId = eventId;
+    lastShareSettingsPayload = payload;
     return payload;
   }
 
@@ -611,6 +621,211 @@ class FakeAhadiApi implements AhadiApi {
     return {
       'text': '*AHADI ZA HARUSI YA MAIN EVENT*\n\nTUMA KWA:\nM-Pesa: 0712345678\n\n1. Jane Contact - TZS 100,000 ✅✅\n\n*MUHTASARI*\nJumla ya Ahadi: TZS 100,000\n\nAlama:\n✅✅ -- Amemaliza\n© AHADI APP',
     };
+  }
+
+  @override
+  Future<List<Map<String, dynamic>>> messageHistory(String tenantId) async {
+    lastTenantId = tenantId;
+    return [
+      {
+        'id': 'sms-a',
+        'event_id': 'event-1',
+        'event_name': 'Main Event',
+        'member_name': 'Jane Contact',
+        'phone_e164': '+255712345678',
+        'template_code': 'BALANCE_REMINDER',
+        'message_type': 'Balance Reminder',
+        'message_body': 'Ndugu Jane, salio lako ni TZS 60,000.',
+        'status': 'SENT',
+        'sender_id': 'MICHANGO',
+        'provider': 'NEXTSMS',
+        'created_at': '2026-08-15T14:00:00Z',
+        'sent_at': '2026-08-15T14:01:00Z',
+        'batch_id': 'batch-a',
+      },
+      {
+        'id': 'sms-b',
+        'event_id': 'event-1',
+        'event_name': 'Main Event',
+        'member_name': 'Unpaid Contact',
+        'phone_e164': '+255712345679',
+        'template_code': 'BALANCE_REMINDER',
+        'message_type': 'Balance Reminder',
+        'message_body': 'Ndugu Unpaid, salio lako ni TZS 80,000.',
+        'status': 'FAILED',
+        'sender_id': 'MICHANGO',
+        'provider': 'NEXTSMS',
+        'created_at': '2026-08-15T14:00:00Z',
+        'last_error_message': 'Provider rejected the message.',
+        'batch_id': 'batch-a',
+      },
+    ];
+  }
+
+  @override
+  Future<Map<String, dynamic>> smsSettings(String tenantId) async {
+    lastTenantId = tenantId;
+    return {
+      'smsEnabled': true,
+      'provider': 'NEXTSMS',
+      'senderId': 'MICHANGO',
+      'defaultLanguage': 'sw',
+      'allowedSenderIds': ['MICHANGO', 'SHEREHE'],
+    };
+  }
+
+  @override
+  Future<Map<String, dynamic>> updateSmsSettings(
+    String tenantId,
+    Map<String, dynamic> payload,
+  ) async {
+    lastTenantId = tenantId;
+    return {'smsEnabled': payload['smsEnabled'], ...payload};
+  }
+
+  @override
+  Future<Map<String, dynamic>> smsProviderOptions(String tenantId) async {
+    lastTenantId = tenantId;
+    return {
+      'providers': [
+        {
+          'provider': 'NEXTSMS',
+          'senderIds': [
+            {'senderId': 'MICHANGO'},
+            {'senderId': 'SHEREHE'},
+          ],
+        },
+        {
+          'provider': 'WEBBULKSMS',
+          'senderIds': [
+            {'senderId': 'MICHANGO'},
+          ],
+        },
+      ],
+    };
+  }
+
+  @override
+  Future<List<Map<String, dynamic>>> smsTemplates(String tenantId) async {
+    lastTenantId = tenantId;
+    return [
+      {
+        'code': 'PLEDGE_REQUEST',
+        'body':
+            'Ndugu {{member_name}}, tunaomba uweke ahadi kwa {{event_name}}.',
+        'variables': ['member_name', 'event_name'],
+        'samplePreview':
+            'Ndugu Jane Contact, tunaomba uweke ahadi kwa Main Event.',
+        'samplePreviewCharacters': 58,
+        'maxCharacters': 159,
+        'language': 'sw',
+      },
+      {
+        'code': 'BALANCE_REMINDER',
+        'body': 'Ndugu {{member_name}}, salio lako ni TZS {{balance}}.',
+        'variables': ['member_name', 'balance'],
+        'samplePreview': 'Ndugu Jane Contact, salio lako ni TZS 60,000.',
+        'samplePreviewCharacters': 48,
+        'maxCharacters': 159,
+        'language': 'sw',
+      },
+    ];
+  }
+
+  @override
+  Future<Map<String, dynamic>> updateSmsTemplate(
+    String tenantId,
+    String code,
+    Map<String, dynamic> payload,
+  ) async {
+    lastTenantId = tenantId;
+    return {'code': code, ...payload};
+  }
+
+  @override
+  Future<Map<String, dynamic>> resetSmsTemplate(
+    String tenantId,
+    String code,
+  ) async {
+    lastTenantId = tenantId;
+    return {'code': code, 'body': 'Reset body'};
+  }
+
+  @override
+  Future<List<Map<String, dynamic>>> noPledgeMessageRecipients(
+    String tenantId,
+    String eventId,
+  ) async {
+    lastTenantId = tenantId;
+    lastEventId = eventId;
+    return [
+      {
+        'eventMemberId': 'em-b',
+        'memberId': 'member-b',
+        'fullName': 'Unpaid Contact',
+        'phone': '+255712345679',
+        'maskedPhone': '+255*****679',
+        'ineligibleReason': null,
+      },
+    ];
+  }
+
+  @override
+  Future<Map<String, dynamic>> smsBulkPreview(
+    String tenantId,
+    String eventId,
+    Map<String, dynamic> payload,
+  ) async {
+    smsPreviewCalls += 1;
+    lastTenantId = tenantId;
+    lastEventId = eventId;
+    lastSmsPreviewPayload = payload;
+    return {
+      'templateCode': payload['templateCode'],
+      'validMessages': (payload['eventMemberIds'] as List?)?.length ?? 0,
+      'samplePreview': payload['templateCode'] == 'PLEDGE_REQUEST'
+          ? 'Ndugu Unpaid Contact, tunaomba uweke ahadi kwa Main Event.'
+          : 'Ndugu Jane Contact, salio lako ni TZS 60,000.',
+      'samplePreviewCharacters': 55,
+      'maxCharacters': 159,
+    };
+  }
+
+  @override
+  Future<Map<String, dynamic>> sendPledgeRequestBulk(
+    String tenantId,
+    String eventId,
+    Map<String, dynamic> payload,
+  ) async {
+    sendPledgeRequestCalls += 1;
+    lastTenantId = tenantId;
+    lastEventId = eventId;
+    lastSmsSendPayload = payload;
+    return {'queued': (payload['eventMemberIds'] as List?)?.length ?? 0};
+  }
+
+  @override
+  Future<Map<String, dynamic>> sendBalanceReminderBulk(
+    String tenantId,
+    String eventId,
+    Map<String, dynamic> payload,
+  ) async {
+    sendBalanceReminderCalls += 1;
+    lastTenantId = tenantId;
+    lastEventId = eventId;
+    lastSmsSendPayload = payload;
+    return {'queued': (payload['eventMemberIds'] as List?)?.length ?? 0};
+  }
+
+  @override
+  Future<Map<String, dynamic>> retrySms(
+    String tenantId,
+    String outboxId,
+    Map<String, dynamic> payload,
+  ) async {
+    retrySmsCalls += 1;
+    lastTenantId = tenantId;
+    return {'queued': true, 'outboxId': outboxId};
   }
 
   @override
@@ -787,6 +1002,9 @@ TenantContext makeTenantContext(
       'members.assign_event',
       'pledges.create',
       'pledges.update',
+      'messages.view',
+      'messages.send',
+      'messages.manage_settings',
     ],
     isOwner: true,
     accessState: 'ACTIVE',

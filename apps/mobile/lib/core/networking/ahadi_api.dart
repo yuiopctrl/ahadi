@@ -128,6 +128,44 @@ abstract class AhadiApi {
     String eventId,
     Map<String, dynamic> payload,
   );
+  Future<List<Map<String, dynamic>>> messageHistory(String tenantId);
+  Future<Map<String, dynamic>> smsSettings(String tenantId);
+  Future<Map<String, dynamic>> updateSmsSettings(
+    String tenantId,
+    Map<String, dynamic> payload,
+  );
+  Future<Map<String, dynamic>> smsProviderOptions(String tenantId);
+  Future<List<Map<String, dynamic>>> smsTemplates(String tenantId);
+  Future<Map<String, dynamic>> updateSmsTemplate(
+    String tenantId,
+    String code,
+    Map<String, dynamic> payload,
+  );
+  Future<Map<String, dynamic>> resetSmsTemplate(String tenantId, String code);
+  Future<List<Map<String, dynamic>>> noPledgeMessageRecipients(
+    String tenantId,
+    String eventId,
+  );
+  Future<Map<String, dynamic>> smsBulkPreview(
+    String tenantId,
+    String eventId,
+    Map<String, dynamic> payload,
+  );
+  Future<Map<String, dynamic>> sendPledgeRequestBulk(
+    String tenantId,
+    String eventId,
+    Map<String, dynamic> payload,
+  );
+  Future<Map<String, dynamic>> sendBalanceReminderBulk(
+    String tenantId,
+    String eventId,
+    Map<String, dynamic> payload,
+  );
+  Future<Map<String, dynamic>> retrySms(
+    String tenantId,
+    String outboxId,
+    Map<String, dynamic> payload,
+  );
 }
 
 class LoginResult {

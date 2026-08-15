@@ -525,26 +525,38 @@ class FilterTabs<T> extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      children: items.map((item) {
-        final active = item.value == selected;
-        return OutlinedButton(
-          onPressed: () => onChanged(item.value),
-          style: OutlinedButton.styleFrom(
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: items.map((item) {
+          final active = item.value == selected;
+          return Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: OutlinedButton(
+              onPressed: () => onChanged(item.value),
+              style: OutlinedButton.styleFrom(
+                minimumSize: const Size(74, 40),
+                padding: const EdgeInsets.symmetric(horizontal: 14),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                backgroundColor: active ? AhadiColors.primarySoft : null,
+                foregroundColor: active
+                    ? AhadiColors.primary
+                    : AhadiColors.text,
+                side: BorderSide(
+                  color: active ? AhadiColors.primary : AhadiColors.border,
+                ),
+              ),
+              child: Text(
+                item.label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
-            backgroundColor: active ? AhadiColors.primarySoft : null,
-            foregroundColor: active ? AhadiColors.primary : AhadiColors.text,
-            side: BorderSide(
-              color: active ? AhadiColors.primary : AhadiColors.border,
-            ),
-          ),
-          child: Text(item.label),
-        );
-      }).toList(),
+          );
+        }).toList(),
+      ),
     );
   }
 }
