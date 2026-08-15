@@ -81,7 +81,7 @@ function tenantDestination(context: UserContext | null): string {
   if (accessibleMemberships.length) {
     return '/select-tenant'
   }
-  return '/invitations'
+  return '/organizations/new'
 }
 
 export function hasTenantWorkspaceAccess(context: UserContext | null): boolean {

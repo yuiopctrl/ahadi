@@ -12,18 +12,18 @@ test('login keeps PIN login while exposing create account entry copy', () => {
   assert.match(authPage, /Forgot PIN\?/)
   assert.match(authPage, /New to Ahadi\?/)
   assert.match(authPage, /Create Account/)
-  assert.doesNotMatch(authPage, /Create a new organization/)
 })
 
 test('create account flow checks account state before OTP and routes to profile then invitations', () => {
   assert.match(api, /accountState:/)
   assert.match(authPage, /api\.accountState\(normalized\)/)
   assert.match(authPage, /localStorage\.setItem\(postAuthDestinationKey, '\/register\/profile'\)/)
-  assert.match(authPage, /navigate\('\/invitations'/)
+  assert.match(authPage, /navigate\(context\?\.pendingInvitations\?\.length \? '\/invitations' : '\/organizations\/new'/)
 })
 
-test('pending invitations route users without tenants and banners users with existing tenant access', () => {
+test('pending invitations route before organization creation and banner existing tenant access', () => {
   assert.match(access, /context\?\.pendingInvitations\?\.length/)
+  assert.match(access, /return '\/organizations\/new'/)
   assert.match(layout, /pendingInvitations\.length/)
   assert.match(layout, /navigate\('\/invitations'\)/)
 })

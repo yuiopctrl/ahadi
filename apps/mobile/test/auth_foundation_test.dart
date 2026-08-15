@@ -12,6 +12,7 @@ import 'fake_ahadi_api.dart';
 void main() {
   test('phone normalization accepts Tanzanian formats', () {
     expect(normalizeTanzaniaPhone('0712 345 678'), '+255712345678');
+    expect(normalizeTanzaniaPhone('712345678'), '+255712345678');
     expect(normalizeTanzaniaPhone('255 712 345 678'), '+255712345678');
     expect(normalizeTanzaniaPhone('+255 712 345 678'), '+255712345678');
     expect(() => normalizeTanzaniaPhone('123'), throwsFormatException);
@@ -112,6 +113,80 @@ void main() {
     expect(controller.needsOrganizationSelection, isTrue);
     expect(controller.selectedTenantContext, isNull);
   });
+
+  test(
+    'pending invitations take precedence over create organization',
+    () async {
+      final storage = MemorySessionStorage()
+        ..session = const SessionCredentials(
+          accessToken: 'a',
+          refreshToken: 'r',
+        );
+      final api = FakeAhadiApi()
+        ..userContext = userWithMemberships(
+          [],
+          pendingInvitations: [
+            invitation('invite-a', 'tenant-a', 'Herosimini Committee'),
+          ],
+        );
+      final controller = SessionController(api: api, storage: storage);
+      await controller.initialize();
+
+      expect(controller.needsInvitationReview, isTrue);
+      expect(controller.needsOrganizationCreation, isFalse);
+      expect(controller.selectedTenantContext, isNull);
+      expect(api.tenantContextCalls, 0);
+    },
+  );
+
+  test(
+    'zero memberships without invitations needs organization creation',
+    () async {
+      final storage = MemorySessionStorage()
+        ..session = const SessionCredentials(
+          accessToken: 'a',
+          refreshToken: 'r',
+        );
+      final api = FakeAhadiApi()..userContext = userWithMemberships([]);
+      final controller = SessionController(api: api, storage: storage);
+      await controller.initialize();
+
+      expect(controller.needsInvitationReview, isFalse);
+      expect(controller.needsOrganizationCreation, isTrue);
+    },
+  );
+
+  test(
+    'accepting pending invitation activates and selects invited tenant',
+    () async {
+      final api = FakeAhadiApi()
+        ..userContext = userWithMemberships(
+          [],
+          pendingInvitations: [
+            invitation('invite-a', 'tenant-a', 'Herosimini Committee'),
+          ],
+        );
+      final controller = SessionController(
+        api: api,
+        storage: MemorySessionStorage(),
+      );
+      controller.credentials = const SessionCredentials(
+        accessToken: 'a',
+        refreshToken: 'r',
+      );
+      controller.userContext = api.userContext;
+
+      await controller.acceptInvitation('invite-a');
+
+      expect(api.acceptInvitationCalls, 1);
+      expect(controller.needsInvitationReview, isFalse);
+      expect(controller.selectedTenantId, 'tenant-a');
+      expect(
+        controller.selectedTenantContext?.tenantName,
+        'Herosimini Committee',
+      );
+    },
+  );
 
   test(
     'organization switching resets tenant context and does not trigger OTP',

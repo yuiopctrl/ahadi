@@ -489,7 +489,7 @@ function ProfileCompletionPage({ title, subtitle }: Pick<AuthPageProps, 'title' 
     },
     onSuccess: async () => {
       const context = await session.refreshContext()
-      navigate(context?.pendingInvitations?.length ? '/invitations' : '/invitations', { replace: true })
+      navigate(context?.pendingInvitations?.length ? '/invitations' : '/organizations/new', { replace: true })
     },
     onError: (nextError) => setError(errorMessage(nextError)),
   })

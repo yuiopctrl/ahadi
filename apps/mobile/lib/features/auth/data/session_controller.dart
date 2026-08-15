@@ -49,6 +49,7 @@ class SessionController extends ChangeNotifier {
   bool get needsOrganizationCreation =>
       isAuthenticated &&
       selectedTenantContext == null &&
+      !(userContext?.pendingInvitations.isNotEmpty ?? false) &&
       activeMemberships.isEmpty;
   bool get needsInvitationReview =>
       isAuthenticated &&
@@ -844,6 +845,17 @@ class SessionController extends ChangeNotifier {
   }
 
   Future<void> _restoreTenantSelection() async {
+    if (userContext?.pendingInvitations.isNotEmpty == true &&
+        activeMemberships.isEmpty) {
+      selectedTenantContext = null;
+      selectedEventId = null;
+      if (selectedTenantId != null) {
+        selectedTenantId = null;
+        await _storage.clearSelectedTenantId();
+      }
+      return;
+    }
+
     final memberships = activeMemberships;
     final storedTenant =
         selectedTenantId != null &&

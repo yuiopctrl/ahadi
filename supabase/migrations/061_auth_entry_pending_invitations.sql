@@ -1,3 +1,122 @@
+create or replace function public.normalize_tz_phone(raw_phone text)
+returns text
+language plpgsql
+immutable
+as $$
+declare
+  digits text;
+begin
+  digits := regexp_replace(coalesce(raw_phone, ''), '[^0-9+]', '', 'g');
+  if digits like '+%' then
+    digits := '+' || regexp_replace(substr(digits, 2), '[^0-9]', '', 'g');
+  else
+    digits := regexp_replace(digits, '[^0-9]', '', 'g');
+  end if;
+
+  if digits ~ '^\+255[67][0-9]{8}$' then
+    return digits;
+  elsif digits ~ '^255[67][0-9]{8}$' then
+    return '+' || digits;
+  elsif digits ~ '^0[67][0-9]{8}$' then
+    return '+255' || substr(digits, 2);
+  elsif digits ~ '^[67][0-9]{8}$' then
+    return '+255' || digits;
+  end if;
+
+  raise exception 'INVALID_PHONE' using errcode = '22023';
+end;
+$$;
+
+create or replace function public.rpc_invite_tenant_user(
+  p_tenant_id uuid,
+  p_full_name text,
+  p_phone_e164 text,
+  p_email text,
+  p_role_code text
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = pg_catalog, public
+as $$
+declare
+  actor uuid := auth.uid();
+  normalized_phone text := public.normalize_tz_phone(p_phone_e164);
+  existing_profile public.profiles%rowtype;
+  existing_tenant_user public.tenant_users%rowtype;
+  tenant_user_id uuid;
+  invitation_record public.tenant_invitations%rowtype;
+begin
+  if actor is null then
+    raise exception 'SESSION_REQUIRED' using errcode = '28000';
+  end if;
+  if not public.has_tenant_permission(p_tenant_id, 'users.invite') then
+    raise exception 'TENANT_ACCESS_DENIED' using errcode = '42501';
+  end if;
+  if p_role_code not in ('TENANT_OWNER', 'EVENT_ADMIN', 'TREASURER', 'COLLECTOR', 'VIEWER') then
+    raise exception 'ROLE_NOT_FOUND' using errcode = '22023';
+  end if;
+  if p_role_code = 'TENANT_OWNER' and not public.current_user_is_tenant_owner(p_tenant_id) then
+    raise exception 'OWNER_ROLE_REQUIRES_OWNER' using errcode = '42501';
+  end if;
+
+  select * into existing_profile
+  from public.profiles
+  where phone_e164 = normalized_phone
+    and status = 'ACTIVE'
+  limit 1;
+
+  if found then
+    select * into existing_tenant_user
+    from public.tenant_users
+    where tenant_id = p_tenant_id
+      and user_id = existing_profile.id
+    limit 1;
+
+    if found and existing_tenant_user.status in ('ACTIVE', 'INVITED', 'SUSPENDED') then
+      raise exception 'USER_ALREADY_IN_TENANT' using errcode = '23505';
+    end if;
+
+    insert into public.tenant_users (tenant_id, user_id, status, is_owner, invited_by, joined_at)
+    values (p_tenant_id, existing_profile.id, 'ACTIVE', p_role_code = 'TENANT_OWNER', actor, now())
+    on conflict (tenant_id, user_id) do update set
+      status = 'ACTIVE',
+      is_owner = (p_role_code = 'TENANT_OWNER'),
+      invited_by = actor,
+      joined_at = coalesce(public.tenant_users.joined_at, now()),
+      updated_at = now()
+    returning id into tenant_user_id;
+
+    perform public.assign_single_tenant_role(tenant_user_id, p_role_code, actor);
+
+    update public.tenant_invitations
+    set status = 'ACCEPTED', accepted_by = existing_profile.id, accepted_at = now()
+    where tenant_id = p_tenant_id and phone_e164 = normalized_phone and status = 'INVITED';
+
+    perform public.write_audit_log(p_tenant_id, 'user.invited', 'tenant_user', tenant_user_id, null, null, jsonb_build_object('targetUserId', existing_profile.id, 'role', p_role_code, 'existingUser', true));
+    return jsonb_build_object('kind', 'USER', 'tenantUserId', tenant_user_id, 'status', 'ACTIVE', 'smsQueued', false);
+  end if;
+
+  select * into invitation_record
+  from public.tenant_invitations
+  where tenant_id = p_tenant_id
+    and phone_e164 = normalized_phone
+    and status = 'INVITED'
+  limit 1;
+
+  if found then
+    return jsonb_build_object('kind', 'INVITATION', 'invitationId', invitation_record.id, 'status', 'INVITED', 'alreadyPending', true, 'smsQueued', false);
+  end if;
+
+  insert into public.tenant_invitations (tenant_id, phone_e164, full_name, email, role_code, invited_by, last_sent_at)
+  values (p_tenant_id, normalized_phone, coalesce(nullif(btrim(p_full_name), ''), ''), nullif(btrim(coalesce(p_email, '')), ''), p_role_code, actor, now())
+  returning * into invitation_record;
+
+  perform public.write_audit_log(p_tenant_id, 'user.invited', 'tenant_invitation', invitation_record.id, null, null, jsonb_build_object('phone', normalized_phone, 'role', p_role_code, 'existingUser', false, 'smsQueued', false));
+  return jsonb_build_object('kind', 'INVITATION', 'invitationId', invitation_record.id, 'status', 'INVITED', 'alreadyPending', false, 'smsQueued', false);
+end;
+$$;
+
 create or replace function public.rpc_list_my_tenant_invitations()
 returns jsonb
 language plpgsql
@@ -237,6 +356,7 @@ as $$
 $$;
 
 grant execute on function public.rpc_list_my_tenant_invitations() to authenticated;
+grant execute on function public.rpc_invite_tenant_user(uuid, text, text, text, text) to authenticated;
 grant execute on function public.rpc_accept_tenant_invitation(uuid) to authenticated;
 grant execute on function public.rpc_decline_tenant_invitation(uuid) to authenticated;
 grant execute on function public.rpc_accept_my_tenant_invitations() to authenticated;
