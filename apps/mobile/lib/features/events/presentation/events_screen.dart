@@ -18,7 +18,15 @@ class EventsScreen extends StatefulWidget {
 
 class _EventsScreenState extends State<EventsScreen> {
   String filter = 'ALL';
-  bool formOpen = false;
+
+  Future<void> _openCreateEvent() async {
+    final changed = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => CreateEventScreen(controller: widget.controller),
+      ),
+    );
+    if (changed == true && mounted) setState(() {});
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -42,9 +50,7 @@ class _EventsScreenState extends State<EventsScreen> {
               ),
             ),
             IconButton.filled(
-              onPressed: canCreate
-                  ? () => setState(() => formOpen = !formOpen)
-                  : null,
+              onPressed: canCreate ? _openCreateEvent : null,
               icon: const Icon(Icons.add),
               tooltip: 'New Event',
             ),
@@ -66,13 +72,6 @@ class _EventsScreenState extends State<EventsScreen> {
           selected: filter,
           onChanged: (value) => setState(() => filter = value),
         ),
-        if (formOpen) ...[
-          const SizedBox(height: 12),
-          _CreateEventForm(
-            controller: widget.controller,
-            onDone: () => setState(() => formOpen = false),
-          ),
-        ],
         const SizedBox(height: 12),
         if (events.isEmpty)
           const Card(
@@ -108,6 +107,29 @@ class _EventsScreenState extends State<EventsScreen> {
             ),
           ),
       ],
+    );
+  }
+}
+
+class CreateEventScreen extends StatelessWidget {
+  const CreateEventScreen({super.key, required this.controller});
+
+  final SessionController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: AhadiColors.background,
+      appBar: AppBar(title: const Text('Create Event')),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          _CreateEventForm(
+            controller: controller,
+            onDone: () => Navigator.of(context).pop(true),
+          ),
+        ],
+      ),
     );
   }
 }

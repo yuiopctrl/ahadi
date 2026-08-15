@@ -154,6 +154,11 @@ void main() {
     await tester.pump(const Duration(milliseconds: 2));
     await tester.pumpAndSettle();
     expect(find.text('No contacts found.'), findsOneWidget);
+
+    await tester.enterText(find.byType(TextField).first, '0712345678');
+    await tester.pump(const Duration(milliseconds: 301));
+    await tester.pumpAndSettle();
+    expect(find.text('Jane Contact'), findsOneWidget);
   });
 
   testWidgets('contact list uses paged server results', (tester) async {
@@ -286,6 +291,43 @@ void main() {
     );
     expect(button.onPressed, isNull);
   });
+
+  testWidgets(
+    'create event action opens separate screen with back navigation',
+    (tester) async {
+      final api = FakeAhadiApi();
+      final controller = SessionController(
+        api: api,
+        storage: MemorySessionStorage(),
+      );
+      controller.credentials = const SessionCredentials(
+        accessToken: 'a',
+        refreshToken: 'r',
+      );
+      controller.userContext = api.userContext;
+      controller.selectedTenantId = 'tenant-a';
+      controller.selectedTenantContext = makeTenantContext(
+        'tenant-a',
+        'Herosimini Committee',
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(body: EventsScreen(controller: controller)),
+        ),
+      );
+
+      await tester.tap(find.byIcon(Icons.add).first);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Create Event'), findsWidgets);
+      expect(find.text('Events'), findsNothing);
+      expect(find.byTooltip('Back'), findsOneWidget);
+
+      await tester.tap(find.byTooltip('Back'));
+      await tester.pumpAndSettle();
+      expect(find.text('Events'), findsOneWidget);
+    },
+  );
 
   test('organization switch clears tenant-scoped context before loading next tenant', () async {
     final api = FakeAhadiApi()

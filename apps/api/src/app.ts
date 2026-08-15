@@ -3283,13 +3283,11 @@ app.get('/api/v1/events/:eventId/pledges', requireAuth, loadUserContext, require
     if (error) {
       throwFinancialDatabaseError(error, 'PLEDGES_LIST_FAILED')
     }
-    const search = query.search.toLowerCase()
     const status = normalizedPledgeFilterStatus(query.status)
     const rows = jsonArray(data).filter((row) => {
       const statusMatches = status === 'ALL' || pledgeRowStatus(row) === status
       if (!statusMatches) return false
-      if (!search) return true
-      return `${row['member_name'] ?? ''} ${row['full_name'] ?? ''} ${row['phone_e164'] ?? ''}`.toLowerCase().includes(search)
+      return matchesNameOrPhoneSearch(row, query.search, ['member_name', 'full_name'], ['phone_e164', 'alternative_phone_e164'])
     })
     response.json({ data: rows.slice(query.offset, query.offset + query.limit) })
   } catch (error) {

@@ -184,9 +184,12 @@ class FakeAhadiApi implements AhadiApi {
     final filtered = rows.where((row) {
       final query = search?.toLowerCase() ?? '';
       if (query.isEmpty) return true;
-      return '${row['full_name'] ?? ''} ${row['phone_e164'] ?? ''}'
-          .toLowerCase()
-          .contains(query);
+      return _matchesNameOrPhone(
+        row,
+        query,
+        ['full_name'],
+        ['phone_e164', 'alternative_phone_e164'],
+      );
     }).toList();
     return filtered.skip(offset ?? 0).take(limit ?? filtered.length).toList();
   }
@@ -438,9 +441,12 @@ class FakeAhadiApi implements AhadiApi {
       if (statusQuery != 'ALL' && rowStatus != statusQuery) return false;
       final query = search?.toLowerCase() ?? '';
       if (query.isEmpty) return true;
-      return '${row['member_name'] ?? ''} ${row['full_name'] ?? ''} ${row['phone_e164'] ?? ''}'
-          .toLowerCase()
-          .contains(query);
+      return _matchesNameOrPhone(
+        row,
+        query,
+        ['member_name', 'full_name'],
+        ['phone_e164', 'alternative_phone_e164'],
+      );
     }).toList();
     return filtered.skip(offset ?? 0).take(limit ?? filtered.length).toList();
   }
@@ -631,6 +637,33 @@ class FakeAhadiApi implements AhadiApi {
       ),
     );
   }
+}
+
+String _compactPhoneSearch(String value) {
+  final digits = value.replaceAll(RegExp(r'\D'), '');
+  if (digits.startsWith('255')) return digits.substring(3);
+  if (digits.startsWith('0')) return digits.substring(1);
+  return digits;
+}
+
+bool _matchesNameOrPhone(
+  Map<String, dynamic> row,
+  String search,
+  List<String> nameKeys,
+  List<String> phoneKeys,
+) {
+  final textSearch = search.trim().toLowerCase();
+  if (textSearch.isEmpty) return true;
+  final textHaystack = nameKeys
+      .map((key) => '${row[key] ?? ''}')
+      .join(' ')
+      .toLowerCase();
+  if (textHaystack.contains(textSearch)) return true;
+  final phoneNeedle = _compactPhoneSearch(textSearch);
+  if (phoneNeedle.isEmpty) return false;
+  return phoneKeys.any(
+    (key) => _compactPhoneSearch('${row[key] ?? ''}').contains(phoneNeedle),
+  );
 }
 
 Map<String, dynamic> _report(
