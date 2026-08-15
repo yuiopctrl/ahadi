@@ -5,6 +5,7 @@ import { normalizeTanzaniaPhone, onboardingPayloadSchema, requestOtpSchema, setu
 test('normalizes supported Tanzania phone formats', () => {
   assert.equal(normalizeTanzaniaPhone('0712345678'), '+255712345678')
   assert.equal(normalizeTanzaniaPhone('0712 345 678'), '+255712345678')
+  assert.equal(normalizeTanzaniaPhone('712345678'), '+255712345678')
   assert.equal(normalizeTanzaniaPhone('255712345678'), '+255712345678')
   assert.equal(normalizeTanzaniaPhone('+255712345678'), '+255712345678')
 })

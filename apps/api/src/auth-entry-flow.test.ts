@@ -25,6 +25,8 @@ test('registration routes separate account profile, invitations and organization
 
 test('pending invitations are visible and accepted by authenticated verified phone only', () => {
   assert.match(migration, /create or replace function public\.rpc_list_my_tenant_invitations/)
+  assert.match(migration, /normalized_phone text := public\.normalize_tz_phone\(p_phone_e164\)/)
+  assert.match(migration, /elsif digits ~ '\^\[67\]\[0-9\]\{8\}\$'/)
   assert.match(migration, /ti\.phone_e164 = profile_record\.phone_e164/)
   assert.match(migration, /create or replace function public\.rpc_accept_tenant_invitation/)
   assert.match(migration, /invitation_record\.phone_e164 <> profile_record\.phone_e164/)

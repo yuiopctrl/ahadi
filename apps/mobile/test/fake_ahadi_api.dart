@@ -1165,7 +1165,10 @@ String _normalizedPledgeStatus(String value) {
   return status;
 }
 
-UserContext userWithMemberships(List<TenantMembership> memberships) {
+UserContext userWithMemberships(
+  List<TenantMembership> memberships, {
+  List<TenantInvitation> pendingInvitations = const [],
+}) {
   return UserContext(
     profile: const UserProfile(
       fullName: 'Test Doctor',
@@ -1174,7 +1177,18 @@ UserContext userWithMemberships(List<TenantMembership> memberships) {
     ),
     onboardingCompleted: true,
     tenantMemberships: memberships,
-    pendingInvitations: const [],
+    pendingInvitations: pendingInvitations,
+  );
+}
+
+TenantInvitation invitation(String id, String tenantId, String tenantName) {
+  return TenantInvitation(
+    invitationId: id,
+    tenantId: tenantId,
+    tenantName: tenantName,
+    fullName: 'Mary Joseph',
+    email: null,
+    roleCode: 'TREASURER',
   );
 }
 

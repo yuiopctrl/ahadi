@@ -20,6 +20,10 @@ export function normalizeTanzaniaPhone(input: string): string {
     return `+255${cleaned.slice(1)}`
   }
 
+  if (/^[67][0-9]{8}$/.test(cleaned)) {
+    return `+255${cleaned}`
+  }
+
   throw new Error('INVALID_PHONE')
 }
 

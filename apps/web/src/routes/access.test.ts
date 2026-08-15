@@ -133,8 +133,39 @@ test('tenant context still sends unfinished tenant users to onboarding', () => {
 test('tenant-only unfinished account without tenant does not fall into onboarding from generic login', () => {
   const tenantOnly = context({ onboardingCompleted: false, tenantMemberships: [] })
   assert.equal(hasActivePlatformRole(tenantOnly), false)
-  assert.equal(getPostAuthDestination(tenantOnly, null), '/invitations')
+  assert.equal(getPostAuthDestination(tenantOnly, null), '/organizations/new')
   assert.equal(getPostAuthDestination(tenantOnly, '/onboarding'), '/onboarding')
+})
+
+test('pending invitations take precedence over organization creation', () => {
+  const invitedOnly = context({
+    tenantMemberships: [],
+    pendingInvitations: [{
+      invitationId: 'invite_1',
+      tenantId: 'tenant_2',
+      tenantName: 'Herosimini Committee',
+      tenantCode: 'AHD-000002',
+      fullName: 'Mary Joseph',
+      phoneE164: '+255713676401',
+      email: null,
+      roleCode: 'TREASURER',
+      status: 'INVITED',
+      invitedAt: '2026-08-15T08:00:00Z',
+      lastSentAt: '2026-08-15T08:00:00Z',
+    }],
+  })
+
+  assert.equal(getPostAuthDestination(invitedOnly, null), '/invitations')
+  assert.equal(resolveAuthenticatedDestination({ context: invitedOnly, requestedPath: '/app' }), '/invitations')
+  assert.equal(getTenantRouteRedirect(invitedOnly, null, false), '/invitations')
+  assert.notEqual(getPostAuthDestination(invitedOnly, null), '/organizations/new')
+})
+
+test('zero memberships and zero invitations explicitly creates organization', () => {
+  const newUser = context({ tenantMemberships: [], pendingInvitations: [] })
+
+  assert.equal(getPostAuthDestination(newUser, null), '/organizations/new')
+  assert.equal(resolveAuthenticatedDestination({ context: newUser, requestedPath: '/app' }), '/organizations/new')
 })
 
 test('explicit additional organization route survives authenticated redirects', () => {

@@ -15,6 +15,9 @@ String normalizeTanzaniaPhone(String input) {
   if (RegExp(r'^0[67][0-9]{8}$').hasMatch(cleaned)) {
     return '+255${cleaned.substring(1)}';
   }
+  if (RegExp(r'^[67][0-9]{8}$').hasMatch(cleaned)) {
+    return '+255$cleaned';
+  }
   throw const FormatException('Invalid Tanzanian phone number');
 }
 
