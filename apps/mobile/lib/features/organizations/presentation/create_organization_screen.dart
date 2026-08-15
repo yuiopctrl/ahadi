@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/ahadi_theme.dart';
+import '../../../core/widgets/formatters.dart';
 import '../../auth/data/session_controller.dart';
 import '../../auth/domain/auth_models.dart';
 
@@ -220,6 +221,9 @@ class _CreateOrganizationScreenState extends State<CreateOrganizationScreen> {
         key: key == null ? null : Key(key),
         controller: controller,
         keyboardType: keyboardType,
+        inputFormatters: keyboardType == TextInputType.number
+            ? const [MoneyInputFormatter()]
+            : null,
         decoration: InputDecoration(labelText: label),
       ),
     );

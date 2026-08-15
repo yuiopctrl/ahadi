@@ -187,7 +187,7 @@ class _EditEventScreenState extends State<EditEventScreen> {
     customType.text = widget.event.customEventType ?? '';
     eventDate.text = widget.event.eventDate ?? '';
     venue.text = widget.event.venue ?? '';
-    targetAmount.text = widget.event.targetAmount?.round().toString() ?? '';
+    targetAmount.text = moneyInputText(widget.event.targetAmount);
     pledgeDeadline.text = widget.event.pledgeDeadline ?? '';
   }
 
@@ -251,7 +251,11 @@ class _EditEventScreenState extends State<EditEventScreen> {
           TextField(
             controller: targetAmount,
             keyboardType: TextInputType.number,
-            decoration: const InputDecoration(labelText: 'Target Amount'),
+            inputFormatters: const [MoneyInputFormatter()],
+            decoration: const InputDecoration(
+              labelText: 'Target Amount',
+              prefixText: 'TZS ',
+            ),
           ),
           const SizedBox(height: 12),
           TextField(
@@ -303,7 +307,7 @@ class _EditEventScreenState extends State<EditEventScreen> {
         'venue': venue.text.trim().isEmpty ? null : venue.text.trim(),
         'targetAmount': targetAmount.text.trim().isEmpty
             ? null
-            : num.tryParse(targetAmount.text.trim()),
+            : moneyInputValue(targetAmount.text),
         'pledgeDeadline': pledgeDeadline.text.trim().isEmpty
             ? null
             : pledgeDeadline.text.trim(),

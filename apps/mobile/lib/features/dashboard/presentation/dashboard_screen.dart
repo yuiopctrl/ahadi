@@ -61,7 +61,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
               padding: const EdgeInsets.all(16),
               children: [
                 ErrorPanel(
-                  message: snapshot.error.toString(),
+                  message: friendlyErrorText(
+                    snapshot.error,
+                    'Unable to load dashboard. Please try again.',
+                  ),
                   onRetry: () => setState(() => future = _load()),
                 ),
               ],

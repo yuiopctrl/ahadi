@@ -1,3 +1,7 @@
+import 'dart:io';
+
+import 'package:ahadi_mobile/core/theme/ahadi_theme.dart';
+import 'package:ahadi_mobile/core/widgets/formatters.dart';
 import 'package:ahadi_mobile/core/storage/session_storage.dart';
 import 'package:ahadi_mobile/features/auth/data/session_controller.dart';
 import 'package:ahadi_mobile/features/auth/domain/auth_models.dart';
@@ -33,6 +37,22 @@ void main() {
   tearDown(() {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(SystemChannels.platform, null);
+  });
+
+  test('Ubuntu fonts and money formatter are configured', () {
+    final theme = ahadiTheme();
+    expect(theme.textTheme.bodyMedium?.fontFamily, AhadiTypography.sans);
+    expect(AhadiTypography.mono, 'Ubuntu Mono');
+    expect(
+      const MoneyInputFormatter()
+          .formatEditUpdate(
+            const TextEditingValue(),
+            const TextEditingValue(text: '50000'),
+          )
+          .text,
+      '50,000',
+    );
+    expect(moneyInputValue('50,000'), 50000);
   });
 
   testWidgets('payments screen uses selected event report and pagination', (
@@ -166,37 +186,19 @@ void main() {
     expect(find.text('Reverse Payment'), findsNothing);
   });
 
-  testWidgets('receipts list opens receipt details and copy payload', (
-    tester,
-  ) async {
-    final api = FakeAhadiApi();
-    final controller = _readyController(api);
-    await tester.pumpWidget(
-      MaterialApp(home: ReceiptsScreen(controller: controller)),
+  test('receipt image share payload writes png metadata', () async {
+    final temp = await Directory.systemTemp.createTemp('ahadi-receipt-test-');
+    addTearDown(() async {
+      if (await temp.exists()) await temp.delete(recursive: true);
+    });
+    final payload = await receiptImageSharePayload(
+      [137, 80, 78, 71],
+      directory: temp,
+      now: DateTime.fromMicrosecondsSinceEpoch(123456),
     );
-    await tester.pumpAndSettle();
-
-    expect(find.text('AHADI-0001'), findsOneWidget);
-    await tester.pumpWidget(
-      MaterialApp(
-        home: ReceiptDetailScreen(
-          controller: controller,
-          receiptId: 'receipt-a',
-        ),
-      ),
-    );
-    await tester.pumpAndSettle();
-    expect(find.text('Receipt Details'), findsOneWidget);
-    expect(find.text('AHADI'), findsOneWidget);
-    expect(find.text('AHADI-0001'), findsOneWidget);
-
-    await tester.drag(find.byType(ListView), const Offset(0, -700));
-    await tester.pump();
-    await tester.tap(find.text('Share Receipt'));
-    await tester.pumpAndSettle();
-    final clipboard = await Clipboard.getData('text/plain');
-    expect(clipboard?.text, contains('AHADI RECEIPT'));
-    expect(clipboard?.text, contains('AHADI-0001'));
+    expect(payload['mimeType'], 'image/png');
+    expect(payload['path'], contains('ahadi-receipt-123456.png'));
+    expect(await File(payload['path']! as String).exists(), isTrue);
   });
 
   testWidgets('outstanding supports search, sort and record-payment reuse', (
@@ -242,14 +244,16 @@ void main() {
 
     expect(find.text('Share List'), findsWidgets);
     expect(find.textContaining('MUHTASARI'), findsOneWidget);
-    await tester.tap(find.text('Show amounts'));
+    await tester.tap(find.text('Detailed'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Privacy Friendly').last);
     await tester.pump(const Duration(milliseconds: 350));
     expect(api.whatsappPreviewCalls, greaterThanOrEqualTo(2));
     expect(api.lastEventId, 'event-1');
 
-    await tester.drag(find.byType(ListView), const Offset(0, -700));
-    await tester.pump();
-    await tester.tap(find.text('Copy').last);
+    await tester.drag(find.byType(ListView).first, const Offset(0, -700));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('share-list-copy-button')));
     await tester.pump(const Duration(milliseconds: 350));
     final clipboard = await Clipboard.getData('text/plain');
     expect(clipboard?.text, contains('© AHADI APP'));

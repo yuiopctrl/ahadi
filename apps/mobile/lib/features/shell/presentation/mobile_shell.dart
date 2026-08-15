@@ -326,8 +326,13 @@ class _MorePage extends StatelessWidget {
                 leading: const Icon(Icons.logout),
                 title: const Text('Sign out'),
                 onTap: () async {
-                  Navigator.of(context).popUntil((route) => route.isFirst);
                   await controller.signOut();
+                  if (context.mounted) {
+                    Navigator.of(
+                      context,
+                      rootNavigator: true,
+                    ).popUntil((route) => route.isFirst);
+                  }
                 },
               ),
             ],

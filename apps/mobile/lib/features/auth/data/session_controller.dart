@@ -513,7 +513,7 @@ class SessionController extends ChangeNotifier {
         'venue': venue.trim().isEmpty ? null : venue.trim(),
         'targetAmount': targetAmount.trim().isEmpty
             ? null
-            : num.tryParse(targetAmount.trim()),
+            : num.tryParse(targetAmount.replaceAll(',', '').trim()),
         'pledgeDeadline': pledgeDeadline.trim().isEmpty
             ? null
             : pledgeDeadline.trim(),

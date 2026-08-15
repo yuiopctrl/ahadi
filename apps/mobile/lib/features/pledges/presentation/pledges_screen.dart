@@ -423,7 +423,7 @@ class _EditPledgeScreenState extends State<EditPledgeScreen> {
   void initState() {
     super.initState();
     amount = TextEditingController(
-      text: '${numberFrom(widget.pledge['pledged_amount'])?.round() ?? ''}',
+      text: moneyInputText(widget.pledge['pledged_amount']),
     );
     dueDate = TextEditingController(
       text: stringFrom(widget.pledge, 'due_date'),
@@ -448,7 +448,11 @@ class _EditPledgeScreenState extends State<EditPledgeScreen> {
           TextField(
             controller: amount,
             keyboardType: TextInputType.number,
-            decoration: const InputDecoration(labelText: 'Pledge Amount'),
+            inputFormatters: const [MoneyInputFormatter()],
+            decoration: const InputDecoration(
+              labelText: 'Pledge Amount',
+              prefixText: 'TZS ',
+            ),
           ),
           const SizedBox(height: 12),
           TextField(
@@ -488,7 +492,7 @@ class _EditPledgeScreenState extends State<EditPledgeScreen> {
       error = null;
     });
     try {
-      final updatedAmount = num.tryParse(amount.text.trim()) ?? 0;
+      final updatedAmount = moneyInputValue(amount.text) ?? 0;
       await widget.controller.upsertPledge(widget.event.id, {
         'eventMemberId': stringFrom(widget.pledge, 'event_member_id'),
         'amount': updatedAmount,

@@ -14,6 +14,53 @@ class AhadiColors {
   static const danger = Color(0xffc53030);
 }
 
+class AhadiTypography {
+  static const sans = 'Ubuntu Sans';
+  static const condensed = 'Ubuntu Condensed';
+  static const mono = 'Ubuntu Mono';
+
+  static const pageTitle = TextStyle(
+    fontFamily: sans,
+    fontSize: 24,
+    fontWeight: FontWeight.w800,
+    height: 1.15,
+  );
+  static const sectionTitle = TextStyle(
+    fontFamily: sans,
+    fontSize: 12,
+    fontWeight: FontWeight.w800,
+    color: AhadiColors.muted,
+    letterSpacing: 0,
+  );
+  static const cardTitle = TextStyle(
+    fontFamily: sans,
+    fontSize: 16,
+    fontWeight: FontWeight.w800,
+  );
+  static const secondary = TextStyle(
+    fontFamily: sans,
+    fontSize: 14,
+    color: AhadiColors.muted,
+  );
+  static const financialValue = TextStyle(
+    fontFamily: condensed,
+    fontSize: 18,
+    fontWeight: FontWeight.w800,
+    letterSpacing: 0,
+  );
+  static const label = TextStyle(
+    fontFamily: sans,
+    fontSize: 12,
+    fontWeight: FontWeight.w700,
+    color: AhadiColors.muted,
+  );
+  static const reference = TextStyle(
+    fontFamily: mono,
+    fontSize: 13,
+    fontWeight: FontWeight.w700,
+  );
+}
+
 ThemeData ahadiTheme() {
   final scheme = ColorScheme.fromSeed(
     seedColor: AhadiColors.primary,
@@ -26,7 +73,19 @@ ThemeData ahadiTheme() {
     useMaterial3: true,
     colorScheme: scheme,
     scaffoldBackgroundColor: AhadiColors.background,
-    fontFamily: 'Roboto',
+    fontFamily: AhadiTypography.sans,
+    textTheme: const TextTheme(
+      headlineSmall: AhadiTypography.pageTitle,
+      titleMedium: AhadiTypography.cardTitle,
+      bodyMedium: TextStyle(fontFamily: AhadiTypography.sans, fontSize: 14),
+      bodySmall: TextStyle(fontFamily: AhadiTypography.sans, fontSize: 12),
+      labelLarge: TextStyle(
+        fontFamily: AhadiTypography.sans,
+        fontSize: 14,
+        fontWeight: FontWeight.w800,
+      ),
+      labelSmall: AhadiTypography.label,
+    ),
     appBarTheme: AppBarTheme(
       backgroundColor: barColor,
       foregroundColor: AhadiColors.text,
@@ -36,6 +95,7 @@ ThemeData ahadiTheme() {
       actionsIconTheme: const IconThemeData(color: AhadiColors.text),
       titleTextStyle: const TextStyle(
         color: AhadiColors.text,
+        fontFamily: AhadiTypography.sans,
         fontSize: 20,
         fontWeight: FontWeight.w700,
       ),
@@ -70,6 +130,18 @@ ThemeData ahadiTheme() {
         backgroundColor: AhadiColors.primary,
         foregroundColor: Colors.white,
         minimumSize: const Size.fromHeight(48),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      ),
+    ),
+    outlinedButtonTheme: OutlinedButtonThemeData(
+      style: OutlinedButton.styleFrom(
+        minimumSize: const Size.fromHeight(48),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        side: const BorderSide(color: AhadiColors.border),
+      ),
+    ),
+    textButtonTheme: TextButtonThemeData(
+      style: TextButton.styleFrom(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       ),
     ),

@@ -329,7 +329,7 @@ const reversePaymentSchema = z.object({
   idempotencyKey: z.string().uuid(),
 })
 
-const createEventSchema = z.object({
+const eventSchemaFields = {
   name: z.string().trim().min(2).max(160),
   eventType: z.enum(['WEDDING', 'SENDOFF', 'FUNERAL', 'FUNDRAISER', 'BIRTHDAY', 'GRADUATION', 'RELIGIOUS', 'OTHER']),
   customEventType: optionalShortTextSchema,
@@ -337,16 +337,16 @@ const createEventSchema = z.object({
   venue: optionalShortTextSchema,
   targetAmount: z.coerce.number().finite().positive().max(999_999_999_999.99).optional().nullable(),
   pledgeDeadline: z.string().date().optional().nullable(),
-}).superRefine((value, context) => {
+}
+
+function requireCustomEventType(value: { eventType?: string | null | undefined; customEventType?: string | null | undefined }, context: z.RefinementCtx) {
   if (value.eventType === 'OTHER' && !value.customEventType) {
     context.addIssue({ code: 'custom', path: ['customEventType'], message: 'Custom event type is required' })
   }
-})
-const updateEventSchema = createEventSchema.partial().superRefine((value, context) => {
-  if (value.eventType === 'OTHER' && !value.customEventType) {
-    context.addIssue({ code: 'custom', path: ['customEventType'], message: 'Custom event type is required' })
-  }
-})
+}
+
+const createEventSchema = z.object(eventSchemaFields).superRefine(requireCustomEventType)
+const updateEventSchema = z.object(eventSchemaFields).partial().superRefine(requireCustomEventType)
 
 const createSubscriptionPaymentIntentSchema = z.object({
   provider: z.enum(['TEST', 'NMB']).default('TEST'),
@@ -821,6 +821,23 @@ function jsonRecord(data: unknown): Record<string, unknown> {
   return typeof data === 'object' && data !== null && !Array.isArray(data) ? data as Record<string, unknown> : {}
 }
 
+function compactPhoneSearch(value: unknown): string {
+  const digits = String(value ?? '').replace(/\D/g, '')
+  if (digits.startsWith('255')) return digits.slice(3)
+  if (digits.startsWith('0')) return digits.slice(1)
+  return digits
+}
+
+function matchesNameOrPhoneSearch(row: Record<string, unknown>, search: string, nameKeys: string[], phoneKeys: string[]) {
+  const textSearch = search.trim().toLowerCase()
+  if (!textSearch) return true
+  const textHaystack = nameKeys.map((key) => String(row[key] ?? '')).join(' ').toLowerCase()
+  if (textHaystack.includes(textSearch)) return true
+  const phoneNeedle = compactPhoneSearch(textSearch)
+  if (!phoneNeedle) return false
+  return phoneKeys.some((key) => compactPhoneSearch(row[key]).includes(phoneNeedle))
+}
+
 function errorCode(error: unknown): string | null {
   return typeof error === 'object' && error !== null && 'code' in error && typeof error.code === 'string' ? error.code : null
 }
@@ -1115,6 +1132,7 @@ function dateField(row: Record<string, unknown>, key: string): string {
 function matchesReportSearch(row: Record<string, unknown>, input: ReportRequest, keys: string[]): boolean {
   const needle = input.search.trim().toLowerCase()
   if (!needle) return true
+  if (matchesNameOrPhoneSearch(row, needle, ['member', 'member_name', 'full_name'], ['phone', 'phone_e164', 'member_phone'])) return true
   return keys.some((key) => String(row[key] ?? '').toLowerCase().includes(needle))
 }
 
@@ -1177,6 +1195,7 @@ function normalizePaymentReportRows(payments: Record<string, unknown>[]) {
     receiptNumber: stringField(payment, 'receipt_number'),
     eventMemberId: stringField(payment, 'event_member_id'),
     member: stringField(payment, 'member_name'),
+    phone: stringField(payment, 'phone_e164', stringField(payment, 'member_phone')),
     amount: numberField(payment, 'amount'),
     allocatedAmount: numberField(payment, 'allocated_amount'),
     unallocatedAmount: numberField(payment, 'unallocated_amount'),
@@ -3062,11 +3081,9 @@ app.get('/api/v1/contacts', requireAuth, loadUserContext, requireTenantContext, 
     if (error) {
       throwFinancialDatabaseError(error, 'CONTACTS_LIST_FAILED')
     }
-    const search = query.search.toLowerCase()
-    const rows = jsonArray(data).filter((row) => {
-      if (!search) return true
-      return `${row['full_name'] ?? ''} ${row['phone_e164'] ?? ''}`.toLowerCase().includes(search)
-    })
+    const rows = jsonArray(data).filter((row) =>
+      matchesNameOrPhoneSearch(row, query.search, ['full_name'], ['phone_e164', 'alternative_phone_e164']),
+    )
     response.json({ data: rows.slice(query.offset, query.offset + query.limit) })
   } catch (error) {
     next(error)

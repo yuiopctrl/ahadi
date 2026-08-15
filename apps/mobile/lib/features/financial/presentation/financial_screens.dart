@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:io';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -10,6 +12,19 @@ import '../../auth/domain/auth_models.dart';
 import '../../events/presentation/event_detail_screen.dart';
 
 const _pageSize = 20;
+const _shareChannel = MethodChannel('work.yuiop.ahadi/share');
+
+Future<Map<String, Object?>> receiptImageSharePayload(
+  List<int> bytes, {
+  DateTime? now,
+  Directory? directory,
+}) async {
+  final file = File(
+    '${(directory ?? Directory.systemTemp).path}/ahadi-receipt-${(now ?? DateTime.now()).microsecondsSinceEpoch}.png',
+  );
+  await file.writeAsBytes(bytes);
+  return {'path': file.path, 'mimeType': 'image/png', 'title': 'Ahadi Receipt'};
+}
 
 class PaymentsScreen extends StatefulWidget {
   const PaymentsScreen({super.key, required this.controller, this.appBar});
@@ -261,7 +276,7 @@ class _RecordPaymentScreenState extends State<RecordPaymentScreen> {
   Future<void> _confirm() async {
     final event = widget.controller.selectedEvent;
     final member = selectedMember;
-    final parsed = num.tryParse(amount.text.replaceAll(',', '').trim());
+    final parsed = moneyInputValue(amount.text);
     if (event == null || member == null) return;
     if (parsed == null || parsed <= 0) {
       setState(() => error = 'Enter a valid payment amount.');
@@ -388,6 +403,7 @@ class _RecordPaymentScreenState extends State<RecordPaymentScreen> {
                   key: const Key('payment-amount-input'),
                   controller: amount,
                   keyboardType: TextInputType.number,
+                  inputFormatters: const [MoneyInputFormatter()],
                   decoration: const InputDecoration(
                     labelText: 'Amount',
                     prefixText: 'TZS ',
@@ -865,11 +881,16 @@ class ReceiptDetailScreen extends StatefulWidget {
     required this.controller,
     required this.receiptId,
     this.fallback,
+    this.shareImage,
+    this.receiptImageBytes,
   });
 
   final SessionController controller;
   final String receiptId;
   final Map<String, dynamic>? fallback;
+  final Future<void> Function(Map<String, Object?> payload)? shareImage;
+  final Future<List<int>> Function(Map<String, dynamic> receipt)?
+  receiptImageBytes;
 
   @override
   State<ReceiptDetailScreen> createState() => _ReceiptDetailScreenState();
@@ -888,20 +909,29 @@ class _ReceiptDetailScreenState extends State<ReceiptDetailScreen> {
               .catchError((_) => widget.fallback ?? <String, dynamic>{});
   }
 
-  Future<void> _copy(Map<String, dynamic> receipt) async {
-    final text = [
-      'AHADI RECEIPT',
-      '',
-      'Receipt: ${_text(receipt, ['receipt_number', 'receiptNumber'], widget.receiptId)}',
-      titleCaseName(_text(receipt, ['member_name', 'member', 'received_from'])),
-      moneyText(receipt['payment_amount'] ?? receipt['amount']),
-      widget.controller.selectedEvent?.name ?? '',
-      dateText(_text(receipt, ['payment_date', 'date', 'issued_at'])),
-    ].where((line) => line.trim().isNotEmpty).join('\n');
-    await Clipboard.setData(ClipboardData(text: text));
+  Future<void> _shareReceipt(Map<String, dynamic> receipt) async {
+    final bytes =
+        await (widget.receiptImageBytes?.call(receipt) ??
+            _receiptImageBytes(
+              receipt,
+              organization:
+                  widget.controller.selectedTenantContext?.tenantName ?? '-',
+              event:
+                  widget.controller.selectedEvent?.name ??
+                  _text(receipt, ['event_name', 'eventName'], '-'),
+              receiptId: widget.receiptId,
+            ));
+    final payload = await receiptImageSharePayload(bytes);
+    final shareImage = widget.shareImage;
+    if (shareImage != null) {
+      await shareImage(payload);
+    } else {
+      await _shareChannel.invokeMethod<void>('shareImage', payload);
+    }
     if (mounted) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('Receipt copied')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Receipt ready to share')));
     }
   }
 
@@ -1022,7 +1052,8 @@ class _ReceiptDetailScreenState extends State<ReceiptDetailScreen> {
                 ],
               ),
               FilledButton.icon(
-                onPressed: () => _copy(receipt),
+                key: const Key('share-receipt-button'),
+                onPressed: () => _shareReceipt(receipt),
                 icon: const Icon(Icons.ios_share),
                 label: const Text('Share Receipt'),
               ),
@@ -1272,7 +1303,7 @@ class ShareListScreen extends StatefulWidget {
 class _ShareListScreenState extends State<ShareListScreen> {
   late Future<Map<String, dynamic>> future;
   String? loadedEventId;
-  bool showAmounts = true;
+  String format = 'DETAILED';
   bool includeSummary = true;
 
   @override
@@ -1293,7 +1324,7 @@ class _ShareListScreenState extends State<ShareListScreen> {
     if (!mounted || loadedEventId == widget.controller.selectedEventId) return;
     setState(() {
       loadedEventId = widget.controller.selectedEventId;
-      showAmounts = true;
+      format = 'DETAILED';
       includeSummary = true;
       future = _load();
     });
@@ -1304,7 +1335,7 @@ class _ShareListScreenState extends State<ShareListScreen> {
     if (event == null) return <String, dynamic>{};
     final settings = await widget.controller.whatsappShareSettings(event.id);
     final preview = await widget.controller.whatsappSharePreview(event.id, {
-      'format': showAmounts ? 'DETAILED' : 'PRIVACY',
+      'format': format,
       'includeSummary': includeSummary,
       'includeWithoutPledges': true,
       'showPaymentInstructions': settings['showPaymentInstructions'],
@@ -1356,20 +1387,39 @@ class _ShareListScreenState extends State<ShareListScreen> {
             event: widget.controller.selectedEvent,
           ),
           const SizedBox(height: 12),
-          SwitchListTile(
-            value: showAmounts,
+          DropdownButtonFormField<String>(
+            initialValue: format,
+            decoration: const InputDecoration(labelText: 'Format'),
+            items: const [
+              DropdownMenuItem(value: 'DETAILED', child: Text('Detailed')),
+              DropdownMenuItem(
+                value: 'PRIVACY',
+                child: Text('Privacy Friendly'),
+              ),
+              DropdownMenuItem(
+                value: 'PAYMENT_PROGRESS',
+                child: Text('Payment Progress'),
+              ),
+              DropdownMenuItem(
+                value: 'OUTSTANDING_FOLLOW_UP',
+                child: Text('Outstanding Follow-up'),
+              ),
+            ],
             onChanged: (value) => setState(() {
-              showAmounts = value;
+              format = value ?? 'DETAILED';
+              includeSummary = format == 'PRIVACY' ? false : includeSummary;
               future = _load();
             }),
-            title: const Text('Show amounts'),
           ),
+          const SizedBox(height: 8),
           CheckboxListTile(
             value: includeSummary,
-            onChanged: (value) => setState(() {
-              includeSummary = value ?? true;
-              future = _load();
-            }),
+            onChanged: format == 'PRIVACY'
+                ? null
+                : (value) => setState(() {
+                    includeSummary = value ?? true;
+                    future = _load();
+                  }),
             title: const Text('Include summary'),
           ),
           FutureBuilder<Map<String, dynamic>>(
@@ -1406,6 +1456,7 @@ class _ShareListScreenState extends State<ShareListScreen> {
                     children: [
                       Expanded(
                         child: OutlinedButton.icon(
+                          key: const Key('share-list-copy-button'),
                           onPressed: () => _copy(text),
                           icon: const Icon(Icons.copy),
                           label: const Text('Copy'),
@@ -1613,6 +1664,129 @@ class _SelectedMemberCard extends StatelessWidget {
   }
 }
 
+Future<List<int>> _receiptImageBytes(
+  Map<String, dynamic> receipt, {
+  required String organization,
+  required String event,
+  required String receiptId,
+}) async {
+  const width = 900.0;
+  const margin = 72.0;
+  var y = 64.0;
+  final recorder = ui.PictureRecorder();
+  final canvas = Canvas(recorder);
+  final paint = Paint()..color = Colors.white;
+  final dividerPaint = Paint()
+    ..color = AhadiColors.border
+    ..strokeWidth = 2;
+  canvas.drawRect(const Rect.fromLTWH(0, 0, width, 1320), paint);
+
+  void text(
+    String value, {
+    double size = 28,
+    FontWeight weight = FontWeight.w500,
+    Color color = AhadiColors.text,
+    TextAlign align = TextAlign.left,
+    String family = AhadiTypography.sans,
+    double gap = 18,
+  }) {
+    final painter = TextPainter(
+      text: TextSpan(
+        text: value,
+        style: TextStyle(
+          fontFamily: family,
+          fontSize: size,
+          fontWeight: weight,
+          color: color,
+          height: 1.25,
+        ),
+      ),
+      textAlign: align,
+      textDirection: TextDirection.ltr,
+      maxLines: 4,
+    )..layout(maxWidth: width - (margin * 2));
+    final dx = switch (align) {
+      TextAlign.center => (width - painter.width) / 2,
+      TextAlign.right => width - margin - painter.width,
+      _ => margin,
+    };
+    painter.paint(canvas, Offset(dx, y));
+    y += painter.height + gap;
+  }
+
+  void row(String label, String value, {bool mono = false}) {
+    text(
+      label,
+      size: 22,
+      weight: FontWeight.w700,
+      color: AhadiColors.muted,
+      gap: 4,
+    );
+    text(
+      value,
+      size: mono ? 26 : 30,
+      weight: FontWeight.w800,
+      family: mono ? AhadiTypography.mono : AhadiTypography.sans,
+      gap: 18,
+    );
+  }
+
+  text(
+    'AHADI',
+    size: 46,
+    weight: FontWeight.w900,
+    align: TextAlign.center,
+    gap: 6,
+  );
+  text(
+    'PAYMENT RECEIPT',
+    size: 24,
+    weight: FontWeight.w800,
+    color: AhadiColors.primary,
+    align: TextAlign.center,
+    gap: 36,
+  );
+  canvas.drawLine(Offset(margin, y), Offset(width - margin, y), dividerPaint);
+  y += 34;
+  row(
+    'Receipt No',
+    _text(receipt, ['receipt_number', 'receiptNumber'], receiptId),
+    mono: true,
+  );
+  row('Organization', organization);
+  row('Event', event);
+  row(
+    'Received From',
+    titleCaseName(_text(receipt, ['member_name', 'member'])),
+  );
+  row('Amount', moneyText(receipt['payment_amount'] ?? receipt['amount']));
+  row('Method', _method(receipt));
+  row('Date', dateText(_text(receipt, ['payment_date', 'date', 'issued_at'])));
+  row('Status', _text(receipt, ['payment_status', 'status'], 'CONFIRMED'));
+  y += 10;
+  canvas.drawLine(Offset(margin, y), Offset(width - margin, y), dividerPaint);
+  y += 36;
+  text(
+    'Thank you',
+    size: 28,
+    weight: FontWeight.w800,
+    align: TextAlign.center,
+    gap: 8,
+  );
+  text(
+    'Powered by Changisha App',
+    size: 22,
+    weight: FontWeight.w700,
+    color: AhadiColors.muted,
+    align: TextAlign.center,
+  );
+
+  final picture = recorder.endRecording();
+  final image = await picture.toImage(width.round(), (y + 72).round());
+  final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
+  return bytes!.buffer.asUint8List();
+}
+
 class _PaymentPreview extends StatelessWidget {
   const _PaymentPreview({required this.member, required this.amount});
 
@@ -1621,7 +1795,7 @@ class _PaymentPreview extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final payment = num.tryParse(amount.replaceAll(',', '').trim()) ?? 0;
+    final payment = moneyInputValue(amount) ?? 0;
     final outstanding = numberFrom(member['outstanding']) ?? 0;
     final remaining = outstanding - payment;
     final overpay = payment > outstanding && outstanding > 0;

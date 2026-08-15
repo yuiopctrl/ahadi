@@ -55,6 +55,16 @@ flutter:
   # included with your application, so that you can use the icons in
   # the material Icons class.
   uses-material-design: true
+  fonts:
+    - family: Ubuntu Sans
+      fonts:
+        - asset: assets/fonts/UbuntuSans.ttf
+    - family: Ubuntu Condensed
+      fonts:
+        - asset: assets/fonts/UbuntuCondensed.ttf
+    - family: Ubuntu Mono
+      fonts:
+        - asset: assets/fonts/UbuntuMono.ttf
 
   # To add assets to your application, add an assets section, like this:
   # assets:

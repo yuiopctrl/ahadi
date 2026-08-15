@@ -152,7 +152,11 @@ class _PledgeFormState extends State<PledgeForm> {
             TextField(
               controller: amount,
               keyboardType: TextInputType.number,
-              decoration: const InputDecoration(labelText: 'Pledge Amount'),
+              inputFormatters: const [MoneyInputFormatter()],
+              decoration: const InputDecoration(
+                labelText: 'Pledge Amount',
+                prefixText: 'TZS ',
+              ),
             ),
             const SizedBox(height: 12),
             TextField(
@@ -209,7 +213,7 @@ class _PledgeFormState extends State<PledgeForm> {
     try {
       await widget.controller.upsertPledge(widget.event.id, {
         'eventMemberId': selected,
-        'amount': num.tryParse(amount.text.trim()) ?? 0,
+        'amount': moneyInputValue(amount.text) ?? 0,
         'dueDate': dueDate.text.trim().isEmpty ? null : dueDate.text.trim(),
         'notes': notes.text.trim().isEmpty ? null : notes.text.trim(),
         'changeReason': null,

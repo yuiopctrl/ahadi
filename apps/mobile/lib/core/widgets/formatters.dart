@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
+import '../errors/api_failure.dart';
 import '../theme/ahadi_theme.dart';
 
 String moneyText(Object? value) {
@@ -16,6 +18,57 @@ String moneyText(Object? value) {
     }
   }
   return 'TZS ${buffer.toString()}';
+}
+
+String compactPhoneSearch(String value) {
+  final digits = value.replaceAll(RegExp(r'\D'), '');
+  if (digits.startsWith('255')) return digits.substring(3);
+  if (digits.startsWith('0')) return digits.substring(1);
+  return digits;
+}
+
+num? moneyInputValue(String value) {
+  final cleaned = value.replaceAll(',', '').trim();
+  if (cleaned.isEmpty) return null;
+  return num.tryParse(cleaned);
+}
+
+String moneyInputText(Object? value) {
+  final amount = numberFrom(value);
+  if (amount == null) return '';
+  return moneyText(amount).replaceFirst('TZS ', '');
+}
+
+class MoneyInputFormatter extends TextInputFormatter {
+  const MoneyInputFormatter();
+
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    final digits = newValue.text.replaceAll(RegExp(r'\D'), '');
+    if (digits.isEmpty) {
+      return const TextEditingValue();
+    }
+    final formatted = _commaDigits(digits);
+    return TextEditingValue(
+      text: formatted,
+      selection: TextSelection.collapsed(offset: formatted.length),
+    );
+  }
+}
+
+String _commaDigits(String digits) {
+  final buffer = StringBuffer();
+  for (var i = 0; i < digits.length; i += 1) {
+    final remaining = digits.length - i;
+    buffer.write(digits[i]);
+    if (remaining > 1 && remaining % 3 == 1) {
+      buffer.write(',');
+    }
+  }
+  return buffer.toString();
 }
 
 String dateText(String? value) {
@@ -66,6 +119,22 @@ String titleCaseName(Object? value, [String fallback = 'Contact']) {
             : '${part[0].toUpperCase()}${part.substring(1).toLowerCase()}',
       )
       .join(' ');
+}
+
+String friendlyErrorText(
+  Object? error, [
+  String fallback = 'Unable to load data. Please try again.',
+]) {
+  if (error is ApiFailure) return error.friendlyMessage;
+  final message = error?.toString() ?? '';
+  if (message.contains('SocketException') ||
+      message.contains('Failed host lookup') ||
+      message.contains('OS Error') ||
+      message.contains('errno')) {
+    return 'No internet connection. Check your connection and try again.';
+  }
+  if (message.trim().isEmpty) return fallback;
+  return fallback;
 }
 
 Color statusColor(String status) {
@@ -192,6 +261,55 @@ class AhadiInfoRow extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class AhadiSearchField extends StatelessWidget {
+  const AhadiSearchField({
+    super.key,
+    required this.controller,
+    required this.onChanged,
+    this.label = 'Search',
+  });
+
+  final TextEditingController controller;
+  final ValueChanged<String> onChanged;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return TextField(
+      controller: controller,
+      onChanged: onChanged,
+      decoration: InputDecoration(
+        labelText: label,
+        prefixIcon: const Icon(Icons.search),
+      ),
+    );
+  }
+}
+
+class AhadiMoneyField extends StatelessWidget {
+  const AhadiMoneyField({
+    super.key,
+    required this.controller,
+    required this.label,
+    this.onChanged,
+  });
+
+  final TextEditingController controller;
+  final String label;
+  final ValueChanged<String>? onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return TextField(
+      controller: controller,
+      keyboardType: TextInputType.number,
+      inputFormatters: const [MoneyInputFormatter()],
+      decoration: InputDecoration(labelText: label, prefixText: 'TZS '),
+      onChanged: onChanged,
     );
   }
 }

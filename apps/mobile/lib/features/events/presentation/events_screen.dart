@@ -212,7 +212,11 @@ class _CreateEventFormState extends State<_CreateEventForm> {
             TextField(
               controller: targetAmount,
               keyboardType: TextInputType.number,
-              decoration: const InputDecoration(labelText: 'Target Amount'),
+              inputFormatters: const [MoneyInputFormatter()],
+              decoration: const InputDecoration(
+                labelText: 'Target Amount',
+                prefixText: 'TZS ',
+              ),
             ),
             const SizedBox(height: 12),
             TextField(
@@ -252,7 +256,7 @@ class _CreateEventFormState extends State<_CreateEventForm> {
         'venue': venue.text.trim().isEmpty ? null : venue.text.trim(),
         'targetAmount': targetAmount.text.trim().isEmpty
             ? null
-            : num.tryParse(targetAmount.text.trim()),
+            : moneyInputValue(targetAmount.text),
         'pledgeDeadline': pledgeDeadline.text.trim().isEmpty
             ? null
             : pledgeDeadline.text.trim(),
