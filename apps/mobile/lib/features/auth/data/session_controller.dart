@@ -298,6 +298,14 @@ class SessionController extends ChangeNotifier {
     return _api.eventFinancialSummary(_requireTenantId(), eventId);
   }
 
+  Future<Map<String, dynamic>> eventReport(
+    String eventId,
+    String reportType,
+    Map<String, dynamic> payload,
+  ) {
+    return _api.eventReport(_requireTenantId(), eventId, reportType, payload);
+  }
+
   Future<List<Map<String, dynamic>>> eventMembers(String eventId) {
     return _api.eventMembers(_requireTenantId(), eventId);
   }
@@ -415,6 +423,57 @@ class SessionController extends ChangeNotifier {
       payload,
       pledgeId: pledgeId,
     );
+  }
+
+  Future<Map<String, dynamic>> recordPayment(
+    String eventId,
+    Map<String, dynamic> payload,
+  ) {
+    return _api.recordPayment(_requireTenantId(), eventId, {
+      ...payload,
+      'idempotencyKey': payload['idempotencyKey'] ?? _uuidV4(),
+    });
+  }
+
+  Future<Map<String, dynamic>> paymentDetail(String eventId, String paymentId) {
+    return _api.paymentDetail(_requireTenantId(), eventId, paymentId);
+  }
+
+  Future<Map<String, dynamic>> reversePayment(
+    String eventId,
+    String paymentId,
+    String reason,
+  ) {
+    return _api.reversePayment(_requireTenantId(), eventId, paymentId, {
+      'reason': reason,
+      'idempotencyKey': _uuidV4(),
+    });
+  }
+
+  Future<Map<String, dynamic>> receiptDetail(String receiptId) {
+    return _api.receiptDetail(_requireTenantId(), receiptId);
+  }
+
+  Future<Map<String, dynamic>> whatsappShareSettings(String eventId) {
+    return _api.whatsappShareSettings(_requireTenantId(), eventId);
+  }
+
+  Future<Map<String, dynamic>> updateWhatsappShareSettings(
+    String eventId,
+    Map<String, dynamic> payload,
+  ) {
+    return _api.updateWhatsappShareSettings(
+      _requireTenantId(),
+      eventId,
+      payload,
+    );
+  }
+
+  Future<Map<String, dynamic>> whatsappSharePreview(
+    String eventId,
+    Map<String, dynamic> payload,
+  ) {
+    return _api.whatsappSharePreview(_requireTenantId(), eventId, payload);
   }
 
   Future<void> createOrganization({

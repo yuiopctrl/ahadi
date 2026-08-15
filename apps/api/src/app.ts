@@ -1416,6 +1416,7 @@ async function getEventReportResult(client: ReturnType<typeof createUserSupabase
       p_direction: input.direction,
       p_page: input.page,
       p_page_size: input.pageSize,
+      p_search: input.search,
     }),
     'payment-methods': () => client.rpc('rpc_get_event_payment_method_summary', rpcArgs),
     collectors: () => client.rpc('rpc_get_event_collector_report', {

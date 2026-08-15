@@ -116,6 +116,15 @@ class StatusPill extends StatelessWidget {
   }
 }
 
+class AhadiStatusLabel extends StatelessWidget {
+  const AhadiStatusLabel({super.key, required this.status});
+
+  final String status;
+
+  @override
+  Widget build(BuildContext context) => StatusPill(status: status);
+}
+
 class AhadiSectionCard extends StatelessWidget {
   const AhadiSectionCard({
     super.key,
@@ -215,6 +224,57 @@ class FinancialSummary extends StatelessWidget {
           child: _FinancialValue(label: 'Outstanding', value: outstanding),
         ),
       ],
+    );
+  }
+}
+
+class AhadiMoneyValue extends StatelessWidget {
+  const AhadiMoneyValue({
+    super.key,
+    required this.label,
+    required this.value,
+    this.accent = false,
+  });
+
+  final String label;
+  final Object? value;
+  final bool accent;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: accent ? AhadiColors.primarySoft : AhadiColors.background,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: accent ? AhadiColors.primary : AhadiColors.border,
+        ),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(10),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              label,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: AhadiColors.muted,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              moneyText(value),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: accent ? AhadiColors.primary : AhadiColors.text,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

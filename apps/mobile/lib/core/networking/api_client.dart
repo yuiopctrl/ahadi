@@ -171,6 +171,22 @@ class ApiClient implements AhadiApi {
   }
 
   @override
+  Future<Map<String, dynamic>> eventReport(
+    String tenantId,
+    String eventId,
+    String reportType,
+    Map<String, dynamic> payload,
+  ) async {
+    final json = await _request(
+      '/events/$eventId/reports/$reportType',
+      method: 'POST',
+      tenantId: tenantId,
+      body: payload,
+    );
+    return jsonMap(json['data']);
+  }
+
+  @override
   Future<List<Map<String, dynamic>>> eventMembers(
     String tenantId,
     String eventId,
@@ -347,6 +363,101 @@ class ApiClient implements AhadiApi {
           ? '/events/$eventId/pledges'
           : '/events/$eventId/pledges/$pledgeId',
       method: pledgeId == null ? 'POST' : 'PATCH',
+      tenantId: tenantId,
+      body: payload,
+    );
+    return jsonMap(json['data']);
+  }
+
+  @override
+  Future<Map<String, dynamic>> recordPayment(
+    String tenantId,
+    String eventId,
+    Map<String, dynamic> payload,
+  ) async {
+    final json = await _request(
+      '/events/$eventId/payments',
+      method: 'POST',
+      tenantId: tenantId,
+      body: payload,
+    );
+    return jsonMap(json['data']);
+  }
+
+  @override
+  Future<Map<String, dynamic>> paymentDetail(
+    String tenantId,
+    String eventId,
+    String paymentId,
+  ) async {
+    final json = await _request(
+      '/events/$eventId/payments/$paymentId',
+      tenantId: tenantId,
+    );
+    return jsonMap(json['data']);
+  }
+
+  @override
+  Future<Map<String, dynamic>> reversePayment(
+    String tenantId,
+    String eventId,
+    String paymentId,
+    Map<String, dynamic> payload,
+  ) async {
+    final json = await _request(
+      '/events/$eventId/payments/$paymentId/reverse',
+      method: 'POST',
+      tenantId: tenantId,
+      body: payload,
+    );
+    return jsonMap(json['data']);
+  }
+
+  @override
+  Future<Map<String, dynamic>> receiptDetail(
+    String tenantId,
+    String receiptId,
+  ) async {
+    final json = await _request('/receipts/$receiptId', tenantId: tenantId);
+    return jsonMap(json['data']);
+  }
+
+  @override
+  Future<Map<String, dynamic>> whatsappShareSettings(
+    String tenantId,
+    String eventId,
+  ) async {
+    final json = await _request(
+      '/events/$eventId/share/whatsapp-settings',
+      tenantId: tenantId,
+    );
+    return jsonMap(json['data']);
+  }
+
+  @override
+  Future<Map<String, dynamic>> updateWhatsappShareSettings(
+    String tenantId,
+    String eventId,
+    Map<String, dynamic> payload,
+  ) async {
+    final json = await _request(
+      '/events/$eventId/share/whatsapp-settings',
+      method: 'PUT',
+      tenantId: tenantId,
+      body: payload,
+    );
+    return jsonMap(json['data']);
+  }
+
+  @override
+  Future<Map<String, dynamic>> whatsappSharePreview(
+    String tenantId,
+    String eventId,
+    Map<String, dynamic> payload,
+  ) async {
+    final json = await _request(
+      '/events/$eventId/share/whatsapp-preview',
+      method: 'POST',
       tenantId: tenantId,
       body: payload,
     );

@@ -16,7 +16,13 @@ class FakeAhadiApi implements AhadiApi {
   int contactsCalls = 0;
   int eventMembersCalls = 0;
   int eventPledgesCalls = 0;
+  int eventReportCalls = 0;
+  int recordPaymentCalls = 0;
+  int reversePaymentCalls = 0;
+  int whatsappPreviewCalls = 0;
   String? lastTenantId;
+  String? lastEventId;
+  String? lastReportType;
   String? lastContactsSearch;
   int? lastContactsLimit;
   int? lastContactsOffset;
@@ -30,6 +36,9 @@ class FakeAhadiApi implements AhadiApi {
   Map<String, dynamic>? lastCreatedContact;
   Map<String, dynamic>? lastUpdatedContact;
   Map<String, dynamic>? lastPledgePayload;
+  Map<String, dynamic>? lastReportPayload;
+  Map<String, dynamic>? lastPaymentPayload;
+  Map<String, dynamic>? lastReversePayload;
   Completer<LoginResult>? loginCompleter;
   Completer<TenantContext>? tenantCompleter;
   Object? meError;
@@ -300,6 +309,54 @@ class FakeAhadiApi implements AhadiApi {
   }
 
   @override
+  Future<Map<String, dynamic>> eventReport(
+    String tenantId,
+    String eventId,
+    String reportType,
+    Map<String, dynamic> payload,
+  ) async {
+    eventReportCalls += 1;
+    lastTenantId = tenantId;
+    lastEventId = eventId;
+    lastReportType = reportType;
+    lastReportPayload = payload;
+    final page = payload['page'] is int ? payload['page'] as int : 1;
+    final pageSize = payload['pageSize'] is int
+        ? payload['pageSize'] as int
+        : 20;
+    final search = (payload['search'] as String? ?? '').toLowerCase();
+    if (reportType == 'payments') {
+      final filtered = _paymentRows.where((row) {
+        if (search.isEmpty) return true;
+        return '${row['member']} ${row['receiptNumber']} ${row['transactionReference']}'
+            .toLowerCase()
+            .contains(search);
+      }).toList();
+      return _report(filtered, page, pageSize);
+    }
+    if (reportType == 'outstanding') {
+      final filtered = _outstandingRows.where((row) {
+        if (search.isEmpty) return true;
+        return '${row['member']} ${row['phone']}'.toLowerCase().contains(
+          search,
+        );
+      }).toList();
+      return {
+        ..._report(filtered, page, pageSize),
+        'summary': {
+          'totalOutstanding': filtered.fold<num>(
+            0,
+            (sum, row) => sum + (row['outstanding'] as num),
+          ),
+          'outstandingMembers': filtered.length,
+          'overdueMembers': 0,
+        },
+      };
+    }
+    return _report(<Map<String, dynamic>>[], page, pageSize);
+  }
+
+  @override
   Future<List<Map<String, dynamic>>> eventMembers(
     String tenantId,
     String eventId,
@@ -434,6 +491,123 @@ class FakeAhadiApi implements AhadiApi {
   }
 
   @override
+  Future<Map<String, dynamic>> recordPayment(
+    String tenantId,
+    String eventId,
+    Map<String, dynamic> payload,
+  ) async {
+    recordPaymentCalls += 1;
+    lastTenantId = tenantId;
+    lastEventId = eventId;
+    lastPaymentPayload = payload;
+    return {
+      'payment_id': 'payment-new',
+      'payment_number': 'PAY-0002',
+      'receipt_id': 'receipt-new',
+      'receipt_number': 'AHADI-0002',
+      'payment_amount': payload['amount'],
+      'allocated_amount': payload['amount'],
+      'unallocated_amount': 0,
+      'outstanding_amount': 0,
+      'pledge_status': 'PAID',
+    };
+  }
+
+  @override
+  Future<Map<String, dynamic>> paymentDetail(
+    String tenantId,
+    String eventId,
+    String paymentId,
+  ) async {
+    lastTenantId = tenantId;
+    lastEventId = eventId;
+    return _paymentRows.firstWhere(
+      (row) => row['paymentId'] == paymentId,
+      orElse: () => _paymentRows.first,
+    );
+  }
+
+  @override
+  Future<Map<String, dynamic>> reversePayment(
+    String tenantId,
+    String eventId,
+    String paymentId,
+    Map<String, dynamic> payload,
+  ) async {
+    reversePaymentCalls += 1;
+    lastTenantId = tenantId;
+    lastEventId = eventId;
+    lastReversePayload = payload;
+    return {'paymentId': paymentId, 'status': 'REVERSED'};
+  }
+
+  @override
+  Future<Map<String, dynamic>> receiptDetail(
+    String tenantId,
+    String receiptId,
+  ) async {
+    lastTenantId = tenantId;
+    return {
+      'receipt_id': receiptId,
+      'receipt_number': 'AHADI-0001',
+      'member_name': 'Jane Contact',
+      'payment_amount': 150000,
+      'allocated_amount': 100000,
+      'unallocated_excess': 50000,
+      'payment_method': 'CASH',
+      'payment_date': '2026-08-15T08:00:00Z',
+      'payment_status': 'CONFIRMED',
+      'received_by_name': 'Treasurer',
+    };
+  }
+
+  @override
+  Future<Map<String, dynamic>> whatsappShareSettings(
+    String tenantId,
+    String eventId,
+  ) async {
+    lastTenantId = tenantId;
+    return {
+      'showPaymentInstructions': true,
+      'paymentInstructions': 'TUMA KWA:\nM-Pesa: 0712345678',
+      'showAlama': true,
+      'alamaLabels': {
+        'completed': 'Amemaliza',
+        'partial': 'Amepunguza',
+        'noPledge': 'Hajatoa Ahadi',
+      },
+      'defaultListFormat': 'DETAILED',
+      'defaultSort': 'ORIGINAL',
+      'defaultIncludeSummary': true,
+    };
+  }
+
+  @override
+  Future<Map<String, dynamic>> updateWhatsappShareSettings(
+    String tenantId,
+    String eventId,
+    Map<String, dynamic> payload,
+  ) async {
+    lastTenantId = tenantId;
+    lastEventId = eventId;
+    return payload;
+  }
+
+  @override
+  Future<Map<String, dynamic>> whatsappSharePreview(
+    String tenantId,
+    String eventId,
+    Map<String, dynamic> payload,
+  ) async {
+    whatsappPreviewCalls += 1;
+    lastTenantId = tenantId;
+    lastEventId = eventId;
+    return {
+      'text': '*AHADI ZA HARUSI YA MAIN EVENT*\n\nTUMA KWA:\nM-Pesa: 0712345678\n\n1. Jane Contact - TZS 100,000 ✅✅\n\n*MUHTASARI*\nJumla ya Ahadi: TZS 100,000\n\nAlama:\n✅✅ -- Amemaliza\n© AHADI APP',
+    };
+  }
+
+  @override
   Future<Map<String, dynamic>> removeEventMember(
     String tenantId,
     String eventId,
@@ -458,6 +632,57 @@ class FakeAhadiApi implements AhadiApi {
     );
   }
 }
+
+Map<String, dynamic> _report(
+  List<Map<String, dynamic>> rows,
+  int page,
+  int pageSize,
+) {
+  final start = (page - 1) * pageSize;
+  final paged = rows.skip(start).take(pageSize).toList();
+  return {
+    'data': paged,
+    'summary': <String, dynamic>{},
+    'pagination': {
+      'page': page,
+      'pageSize': pageSize,
+      'totalRows': rows.length,
+      'totalPages': rows.isEmpty ? 0 : (rows.length / pageSize).ceil(),
+    },
+  };
+}
+
+final _paymentRows = <Map<String, dynamic>>[
+  {
+    'paymentId': 'payment-a',
+    'receiptId': 'receipt-a',
+    'receiptNumber': 'AHADI-0001',
+    'eventMemberId': 'em-a',
+    'member': 'Jane Contact',
+    'amount': 150000,
+    'allocatedAmount': 100000,
+    'unallocatedAmount': 50000,
+    'paymentMethod': 'CASH',
+    'transactionReference': '',
+    'receivedBy': 'Treasurer',
+    'status': 'CONFIRMED',
+    'date': '2026-08-15T08:00:00Z',
+  },
+];
+
+final _outstandingRows = <Map<String, dynamic>>[
+  {
+    'pledgeId': 'pledge-a',
+    'eventMemberId': 'em-a',
+    'member': 'Jane Contact',
+    'phone': '+255712345678',
+    'pledged': 100000,
+    'paid': 40000,
+    'outstanding': 60000,
+    'effectiveDueDate': '2026-08-24',
+    'status': 'PARTIALLY_PAID',
+  },
+];
 
 String _normalizedPledgeStatus(String value) {
   final status = value.trim().toUpperCase();

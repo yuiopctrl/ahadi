@@ -5,6 +5,7 @@ import '../../auth/data/session_controller.dart';
 import '../../contacts/presentation/contacts_screen.dart';
 import '../../dashboard/presentation/dashboard_screen.dart';
 import '../../events/presentation/events_screen.dart';
+import '../../financial/presentation/financial_screens.dart';
 import '../../organizations/presentation/create_organization_screen.dart';
 import '../../pledges/presentation/pledges_screen.dart';
 import '../../profile/presentation/profile_screen.dart';
@@ -30,7 +31,7 @@ class _MobileShellState extends State<MobileShell> {
     final pages = [
       DashboardScreen(controller: widget.controller),
       EventsScreen(controller: widget.controller),
-      const _PlaceholderPage(title: 'Payments', icon: Icons.payments_outlined),
+      PaymentsScreen(controller: widget.controller),
       _MorePage(controller: widget.controller),
     ];
     return Scaffold(
@@ -150,6 +151,7 @@ class _MobileShellState extends State<MobileShell> {
                           await widget.controller.switchTenant(
                             membership.tenantId,
                           );
+                          if (mounted) setState(() {});
                         },
                 );
               }),
@@ -211,6 +213,7 @@ class _MobileShellState extends State<MobileShell> {
                     onTap: () async {
                       Navigator.of(context).pop();
                       await widget.controller.selectEvent(event.id);
+                      if (mounted) setState(() {});
                     },
                   );
                 }),
@@ -273,6 +276,39 @@ class _MorePage extends StatelessWidget {
               ),
               const Divider(height: 1),
               ListTile(
+                leading: const Icon(Icons.receipt_long_outlined),
+                title: const Text('Receipts'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => ReceiptsScreen(controller: controller),
+                  ),
+                ),
+              ),
+              const Divider(height: 1),
+              ListTile(
+                leading: const Icon(Icons.trending_down_outlined),
+                title: const Text('Outstanding'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => OutstandingScreen(controller: controller),
+                  ),
+                ),
+              ),
+              const Divider(height: 1),
+              ListTile(
+                leading: const Icon(Icons.ios_share),
+                title: const Text('Share List'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => ShareListScreen(controller: controller),
+                  ),
+                ),
+              ),
+              const Divider(height: 1),
+              ListTile(
                 leading: const Icon(Icons.account_circle_outlined),
                 title: const Text('Profile'),
                 trailing: const Icon(Icons.chevron_right),
@@ -298,38 +334,6 @@ class _MorePage extends StatelessWidget {
           ),
         ),
       ],
-    );
-  }
-}
-
-class _PlaceholderPage extends StatelessWidget {
-  const _PlaceholderPage({required this.title, required this.icon});
-
-  final String title;
-  final IconData icon;
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 42, color: AhadiColors.primary),
-            const SizedBox(height: 12),
-            Text(
-              title,
-              style: Theme.of(context).textTheme.headlineSmall
-                  ?.copyWith(fontWeight: FontWeight.w800),
-            ),
-            const SizedBox(height: 6),
-            const Text(
-              'This mobile area will be expanded after the auth and organization foundation.',
-            ),
-          ],
-        ),
-      ),
     );
   }
 }

@@ -32,6 +32,12 @@ abstract class AhadiApi {
     String tenantId,
     String eventId,
   );
+  Future<Map<String, dynamic>> eventReport(
+    String tenantId,
+    String eventId,
+    String reportType,
+    Map<String, dynamic> payload,
+  );
   Future<List<Map<String, dynamic>>> eventMembers(
     String tenantId,
     String eventId,
@@ -91,6 +97,37 @@ abstract class AhadiApi {
     Map<String, dynamic> payload, {
     String? pledgeId,
   });
+  Future<Map<String, dynamic>> recordPayment(
+    String tenantId,
+    String eventId,
+    Map<String, dynamic> payload,
+  );
+  Future<Map<String, dynamic>> paymentDetail(
+    String tenantId,
+    String eventId,
+    String paymentId,
+  );
+  Future<Map<String, dynamic>> reversePayment(
+    String tenantId,
+    String eventId,
+    String paymentId,
+    Map<String, dynamic> payload,
+  );
+  Future<Map<String, dynamic>> receiptDetail(String tenantId, String receiptId);
+  Future<Map<String, dynamic>> whatsappShareSettings(
+    String tenantId,
+    String eventId,
+  );
+  Future<Map<String, dynamic>> updateWhatsappShareSettings(
+    String tenantId,
+    String eventId,
+    Map<String, dynamic> payload,
+  );
+  Future<Map<String, dynamic>> whatsappSharePreview(
+    String tenantId,
+    String eventId,
+    Map<String, dynamic> payload,
+  );
 }
 
 class LoginResult {
