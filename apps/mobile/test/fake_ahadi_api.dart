@@ -118,7 +118,38 @@ class FakeAhadiApi implements AhadiApi {
 
   @override
   Future<Map<String, dynamic>> billingSummary(String tenantId) async => {
-    'subscription': {'status': 'TRIAL'},
+    'subscription': {
+      'id': 'sub-1',
+      'status': 'TRIAL',
+      'planCode': 'BASIC',
+      'planName': 'Basic',
+      'trialEndsAt': '2026-08-30T00:00:00Z',
+      'currentPeriodEnd': '2026-09-30T00:00:00Z',
+      'limits': {
+        'maxEventSlots': 2,
+        'usedEventSlots': 1,
+        'availableEventSlots': 1,
+        'includedSms': 100,
+      },
+      'eventUsage': {'used': 1, 'limit': 2, 'available': 1},
+    },
+    'invoices': [
+      {
+        'id': 'invoice-1',
+        'invoice_number': 'INV-0001',
+        'status': 'ISSUED',
+        'total_amount': 20000,
+        'amount_paid': 5000,
+        'amount_due': 15000,
+        'due_date': '2026-09-01T00:00:00Z',
+      },
+    ],
+    'payments': [
+      {'id': 'payment-1', 'amount': 5000, 'status': 'CONFIRMED'},
+    ],
+    'pendingIntents': [
+      {'id': 'intent-1', 'status': 'PENDING'},
+    ],
   };
 
   @override
@@ -667,7 +698,30 @@ class FakeAhadiApi implements AhadiApi {
 
   @override
   Future<List<SubscriptionPlan>> plans() async => const [
-    SubscriptionPlan(code: 'BASIC', name: 'Basic'),
+    SubscriptionPlan(
+      code: 'BASIC',
+      name: 'Basic',
+      description: 'Starter package for smaller committees.',
+      priceAmount: 20000,
+      billingInterval: 'MONTHLY',
+      trialDays: 14,
+      maxActiveEvents: 2,
+      maxMembers: 250,
+      maxUsers: 5,
+      includedSms: 100,
+    ),
+    SubscriptionPlan(
+      code: 'GROWTH',
+      name: 'Growth',
+      description: 'More capacity for larger events and teams.',
+      priceAmount: 50000,
+      billingInterval: 'MONTHLY',
+      trialDays: 14,
+      maxActiveEvents: 6,
+      maxMembers: 1000,
+      maxUsers: 20,
+      includedSms: 500,
+    ),
   ];
 
   @override
@@ -1252,7 +1306,20 @@ TenantMembership membership(String id, String name) {
         eventType: 'WEDDING',
       ),
     ],
-    subscription: const SubscriptionSummary(status: 'TRIAL', planName: 'Basic'),
+    subscription: const SubscriptionSummary(
+      status: 'TRIAL',
+      planCode: 'BASIC',
+      planName: 'Basic',
+      trialEndsAt: '2026-08-30T00:00:00Z',
+      currentPeriodEnd: '2026-09-30T00:00:00Z',
+      limits: {
+        'maxEventSlots': 2,
+        'usedEventSlots': 1,
+        'availableEventSlots': 1,
+        'includedSms': 100,
+      },
+      eventUsage: {'used': 1, 'limit': 2, 'available': 1},
+    ),
   );
 }
 
@@ -1295,7 +1362,20 @@ TenantContext makeTenantContext(
     ],
     isOwner: true,
     accessState: 'ACTIVE',
-    subscription: const SubscriptionSummary(status: 'TRIAL', planName: 'Basic'),
+    subscription: const SubscriptionSummary(
+      status: 'TRIAL',
+      planCode: 'BASIC',
+      planName: 'Basic',
+      trialEndsAt: '2026-08-30T00:00:00Z',
+      currentPeriodEnd: '2026-09-30T00:00:00Z',
+      limits: {
+        'maxEventSlots': 2,
+        'usedEventSlots': 1,
+        'availableEventSlots': 1,
+        'includedSms': 100,
+      },
+      eventUsage: {'used': 1, 'limit': 2, 'available': 1},
+    ),
   );
 }
 

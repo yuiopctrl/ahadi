@@ -4,6 +4,7 @@ import '../../../core/theme/ahadi_theme.dart';
 import '../../../core/widgets/formatters.dart';
 import '../../auth/data/session_controller.dart';
 import '../../auth/domain/auth_models.dart';
+import '../../billing/presentation/subscription_plan_card.dart';
 
 class CreateOrganizationScreen extends StatefulWidget {
   const CreateOrganizationScreen({super.key, required this.controller});
@@ -74,20 +75,22 @@ class _CreateOrganizationScreenState extends State<CreateOrganizationScreen> {
                         ?.copyWith(fontWeight: FontWeight.w800),
                   ),
                   const SizedBox(height: 8),
-                  DropdownButtonFormField<String>(
-                    key: const Key('plan-dropdown'),
-                    initialValue: planCode,
-                    items: plans
-                        .map(
-                          (plan) => DropdownMenuItem(
-                            value: plan.code,
-                            child: Text(plan.name),
-                          ),
-                        )
-                        .toList(),
-                    onChanged: (value) => setState(() => planCode = value),
-                    decoration: const InputDecoration(labelText: 'Package'),
-                  ),
+                  if (snapshot.connectionState == ConnectionState.waiting)
+                    const LinearProgressIndicator()
+                  else if (plans.isEmpty)
+                    const _PlanUnavailableCard()
+                  else
+                    ...plans.map(
+                      (plan) => Padding(
+                        padding: const EdgeInsets.only(bottom: 10),
+                        child: SubscriptionPlanCard(
+                          key: Key('plan-card-${plan.code}'),
+                          plan: plan,
+                          selected: planCode == plan.code,
+                          onTap: () => setState(() => planCode = plan.code),
+                        ),
+                      ),
+                    ),
                   const SizedBox(height: 20),
                   Text(
                     'Organization details',
@@ -225,6 +228,26 @@ class _CreateOrganizationScreenState extends State<CreateOrganizationScreen> {
             ? const [MoneyInputFormatter()]
             : null,
         decoration: InputDecoration(labelText: label),
+      ),
+    );
+  }
+}
+
+class _PlanUnavailableCard extends StatelessWidget {
+  const _PlanUnavailableCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AhadiColors.surface,
+        border: Border.all(color: AhadiColors.border),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: const Text(
+        'No public packages are available. Contact Ahadi support before creating an organization.',
+        style: AhadiTypography.secondary,
       ),
     );
   }

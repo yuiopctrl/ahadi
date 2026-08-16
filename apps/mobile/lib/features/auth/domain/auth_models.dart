@@ -66,31 +66,46 @@ class UserProfile {
 
 class SubscriptionSummary {
   const SubscriptionSummary({
+    this.id,
     required this.status,
     required this.planName,
+    this.planCode,
     this.trialEndsAt,
     this.currentPeriodEnd,
+    this.limits = const {},
+    this.eventUsage = const {},
   });
 
+  final String? id;
   final String status;
   final String planName;
+  final String? planCode;
   final String? trialEndsAt;
   final String? currentPeriodEnd;
+  final Map<String, dynamic> limits;
+  final Map<String, dynamic> eventUsage;
 
   factory SubscriptionSummary.fromJson(Map<String, dynamic> json) {
+    final limitsJson = json['limits'];
+    final eventUsageJson = json['eventUsage'] ?? json['event_usage'];
     return SubscriptionSummary(
+      id: stringValue(json, 'id'),
       status: stringValue(json, 'status') ?? '',
       planName:
           stringValue(json, 'planName') ??
           stringValue(json, 'plan_name') ??
           stringValue(json, 'planCode') ??
+          stringValue(json, 'plan_code') ??
           '',
+      planCode: stringValue(json, 'planCode') ?? stringValue(json, 'plan_code'),
       trialEndsAt:
           stringValue(json, 'trialEndsAt') ??
           stringValue(json, 'trial_ends_at'),
       currentPeriodEnd:
           stringValue(json, 'currentPeriodEnd') ??
           stringValue(json, 'current_period_end'),
+      limits: objectMap(limitsJson),
+      eventUsage: objectMap(eventUsageJson),
     );
   }
 }
@@ -348,17 +363,97 @@ class TenantContext {
 }
 
 class SubscriptionPlan {
-  const SubscriptionPlan({required this.code, required this.name});
+  const SubscriptionPlan({
+    required this.code,
+    required this.name,
+    this.id,
+    this.description,
+    this.currency = 'TZS',
+    this.priceAmount = 0,
+    this.billingInterval = 'CUSTOM',
+    this.trialDays = 0,
+    this.maxActiveEvents = 0,
+    this.maxMembers = 0,
+    this.maxUsers = 0,
+    this.includedSms = 0,
+    this.features = const {},
+    this.isPublic = true,
+    this.isActive = true,
+    this.displayOrder = 0,
+  });
 
+  final String? id;
   final String code;
   final String name;
+  final String? description;
+  final String currency;
+  final num priceAmount;
+  final String billingInterval;
+  final int trialDays;
+  final int maxActiveEvents;
+  final int maxMembers;
+  final int maxUsers;
+  final int includedSms;
+  final Map<String, dynamic> features;
+  final bool isPublic;
+  final bool isActive;
+  final int displayOrder;
 
   factory SubscriptionPlan.fromJson(Map<String, dynamic> json) {
     return SubscriptionPlan(
+      id: stringValue(json, 'id'),
       code: stringValue(json, 'code') ?? '',
       name: stringValue(json, 'name') ?? stringValue(json, 'code') ?? '',
+      description: stringValue(json, 'description'),
+      currency: stringValue(json, 'currency') ?? 'TZS',
+      priceAmount:
+          numberValue(json, 'priceAmount') ??
+          numberValue(json, 'price_amount') ??
+          0,
+      billingInterval:
+          stringValue(json, 'billingInterval') ??
+          stringValue(json, 'billing_interval') ??
+          'CUSTOM',
+      trialDays:
+          (numberValue(json, 'trialDays') ??
+                  numberValue(json, 'trial_days') ??
+                  0)
+              .toInt(),
+      maxActiveEvents:
+          (numberValue(json, 'maxActiveEvents') ??
+                  numberValue(json, 'max_active_events') ??
+                  0)
+              .toInt(),
+      maxMembers:
+          (numberValue(json, 'maxMembers') ??
+                  numberValue(json, 'max_members') ??
+                  0)
+              .toInt(),
+      maxUsers:
+          (numberValue(json, 'maxUsers') ?? numberValue(json, 'max_users') ?? 0)
+              .toInt(),
+      includedSms:
+          (numberValue(json, 'includedSms') ??
+                  numberValue(json, 'included_sms') ??
+                  0)
+              .toInt(),
+      features: objectMap(json['features']),
+      isPublic:
+          boolValue(json, 'isPublic') ?? boolValue(json, 'is_public') ?? true,
+      isActive:
+          boolValue(json, 'isActive') ?? boolValue(json, 'is_active') ?? true,
+      displayOrder:
+          (numberValue(json, 'displayOrder') ??
+                  numberValue(json, 'display_order') ??
+                  0)
+              .toInt(),
     );
   }
+}
+
+bool? boolValue(Map<String, dynamic> json, String key) {
+  final value = json[key];
+  return value is bool ? value : null;
 }
 
 String? stringValue(Map<String, dynamic> json, String key) {
@@ -381,4 +476,8 @@ List<String> stringList(Object? value) {
 List<Map<String, dynamic>> objectList(Object? value) {
   if (value is! List) return const [];
   return value.whereType<Map<String, dynamic>>().toList(growable: false);
+}
+
+Map<String, dynamic> objectMap(Object? value) {
+  return value is Map<String, dynamic> ? value : const <String, dynamic>{};
 }

@@ -128,9 +128,9 @@ export function DesktopSidebar({ event, events = [], showPlatformLink = false, o
   return (
     <aside className="desktop-sidebar">
       <div className="sidebar-brand">
-        <span className="brand-mark">A</span>
+        <img className="brand-icon" src="/brand/app_icon.png" alt="" aria-hidden="true" />
         <div>
-          <strong>Ahadi</strong>
+          <img className="brand-wordmark" src="/brand/wordmark.png" alt="Changisha" />
           <small>Pledge collections</small>
         </div>
       </div>

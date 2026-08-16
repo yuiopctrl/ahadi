@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/theme/ahadi_theme.dart';
 import '../../auth/data/session_controller.dart';
+import '../../billing/presentation/subscription_screen.dart';
 import '../../contacts/presentation/contacts_screen.dart';
 import '../../dashboard/presentation/dashboard_screen.dart';
 import '../../events/presentation/events_screen.dart';
@@ -381,6 +382,17 @@ class _MorePage extends StatelessWidget {
                 onTap: () => Navigator.of(context).push(
                   MaterialPageRoute(
                     builder: (_) => ReportsScreen(controller: controller),
+                  ),
+                ),
+              ),
+              const Divider(height: 1),
+              ListTile(
+                leading: const _MenuIcon(Icons.credit_card_outlined),
+                title: const Text('Subscription'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => SubscriptionScreen(controller: controller),
                   ),
                 ),
               ),
