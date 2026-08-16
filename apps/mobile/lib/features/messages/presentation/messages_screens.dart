@@ -630,7 +630,6 @@ class _MessageDetailScreenState extends State<_MessageDetailScreen> {
               ),
               AhadiInfoRow(label: 'Event', value: c.eventName),
               AhadiInfoRow(label: 'Created', value: dateText(c.createdAt)),
-              AhadiInfoRow(label: 'Provider', value: c.provider),
               AhadiInfoRow(label: 'Sender', value: c.senderId),
             ],
           ),

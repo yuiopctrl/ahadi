@@ -11,6 +11,7 @@ import '../../messages/presentation/messages_screens.dart';
 import '../../organizations/presentation/create_organization_screen.dart';
 import '../../organizations/presentation/organization_selection_screen.dart';
 import '../../pledges/presentation/pledges_screen.dart';
+import '../../profile/presentation/change_pin_screen.dart';
 import '../../profile/presentation/profile_screen.dart';
 import '../../reports/presentation/reports_screen.dart';
 import '../../users/presentation/users_roles_screen.dart';
@@ -86,15 +87,25 @@ class _MobileShellState extends State<MobileShell> {
           ],
         ),
         actions: [
-          IconButton(
-            tooltip: 'Account',
-            onPressed: () => setState(() => index = 3),
-            style: IconButton.styleFrom(
-              shape: const CircleBorder(),
-              side: const BorderSide(color: AhadiColors.border),
-              foregroundColor: AhadiColors.primary,
+          Padding(
+            padding: const EdgeInsets.only(right: 12),
+            child: InkWell(
+              key: const Key('top-account-avatar'),
+              customBorder: const CircleBorder(),
+              onTap: () => _showAccountSheet(context),
+              child: CircleAvatar(
+                radius: 18,
+                backgroundColor: AhadiColors.primary,
+                child: Text(
+                  _initials(widget.controller.userContext?.profile?.fullName),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 14,
+                  ),
+                ),
+              ),
             ),
-            icon: const Icon(Icons.person_outline),
           ),
         ],
       ),
@@ -207,6 +218,80 @@ class _MobileShellState extends State<MobileShell> {
                       ),
                     ),
                   );
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  String _initials(String? fullName) {
+    final trimmed = fullName?.trim() ?? '';
+    if (trimmed.isEmpty) return 'A';
+    final parts = trimmed.split(RegExp(r'\s+'));
+    if (parts.length == 1) return parts.first.substring(0, 1).toUpperCase();
+    return (parts.first.substring(0, 1) + parts.last.substring(0, 1))
+        .toUpperCase();
+  }
+
+  void _showAccountSheet(BuildContext context) {
+    final profile = widget.controller.userContext?.profile;
+    final name = profile?.fullName.isNotEmpty == true
+        ? profile!.fullName
+        : 'Ahadi user';
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) {
+        return SafeArea(
+          child: ListView(
+            shrinkWrap: true,
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
+            children: [
+              ListTile(
+                leading: CircleAvatar(
+                  radius: 20,
+                  backgroundColor: AhadiColors.primary,
+                  child: Text(
+                    _initials(profile?.fullName),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+                title: Text(
+                  name,
+                  style: const TextStyle(fontWeight: FontWeight.w800),
+                ),
+                subtitle: profile != null ? Text(profile.phoneE164) : null,
+              ),
+              const Divider(),
+              ListTile(
+                leading: const _MenuIcon(Icons.pin_outlined),
+                title: const Text('Change PIN'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () {
+                  Navigator.of(context).pop();
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) =>
+                          ChangePinScreen(controller: widget.controller),
+                    ),
+                  );
+                },
+              ),
+              const Divider(height: 1),
+              ListTile(
+                leading: const _MenuIcon(Icons.logout_outlined),
+                title: const Text('Sign out'),
+                onTap: () async {
+                  final navigator = Navigator.of(context, rootNavigator: true);
+                  Navigator.of(context).pop();
+                  await widget.controller.signOut();
+                  navigator.popUntil((route) => route.isFirst);
                 },
               ),
             ],

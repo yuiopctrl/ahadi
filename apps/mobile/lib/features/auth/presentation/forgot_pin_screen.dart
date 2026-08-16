@@ -105,13 +105,9 @@ class _ForgotPinScreenState extends State<ForgotPinScreen> {
                   ),
                 ],
                 if (step == ForgotPinStep.newPin) ...[
-                  const Text(
-                    'New PIN',
-                    style: TextStyle(fontWeight: FontWeight.w700),
-                  ),
-                  const SizedBox(height: 8),
                   PinInput(
                     key: const Key('new-pin-input'),
+                    label: 'New PIN',
                     onCompleted: (pin) => pendingPin = pin,
                     enabled: !widget.controller.isSubmitting,
                   ),

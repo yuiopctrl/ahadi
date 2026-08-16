@@ -242,6 +242,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
           PinInput(
             key: confirmPinKey,
             enabled: !busy,
+            label: 'Confirm PIN',
             onCompleted: (_) => _setPin(),
           ),
           const SizedBox(height: 16),
