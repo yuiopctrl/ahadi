@@ -41,9 +41,9 @@ export function PlatformAppLayout() {
     <div className="platform-layout">
       <aside className="platform-sidebar">
         <div className="platform-brand">
-          <span className="brand-mark">A</span>
+          <img className="brand-icon" src="/brand/app_icon.png" alt="" aria-hidden="true" />
           <div>
-            <strong>Ahadi Platform</strong>
+            <img className="brand-wordmark brand-wordmark-invert" src="/brand/wordmark.png" alt="Changisha" />
             <small>Owner console</small>
           </div>
         </div>

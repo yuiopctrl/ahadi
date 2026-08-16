@@ -114,30 +114,75 @@ a {
   font-weight: 800;
 }
 
+.brand-icon {
+  width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
+  border-radius: 8px;
+  object-fit: cover;
+}
+
+.brand-wordmark {
+  display: block;
+  width: min(168px, 42vw);
+  height: 22px;
+  object-fit: contain;
+  object-position: left center;
+}
+
+.brand-wordmark-invert {
+  filter: brightness(0) invert(1);
+}
+
+.page-header-logo {
+  display: block;
+  width: 124px;
+  max-width: 42vw;
+  height: auto;
+  margin-bottom: 8px;
+}
+
 .auth-layout {
   display: grid;
   min-height: 100svh;
   place-items: center;
   padding: 20px;
   background:
-    linear-gradient(180deg, rgba(143, 29, 44, 0.08), rgba(247, 245, 242, 0)),
+    linear-gradient(180deg, rgba(143, 29, 44, 0.1), rgba(247, 245, 242, 0) 55%),
     var(--color-background);
 }
 
 .auth-panel {
   width: min(100%, 440px);
   border: 1px solid var(--color-border);
-  border-radius: 8px;
+  border-radius: 20px;
   background: var(--color-card);
   box-shadow: var(--shadow-soft);
-  padding: 22px;
+  padding: 36px 28px 28px;
 }
 
 .auth-brand {
   display: flex;
-  gap: 12px;
+  flex-direction: column;
   align-items: center;
-  padding-bottom: 20px;
+  gap: 4px;
+  text-align: center;
+  padding-bottom: 28px;
+}
+
+.auth-brand .brand-icon {
+  width: 84px;
+  height: 84px;
+  flex: 0 0 84px;
+  border-radius: 22px;
+  margin-bottom: 12px;
+  box-shadow: 0 12px 28px rgba(143, 29, 44, 0.22);
+}
+
+.auth-brand .brand-wordmark {
+  width: min(200px, 55vw);
+  height: 30px;
+  margin: 0 auto;
 }
 
 .auth-brand strong,
@@ -160,13 +205,17 @@ a {
 
 .auth-form {
   display: grid;
-  gap: 16px;
+  gap: 18px;
+}
+
+.auth-form > div:first-child {
+  text-align: center;
 }
 
 .auth-form h1 {
   margin: 0 0 6px;
-  font-size: 28px;
-  line-height: 1.1;
+  font-size: 26px;
+  line-height: 1.2;
 }
 
 .auth-form p {
@@ -190,11 +239,14 @@ a {
   min-height: 48px;
   width: 100%;
   border: 1px solid var(--color-border);
-  border-radius: 8px;
+  border-radius: 10px;
   background: white;
   color: var(--color-text);
   padding: 0 14px;
   outline: none;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
 }
 
 .auth-form input:focus,
@@ -211,15 +263,26 @@ a {
 .mobile-action-bar button {
   min-height: 48px;
   border: 0;
-  border-radius: 8px;
+  border-radius: 10px;
   background: var(--color-primary);
   color: white;
   cursor: pointer;
   font-weight: 800;
+  transition:
+    background 0.15s ease,
+    box-shadow 0.15s ease,
+    transform 0.15s ease;
 }
 
 .primary-button {
   width: 100%;
+}
+
+.primary-button:not(:disabled):hover,
+.desktop-primary-button:not(:disabled):hover,
+.mobile-action-bar button:not(:disabled):hover {
+  background: var(--color-primary-strong);
+  box-shadow: 0 8px 20px rgba(143, 29, 44, 0.24);
 }
 
 .auth-form button:disabled,
@@ -295,11 +358,111 @@ a {
   color: var(--color-primary);
   cursor: pointer;
   font-weight: 800;
+  border-radius: 8px;
+  transition: background 0.15s ease;
+}
+
+.text-button:not(:disabled):hover {
+  background: var(--color-primary-soft);
 }
 
 .tenant-card-stack {
   display: grid;
   gap: 10px;
+}
+
+.invitation-stack {
+  display: grid;
+  gap: 12px;
+}
+
+.invitation-card {
+  display: grid;
+  gap: 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: white;
+  padding: 16px;
+}
+
+.invitation-card-header {
+  display: grid;
+  grid-template-columns: 44px 1fr;
+  gap: 12px;
+  align-items: start;
+}
+
+.invitation-card-header strong,
+.invitation-card-header span,
+.invitation-detail strong,
+.invitation-detail small {
+  display: block;
+}
+
+.invitation-card-header small,
+.invitation-detail small {
+  color: var(--color-muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.invitation-card-header strong {
+  margin-top: 2px;
+  color: var(--color-text);
+  font-size: 18px;
+  line-height: 1.2;
+}
+
+.invitation-card-header span {
+  margin-top: 4px;
+  color: var(--color-muted);
+  font-size: 14px;
+  line-height: 1.35;
+}
+
+.invitation-icon {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  border: 1px solid var(--color-primary);
+  border-radius: 8px;
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+}
+
+.invitation-detail {
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-background);
+  padding: 12px;
+}
+
+.invitation-detail strong {
+  margin-top: 3px;
+  color: var(--color-text);
+  font-size: 14px;
+  line-height: 1.35;
+  text-transform: capitalize;
+}
+
+.invitation-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 10px;
+}
+
+.invitation-actions button {
+  min-height: 48px;
+  width: 100%;
+  border-radius: 8px;
+  font-weight: 800;
+}
+
+.invitation-actions button:not(.primary-button) {
+  border: 1px solid var(--color-border);
+  background: white;
+  color: var(--color-text);
 }
 
 .tenant-card {
@@ -1639,6 +1802,10 @@ a {
   color: var(--color-primary);
 }
 
+.platform-sidebar .brand-icon {
+  border: 1px solid rgba(255, 255, 255, 0.22);
+}
+
 .platform-sidebar nav {
   display: flex;
   gap: 8px;
@@ -2120,6 +2287,26 @@ th {
 .review-stack {
   display: grid;
   gap: 14px;
+}
+
+.section-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.section-heading h2 {
+  margin: 0;
+  color: var(--color-text);
+  font-size: 18px;
+}
+
+.section-heading p {
+  margin: 4px 0 0;
+  color: var(--color-muted);
+  font-size: 13px;
+  line-height: 1.45;
 }
 
 .payment-context-panel {

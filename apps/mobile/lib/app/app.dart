@@ -51,7 +51,7 @@ class _AhadiAppState extends State<AhadiApp> {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Ahadi',
+      title: 'Changisha',
       debugShowCheckedModeBanner: false,
       theme: ahadiTheme(),
       home: AnimatedBuilder(

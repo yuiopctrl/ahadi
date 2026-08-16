@@ -49,26 +49,40 @@ class _LoginScreenState extends State<LoginScreen> {
                 padding: const EdgeInsets.all(20),
                 child: ConstrainedBox(
                   constraints: const BoxConstraints(maxWidth: 440),
-                  child: Card(
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: AhadiColors.surface,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: AhadiColors.border),
+                      boxShadow: [
+                        BoxShadow(
+                          color: AhadiColors.text.withValues(alpha: 0.06),
+                          blurRadius: 48,
+                          offset: const Offset(0, 18),
+                        ),
+                      ],
+                    ),
                     child: Padding(
-                      padding: const EdgeInsets.all(20),
+                      padding: const EdgeInsets.fromLTRB(24, 32, 24, 24),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          const BrandHeader(subtitle: 'Mobile'),
-                          const SizedBox(height: 28),
+                          const BrandHeader(),
+                          const SizedBox(height: 32),
                           Text(
                             'Sign in',
+                            textAlign: TextAlign.center,
                             style: Theme.of(context).textTheme.headlineSmall
                                 ?.copyWith(fontWeight: FontWeight.w800),
                           ),
                           const SizedBox(height: 8),
                           Text(
                             'Use your verified phone number and 4 digit PIN.',
+                            textAlign: TextAlign.center,
                             style: Theme.of(context).textTheme.bodyMedium
                                 ?.copyWith(color: AhadiColors.muted),
                           ),
-                          const SizedBox(height: 20),
+                          const SizedBox(height: 24),
                           TextField(
                             key: const Key('phone-input'),
                             controller: phoneController,

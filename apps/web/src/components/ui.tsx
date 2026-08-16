@@ -26,7 +26,7 @@ export function PageHeader({ title, description, action }: PageHeaderProps) {
   return (
     <header className="page-header">
       <div>
-        <p className="eyebrow">Ahadi</p>
+        <img className="page-header-logo" src="/brand/wordmark.png" alt="Changisha" />
         <h1>{title}</h1>
         {description ? <p className="page-description">{description}</p> : null}
       </div>

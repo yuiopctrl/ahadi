@@ -20,9 +20,9 @@ import {
 import { useEffect, useMemo, useState } from 'react'
 import type { FormEvent, ReactNode } from 'react'
 import { Link, NavLink, useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import type { EventSummary } from '@ahadi/types'
+import type { EventSummary, SubscriptionPlan } from '@ahadi/types'
 import { PinEntry, canSubmitPin } from '../components/pin-entry'
-import { DataTable, EmptyState, ErrorState, LoadingState, PageContainer, PageHeader, SearchInput, StatCard, StatusBadge } from '../components/ui'
+import { DataTable, EmptyState, ErrorState, LoadingState, MoneyDisplay, PageContainer, PageHeader, SearchInput, StatCard, StatusBadge } from '../components/ui'
 import type { DataTableColumn } from '../components/ui'
 import { api, ApiClientError } from '../lib/api'
 import { useSessionStore } from '../stores/session-store'
@@ -196,6 +196,45 @@ function moneyText(value: unknown) {
   return new Intl.NumberFormat('en-TZ', { style: 'currency', currency: 'TZS', maximumFractionDigits: 0 }).format(asNumber(value))
 }
 
+function billingIntervalText(value: unknown) {
+  return asString(value, 'CUSTOM').toLowerCase().replaceAll('_', ' ')
+}
+
+function activeEventLimitLabel(value: unknown) {
+  const limit = asNumber(value)
+  if (limit <= 0) return 'No active events'
+  return limit === 1 ? '1 active event' : `${limit} active events`
+}
+
+function usageNumber(row: Row, keys: string[]) {
+  for (const key of keys) {
+    const value = row[key]
+    if (value !== undefined && value !== null && value !== '') return asNumber(value)
+  }
+  return 0
+}
+
+function normalizePlanRow(row: Row): SubscriptionPlan {
+  return {
+    id: asString(row.id),
+    code: asString(row.code),
+    name: asString(row.name, asString(row.code, 'Package')),
+    description: asString(row.description),
+    currency: asString(row.currency, 'TZS'),
+    priceAmount: asNumber(row.priceAmount ?? row.price_amount),
+    billingInterval: asString(row.billingInterval ?? row.billing_interval, 'CUSTOM') as SubscriptionPlan['billingInterval'],
+    trialDays: asNumber(row.trialDays ?? row.trial_days),
+    maxActiveEvents: asNumber(row.maxActiveEvents ?? row.max_active_events),
+    maxMembers: asNumber(row.maxMembers ?? row.max_members),
+    maxUsers: asNumber(row.maxUsers ?? row.max_users),
+    includedSms: asNumber(row.includedSms ?? row.included_sms),
+    features: jsonRecord(row.features),
+    isPublic: row.isPublic !== false && row.is_public !== false,
+    isActive: row.isActive !== false && row.is_active !== false,
+    displayOrder: asNumber(row.displayOrder ?? row.display_order),
+  }
+}
+
 function normalizeWhatsappSummaryRows(value: unknown): WhatsappSummaryRow[] {
   if (!Array.isArray(value)) return defaultWhatsappSummaryRows
   const rows = value.map((row, index) => {
@@ -232,9 +271,9 @@ function normalizeWhatsappAlamaLabels(value: unknown): WhatsappAlamaLabels {
 }
 
 function statusTone(status: unknown): 'success' | 'warning' | 'danger' | 'neutral' {
-  if (status === 'PAID' || status === 'CONFIRMED' || status === 'ACTIVE') return 'success'
-  if (status === 'OVERDUE' || status === 'REVERSED' || status === 'CANCELLED') return 'danger'
-  if (status === 'PARTIALLY_PAID' || status === 'PENDING') return 'warning'
+  if (status === 'PAID' || status === 'CONFIRMED' || status === 'ACTIVE' || status === 'TRIAL') return 'success'
+  if (status === 'OVERDUE' || status === 'REVERSED' || status === 'CANCELLED' || status === 'SUSPENDED') return 'danger'
+  if (status === 'PARTIALLY_PAID' || status === 'PENDING' || status === 'PAST_DUE' || status === 'EXPIRED') return 'warning'
   return 'neutral'
 }
 
@@ -3275,26 +3314,85 @@ export function TenantBillingPage() {
   const session = useSessionStore()
   const tenantId = session.selectedTenantId
   const billing = useQuery({ queryKey: ['tenant-billing-summary', tenantId], queryFn: async () => (await api.billingSummary(tenantId ?? '')).data, enabled: Boolean(tenantId) })
+  const plans = useQuery({ queryKey: ['public-plans'], queryFn: async () => ((await api.plans()).data as Row[]).map(normalizePlanRow) })
 
   if (!tenantId) return <ErrorState title="Unable to load billing" message="Select a tenant first." />
   if (billing.isLoading) return <LoadingState title="Loading billing" message="Fetching subscription invoices and gateway status." />
   if (billing.isError || !billing.data) return <ErrorState title="Unable to load billing" message={errorMessage(billing.error, 'Billing could not be loaded.')} />
 
   const subscription = jsonRecord(billing.data.subscription)
+  const limits = jsonRecord(subscription.limits)
+  const eventUsage = jsonRecord(subscription.eventUsage ?? subscription.event_usage)
+  const usage = Object.keys(eventUsage).length ? eventUsage : limits
+  const usedEventSlots = usageNumber(usage, ['used', 'usedEventSlots', 'used_event_slots'])
+  const maxEventSlots = usageNumber(usage, ['limit', 'maxEventSlots', 'max_event_slots'])
+  const availableEventSlots = usageNumber(usage, ['available', 'availableEventSlots', 'available_event_slots'])
+  const includedSms = usageNumber(limits, ['includedSms', 'included_sms'])
+  const usagePercent = maxEventSlots > 0 ? Math.min(100, Math.round((usedEventSlots / maxEventSlots) * 100)) : 0
   const invoices = rows(billing.data.invoices)
   const payments = rows(billing.data.payments)
   const pendingIntents = rows(billing.data.pendingIntents)
   const payableInvoices = invoices.filter(invoicePayable)
+  const currentPlanCode = asString(subscription.planCode ?? subscription.plan_code)
 
   return (
     <PageContainer>
-      <PageHeader title="Billing" description="Ahadi subscription invoices, verified payments and pending gateway attempts." action={<Link to="/app/settings">Settings</Link>} />
+      <PageHeader title="Billing" description="Tenant subscription status, package limits, invoices and verified payment attempts." action={<Link to="/app/settings">Settings</Link>} />
       <section className="stats-grid">
         <StatCard label="Package" value={asString(subscription.planName, 'Not set')} meta={asString(subscription.status, 'No status')} icon={FileText} />
         <StatCard label="Open Balance" value={moneyText(payableInvoices.reduce((sum, invoice) => sum + asNumber(invoice.amount_due ?? invoice.amountDue), 0))} meta={`${payableInvoices.length} payable invoices`} icon={CreditCard} tone={payableInvoices.length ? 'warning' : 'success'} />
         <StatCard label="Verified Payments" value={String(payments.length)} meta={`${pendingIntents.length} pending attempts`} icon={CheckCircle2} />
       </section>
       <section className="finance-card-list">
+        <article className="finance-card subscription-summary-card">
+          <div className="card-title-row">
+            <div><strong>{asString(subscription.planName, 'No package selected')}</strong><span>{session.selectedTenantContext?.tenant.name ?? 'Current organization'}</span></div>
+            <StatusBadge tone={statusTone(subscription.status)}>{asString(subscription.status, 'UNKNOWN')}</StatusBadge>
+          </div>
+          <div className="amount-triplet">
+            <span><small>{asString(subscription.status) === 'TRIAL' ? 'Trial Ends' : 'Renews'}</small>{asDate(subscription.trialEndsAt ?? subscription.trial_ends_at ?? subscription.currentPeriodEnd ?? subscription.current_period_end)}</span>
+            <span><small>Used Event Slots</small>{usedEventSlots} / {maxEventSlots}</span>
+            <span><small>Available Slots</small>{availableEventSlots}</span>
+          </div>
+          <progress max={100} value={usagePercent} aria-label="Event slot usage" />
+          <div className="card-actions">
+            <a href="#available-packages">Change Plan</a>
+          </div>
+        </article>
+        <article className="finance-card">
+          <div className="card-title-row">
+            <div><strong>Limits enforced by package</strong><span>Backend checks remain active even when buttons are hidden or disabled.</span></div>
+            <MessageCircle size={18} aria-hidden />
+          </div>
+          <div className="amount-triplet">
+            <span><small>Included SMS</small>{includedSms}</span>
+            <span><small>Members</small>{displayValue(limits.maxMembers ?? limits.max_members)}</span>
+            <span><small>Users</small>{displayValue(limits.maxUsers ?? limits.max_users)}</span>
+          </div>
+        </article>
+      </section>
+      <section className="finance-card-list" id="available-packages">
+        <div className="section-heading">
+          <div><h2>Available Packages</h2><p>Compare public packages. Upgrade and downgrade activation is handled through Ahadi billing until automated package switching is enabled.</p></div>
+        </div>
+        {plans.isLoading ? <LoadingState title="Loading packages" message="Fetching public subscription packages." /> : null}
+        {plans.isError ? <ErrorState title="Unable to load packages" message={errorMessage(plans.error, 'Packages could not be loaded.')} /> : null}
+        {(plans.data ?? []).map((plan) => (
+          <article className={plan.code === currentPlanCode ? 'package-card selected' : 'package-card'} key={plan.code}>
+            <div className="card-title-row">
+              <strong>{plan.code === currentPlanCode ? `${plan.name} · Current` : plan.name}</strong>
+              {plan.code === currentPlanCode ? <StatusBadge tone="success">CURRENT</StatusBadge> : null}
+            </div>
+            <MoneyDisplay amount={plan.priceAmount} currency={plan.currency} />
+            <span>{billingIntervalText(plan.billingInterval)} billing, {plan.trialDays} trial days</span>
+            <small>{activeEventLimitLabel(plan.maxActiveEvents)} · {plan.maxUsers} users · {plan.maxMembers} members · {plan.includedSms} SMS</small>
+          </article>
+        ))}
+      </section>
+      <section className="finance-card-list">
+        <div className="section-heading">
+          <div><h2>Invoices</h2><p>Subscription invoices and confirmed payment state from the existing billing integration.</p></div>
+        </div>
         {invoices.map((invoice) => (
           <article className="finance-card" key={asString(invoice.id)}>
             <div className="card-title-row">
