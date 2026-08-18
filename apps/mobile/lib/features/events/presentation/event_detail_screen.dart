@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/ahadi_theme.dart';
@@ -5,6 +7,7 @@ import '../../../core/widgets/formatters.dart';
 import '../../auth/data/session_controller.dart';
 import '../../auth/domain/auth_models.dart';
 import '../../contacts/presentation/contacts_screen.dart';
+import '../../financial/presentation/financial_screens.dart' hide objectList;
 import '../../pledges/presentation/pledge_form.dart';
 import '../../pledges/presentation/pledges_screen.dart';
 
@@ -110,6 +113,7 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
                     FilterTabItem(value: 0, label: 'Overview'),
                     FilterTabItem(value: 1, label: 'Members'),
                     FilterTabItem(value: 2, label: 'Pledges'),
+                    FilterTabItem(value: 3, label: 'Payments'),
                   ],
                   selected: tabIndex,
                   onChanged: (value) => setState(() => tabIndex = value),
@@ -131,6 +135,8 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
                     pledges: data.pledges,
                     onChanged: _refresh,
                   ),
+                if (tabIndex == 3)
+                  _PaymentsTab(controller: widget.controller, event: event),
               ],
             ),
           );
@@ -980,6 +986,185 @@ class _PledgesTabState extends State<_PledgesTab> {
                 : () => setState(() => page = effectivePage + 1),
           ),
         ],
+      ],
+    );
+  }
+}
+
+class _PaymentsTab extends StatefulWidget {
+  const _PaymentsTab({required this.controller, required this.event});
+
+  final SessionController controller;
+  final EventSummary event;
+
+  @override
+  State<_PaymentsTab> createState() => _PaymentsTabState();
+}
+
+class _PaymentsTabState extends State<_PaymentsTab> {
+  static const pageSize = 10;
+
+  final search = TextEditingController();
+  Timer? debounce;
+  late Future<Map<String, dynamic>> future;
+  int page = 1;
+
+  @override
+  void initState() {
+    super.initState();
+    future = _load();
+  }
+
+  @override
+  void dispose() {
+    debounce?.cancel();
+    search.dispose();
+    super.dispose();
+  }
+
+  Future<Map<String, dynamic>> _load() {
+    return widget.controller.eventReport(widget.event.id, 'payments', {
+      'page': page,
+      'pageSize': pageSize,
+      'search': search.text.trim(),
+      'sort': 'DATE',
+      'direction': 'DESC',
+    });
+  }
+
+  Future<void> _refresh() async {
+    setState(() => future = _load());
+    await future;
+  }
+
+  void _searchChanged(String _) {
+    debounce?.cancel();
+    debounce = Timer(const Duration(milliseconds: 300), () {
+      if (!mounted) return;
+      setState(() {
+        page = 1;
+        future = _load();
+      });
+    });
+  }
+
+  Future<void> _record() async {
+    final recorded = await Navigator.of(context).push<Map<String, dynamic>>(
+      MaterialPageRoute(
+        builder: (_) => RecordPaymentScreen(controller: widget.controller),
+      ),
+    );
+    if (recorded != null && mounted) await _refresh();
+  }
+
+  String _methodLabel(Map<String, dynamic> payment) {
+    final raw = stringFrom(
+      payment,
+      'paymentMethod',
+      stringFrom(payment, 'payment_method'),
+    );
+    if (raw.isEmpty) return 'Payment';
+    return raw
+        .replaceAll('_', ' ')
+        .toLowerCase()
+        .split(' ')
+        .map(
+          (part) => part.isEmpty
+              ? part
+              : '${part[0].toUpperCase()}${part.substring(1)}',
+        )
+        .join(' ');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final canRecord =
+        widget.controller.selectedEventId == widget.event.id &&
+        (widget.controller.selectedTenantContext?.isOwner == true ||
+            widget.controller.selectedTenantContext?.permissions.contains(
+                  'payments.create',
+                ) ==
+                true);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (canRecord)
+          FilledButton.icon(
+            onPressed: _record,
+            icon: const Icon(Icons.add),
+            label: const Text('Record Payment'),
+          ),
+        const SizedBox(height: 8),
+        TextField(
+          controller: search,
+          decoration: const InputDecoration(
+            labelText: 'Search payments',
+            prefixIcon: Icon(Icons.search),
+          ),
+          onChanged: _searchChanged,
+        ),
+        const SizedBox(height: 8),
+        FutureBuilder<Map<String, dynamic>>(
+          future: future,
+          builder: (context, snapshot) {
+            if (!snapshot.hasData) return const LoadingCards(count: 3);
+            final report = snapshot.data!;
+            final rows = objectList(report['data']);
+            if (rows.isEmpty) {
+              return const Card(
+                child: Padding(
+                  padding: EdgeInsets.all(16),
+                  child: Text('No payments found for this event.'),
+                ),
+              );
+            }
+            final pagination = objectMap(report['pagination']);
+            final totalPages =
+                numberFrom(pagination['totalPages'])?.round() ?? 1;
+            final totalRows =
+                numberFrom(pagination['totalRows'])?.round() ?? rows.length;
+            return Column(
+              children: [
+                ...rows.map(
+                  (payment) => AhadiListRow(
+                    title: titleCaseName(
+                      stringFrom(payment, 'member', 'Member'),
+                    ),
+                    subtitle:
+                        '${moneyText(payment['amount'])}\n${_methodLabel(payment)} • ${dateText(stringFrom(payment, 'date', stringFrom(payment, 'payment_date')))}',
+                    status: stringFrom(payment, 'status', 'CONFIRMED'),
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => PaymentDetailScreen(
+                          controller: widget.controller,
+                          payment: payment,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                _EventListPaginationControls(
+                  page: page - 1,
+                  totalPages: totalPages,
+                  totalRows: totalRows,
+                  label: 'payments',
+                  onPrevious: page <= 1
+                      ? null
+                      : () => setState(() {
+                          page -= 1;
+                          future = _load();
+                        }),
+                  onNext: page >= totalPages
+                      ? null
+                      : () => setState(() {
+                          page += 1;
+                          future = _load();
+                        }),
+                ),
+              ],
+            );
+          },
+        ),
       ],
     );
   }

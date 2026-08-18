@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/ahadi_theme.dart';
+import '../../../core/widgets/formatters.dart';
 import '../../auth/data/session_controller.dart';
 import '../../billing/presentation/subscription_screen.dart';
 import '../../contacts/presentation/contacts_screen.dart';
@@ -40,74 +41,164 @@ class _MobileShellState extends State<MobileShell> {
       PaymentsScreen(controller: widget.controller),
       _MorePage(controller: widget.controller),
     ];
+    final hasEvent = widget.controller.selectedEvent != null;
     return Scaffold(
       backgroundColor: AhadiColors.background,
-      appBar: AppBar(
-        titleSpacing: 8,
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            InkWell(
-              key: const Key('top-organization-switcher'),
-              onTap: () => _showOrganizationSheet(context),
-              child: Text(
-                tenantName,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: AhadiColors.text,
-                  fontWeight: FontWeight.w800,
-                  fontSize: 15,
-                ),
-              ),
-            ),
-            InkWell(
-              key: const Key('top-event-switcher'),
-              onTap: () => _showEventSheet(context),
+      appBar: PreferredSize(
+        preferredSize: const Size.fromHeight(96),
+        child: DecoratedBox(
+          decoration: const BoxDecoration(
+            color: AhadiColors.surface,
+            border: Border(bottom: BorderSide(color: AhadiColors.border)),
+          ),
+          child: SafeArea(
+            bottom: false,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 10, 12, 12),
               child: Row(
-                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  Flexible(
-                    child: Text(
-                      eventName,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: AhadiColors.muted,
-                        fontSize: 12,
-                      ),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        InkWell(
+                          key: const Key('top-organization-switcher'),
+                          borderRadius: BorderRadius.circular(8),
+                          onTap: () => _showOrganizationSheet(context),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 2),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(5),
+                                  decoration: BoxDecoration(
+                                    color: AhadiColors.primarySoft,
+                                    borderRadius: BorderRadius.circular(7),
+                                  ),
+                                  child: const Icon(
+                                    Icons.apartment_rounded,
+                                    size: 14,
+                                    color: AhadiColors.primary,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Flexible(
+                                  child: Text(
+                                    tenantName,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      color: AhadiColors.text,
+                                      fontWeight: FontWeight.w800,
+                                      fontSize: 16,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 2),
+                                const Icon(
+                                  Icons.unfold_more_rounded,
+                                  size: 16,
+                                  color: AhadiColors.muted,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        InkWell(
+                          key: const Key('top-event-switcher'),
+                          borderRadius: BorderRadius.circular(6),
+                          onTap: () => _showEventSheet(context),
+                          child: Container(
+                            padding: const EdgeInsets.fromLTRB(9, 5, 6, 5),
+                            decoration: BoxDecoration(
+                              color: AhadiColors.background,
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(color: AhadiColors.border),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                if (hasEvent)
+                                  Container(
+                                    width: 7,
+                                    height: 7,
+                                    decoration: BoxDecoration(
+                                      color: statusColor(
+                                        widget.controller.selectedEvent!.status,
+                                      ),
+                                      shape: BoxShape.circle,
+                                    ),
+                                  )
+                                else
+                                  const Icon(
+                                    Icons.event_outlined,
+                                    size: 13,
+                                    color: AhadiColors.muted,
+                                  ),
+                                const SizedBox(width: 6),
+                                Flexible(
+                                  child: Text(
+                                    eventName,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      color: hasEvent
+                                          ? AhadiColors.text
+                                          : AhadiColors.muted,
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 12.5,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 3),
+                                const Icon(
+                                  Icons.expand_more_rounded,
+                                  size: 15,
+                                  color: AhadiColors.muted,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                  const Icon(
-                    Icons.expand_more,
-                    size: 16,
-                    color: AhadiColors.muted,
+                  const SizedBox(width: 8),
+                  InkWell(
+                    key: const Key('top-account-avatar'),
+                    customBorder: const CircleBorder(),
+                    onTap: () => _showAccountSheet(context),
+                    child: Container(
+                      padding: const EdgeInsets.all(2),
+                      decoration: const BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.fromBorderSide(
+                          BorderSide(color: AhadiColors.border),
+                        ),
+                      ),
+                      child: CircleAvatar(
+                        radius: 17,
+                        backgroundColor: AhadiColors.primary,
+                        child: Text(
+                          _initials(
+                            widget.controller.userContext?.profile?.fullName,
+                          ),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w800,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                    ),
                   ),
                 ],
               ),
             ),
-          ],
-        ),
-        actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 12),
-            child: InkWell(
-              key: const Key('top-account-avatar'),
-              customBorder: const CircleBorder(),
-              onTap: () => _showAccountSheet(context),
-              child: CircleAvatar(
-                radius: 18,
-                backgroundColor: AhadiColors.primary,
-                child: Text(
-                  _initials(widget.controller.userContext?.profile?.fullName),
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w800,
-                    fontSize: 14,
-                  ),
-                ),
-              ),
-            ),
           ),
-        ],
+        ),
       ),
       body: Column(
         children: [
@@ -333,7 +424,10 @@ class _MobileShellState extends State<MobileShell> {
                       color: selected ? AhadiColors.success : null,
                     ),
                     title: Text(event.name),
-                    subtitle: Text(event.status),
+                    subtitle: Align(
+                      alignment: Alignment.centerLeft,
+                      child: StatusPill(status: event.status),
+                    ),
                     onTap: () async {
                       Navigator.of(context).pop();
                       await widget.controller.selectEvent(event.id);
