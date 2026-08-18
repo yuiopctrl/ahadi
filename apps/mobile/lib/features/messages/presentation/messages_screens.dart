@@ -83,7 +83,6 @@ class _MessageComposerState extends State<MessageComposer> {
   final search = TextEditingController();
   Timer? debounce;
   String query = '';
-  bool sending = false;
   String? error;
 
   @override
@@ -112,14 +111,7 @@ class _MessageComposerState extends State<MessageComposer> {
 
   Future<_ComposerData> _load() async {
     final recipients = await _eligibleRecipients();
-    final ids = _targetIds(recipients);
-    final preview = ids.isEmpty
-        ? <String, dynamic>{}
-        : await widget.controller.smsBulkPreview(widget.event.id, {
-            'templateCode': messageType,
-            'eventMemberIds': ids.take(25).toList(),
-          });
-    return _ComposerData(recipients: recipients, preview: preview);
+    return _ComposerData(recipients: recipients);
   }
 
   Future<List<Map<String, dynamic>>> _eligibleRecipients() async {
@@ -185,84 +177,33 @@ class _MessageComposerState extends State<MessageComposer> {
     });
   }
 
-  Future<void> _confirmSend(_ComposerData data) async {
+  Future<void> _openPreview(_ComposerData data) async {
     final ids = _targetIds(data.recipients);
     if (ids.isEmpty) {
       setState(() => error = 'No eligible members found.');
       return;
     }
-    final settings = await widget.controller.smsSettings().catchError(
-      (_) => <String, dynamic>{},
-    );
-    if (!mounted) return;
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Confirm Message'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            AhadiInfoRow(label: 'Event', value: widget.event.name),
-            AhadiInfoRow(label: 'Type', value: _messageTypeLabel(messageType)),
-            AhadiInfoRow(label: 'Recipients', value: '${ids.length}'),
-            AhadiInfoRow(
-              label: 'Provider',
-              value: _text(settings, ['provider', 'smsProvider'], '-'),
-            ),
-            AhadiInfoRow(
-              label: 'Sender',
-              value: _text(settings, ['senderId', 'sender_id'], '-'),
-            ),
-          ],
+    setState(() => error = null);
+    final queued = await Navigator.of(context).push<int>(
+      MaterialPageRoute(
+        builder: (_) => _MessagePreviewScreen(
+          controller: widget.controller,
+          event: widget.event,
+          messageType: messageType,
+          targetIds: ids,
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: Text('Send ${ids.length} Messages'),
-          ),
-        ],
       ),
     );
-    if (confirmed != true) return;
-    setState(() {
-      sending = true;
-      error = null;
-    });
-    try {
-      final response = messageType == 'PLEDGE_REQUEST'
-          ? await widget.controller.sendPledgeRequestBulk(widget.event.id, ids)
-          : await widget.controller.sendBalanceReminderBulk(
-              widget.event.id,
-              ids,
-            );
-      final queued =
-          numberFrom(
-            response['queued'] ?? response['queuedCount'] ?? response['count'],
-          )?.round() ??
-          ids.length;
-      selected.clear();
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Messages queued successfully. $queued recipients.'),
-          ),
-        );
-        widget.onSent?.call();
-      }
-    } catch (err) {
-      setState(
-        () => error = friendlyErrorText(
-          err,
-          'Unable to send messages. Please try again.',
+    if (queued == null) return;
+    selected.clear();
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Messages queued successfully. $queued recipients.'),
         ),
       );
-    } finally {
-      if (mounted) setState(() => sending = false);
     }
+    widget.onSent?.call();
   }
 
   @override
@@ -284,17 +225,6 @@ class _MessageComposerState extends State<MessageComposer> {
         final data = snapshot.data!;
         final recipients = _visibleRecipients(data.recipients);
         final ids = _targetIds(data.recipients);
-        final preview = data.preview;
-        final previewText = _text(preview, [
-          'samplePreview',
-          'message',
-          'preview',
-        ]);
-        final characters = numberFrom(
-          preview['samplePreviewCharacters'] ?? preview['characters'],
-        )?.round();
-        final maxCharacters =
-            numberFrom(preview['maxCharacters'])?.round() ?? 159;
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -312,16 +242,14 @@ class _MessageComposerState extends State<MessageComposer> {
                         ),
                       )
                       .toList(),
-                  onChanged: sending
-                      ? null
-                      : (value) {
-                          setState(() {
-                            messageType = value ?? 'BALANCE_REMINDER';
-                            recipientGroup = 'eligible';
-                            selected.clear();
-                            future = _load();
-                          });
-                        },
+                  onChanged: (value) {
+                    setState(() {
+                      messageType = value ?? 'BALANCE_REMINDER';
+                      recipientGroup = 'eligible';
+                      selected.clear();
+                      future = _load();
+                    });
+                  },
                 ),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
@@ -341,15 +269,13 @@ class _MessageComposerState extends State<MessageComposer> {
                       child: Text('Selected Members'),
                     ),
                   ],
-                  onChanged: sending
-                      ? null
-                      : (value) {
-                          setState(() {
-                            recipientGroup = value ?? 'eligible';
-                            selected.clear();
-                            future = _load();
-                          });
-                        },
+                  onChanged: (value) {
+                    setState(() {
+                      recipientGroup = value ?? 'eligible';
+                      selected.clear();
+                      future = _load();
+                    });
+                  },
                 ),
                 const SizedBox(height: 12),
                 AhadiInfoRow(
@@ -388,25 +314,6 @@ class _MessageComposerState extends State<MessageComposer> {
                 ],
               ],
             ),
-            if (previewText.isNotEmpty)
-              AhadiSectionCard(
-                title: 'Preview using sample recipient',
-                children: [
-                  Text(previewText),
-                  const SizedBox(height: 8),
-                  Text(
-                    characters == null
-                        ? 'SMS length validated by server'
-                        : '$characters / $maxCharacters',
-                    style: TextStyle(
-                      color: (characters ?? 0) > maxCharacters
-                          ? AhadiColors.danger
-                          : AhadiColors.muted,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ],
-              ),
             if (error != null)
               Padding(
                 padding: const EdgeInsets.only(bottom: 8),
@@ -417,11 +324,11 @@ class _MessageComposerState extends State<MessageComposer> {
               ),
             FilledButton.icon(
               key: const Key('send-message-button'),
-              onPressed: !canSend || sending || ids.isEmpty
+              onPressed: !canSend || ids.isEmpty
                   ? null
-                  : () => _confirmSend(data),
-              icon: const Icon(Icons.send_outlined),
-              label: Text(sending ? 'Sending...' : 'Continue'),
+                  : () => _openPreview(data),
+              icon: const Icon(Icons.visibility_outlined),
+              label: const Text('Preview Messages'),
             ),
             if (!canSend)
               const Padding(
@@ -434,6 +341,245 @@ class _MessageComposerState extends State<MessageComposer> {
           ],
         );
       },
+    );
+  }
+}
+
+class _MessagePreviewScreen extends StatefulWidget {
+  const _MessagePreviewScreen({
+    required this.controller,
+    required this.event,
+    required this.messageType,
+    required this.targetIds,
+  });
+
+  final SessionController controller;
+  final EventSummary event;
+  final String messageType;
+  final List<String> targetIds;
+
+  @override
+  State<_MessagePreviewScreen> createState() => _MessagePreviewScreenState();
+}
+
+class _MessagePreviewScreenState extends State<_MessagePreviewScreen> {
+  late Future<Map<String, dynamic>> future;
+  bool sending = false;
+  String? error;
+
+  @override
+  void initState() {
+    super.initState();
+    future = _load();
+  }
+
+  Future<Map<String, dynamic>> _load() {
+    return widget.controller.smsBulkPreview(widget.event.id, {
+      'templateCode': widget.messageType,
+      'eventMemberIds': widget.targetIds,
+    });
+  }
+
+  Future<void> _send(int recipientCount) async {
+    setState(() {
+      sending = true;
+      error = null;
+    });
+    try {
+      final response = widget.messageType == 'PLEDGE_REQUEST'
+          ? await widget.controller.sendPledgeRequestBulk(
+              widget.event.id,
+              widget.targetIds,
+            )
+          : await widget.controller.sendBalanceReminderBulk(
+              widget.event.id,
+              widget.targetIds,
+            );
+      final queued =
+          numberFrom(
+            response['queued'] ?? response['queuedCount'] ?? response['count'],
+          )?.round() ??
+          recipientCount;
+      if (mounted) Navigator.of(context).pop(queued);
+    } catch (err) {
+      setState(
+        () => error = friendlyErrorText(
+          err,
+          'Unable to send messages. Please try again.',
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => sending = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: AhadiColors.background,
+      appBar: AppBar(title: const Text('Preview Messages')),
+      body: FutureBuilder<Map<String, dynamic>>(
+        future: future,
+        builder: (context, snapshot) {
+          if (snapshot.hasError) {
+            return Padding(
+              padding: const EdgeInsets.all(16),
+              child: ErrorPanel(
+                message: friendlyErrorText(
+                  snapshot.error,
+                  'Unable to load message previews.',
+                ),
+                onRetry: () => setState(() => future = _load()),
+              ),
+            );
+          }
+          if (!snapshot.hasData) {
+            return const Padding(
+              padding: EdgeInsets.all(16),
+              child: LoadingCards(count: 4),
+            );
+          }
+          final data = snapshot.data!;
+          final previews = _list(data['previews']);
+          final maxCharacters =
+              numberFrom(data['maxCharacters'])?.round() ?? 159;
+          final skipped = <String>[
+            for (final entry in {
+              'No phone': data['noPhone'],
+              'SMS disabled': data['smsDisabled'],
+              'Recently sent': data['recentlySent'],
+              'Already pledged': data['hasPledge'],
+            }.entries)
+              if ((numberFrom(entry.value)?.round() ?? 0) > 0)
+                '${entry.key}: ${numberFrom(entry.value)!.round()}',
+          ];
+          return Column(
+            children: [
+              Expanded(
+                child: ListView(
+                  padding: const EdgeInsets.all(16),
+                  children: [
+                    AhadiSectionCard(
+                      title: 'Ready to Send',
+                      children: [
+                        AhadiInfoRow(label: 'Event', value: widget.event.name),
+                        AhadiInfoRow(
+                          label: 'Type',
+                          value: _messageTypeLabel(widget.messageType),
+                        ),
+                        AhadiInfoRow(
+                          label: 'Recipients',
+                          value: '${previews.length}',
+                        ),
+                        if (skipped.isNotEmpty)
+                          AhadiInfoRow(
+                            label: 'Skipped',
+                            value: skipped.join(' • '),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    if (previews.isEmpty)
+                      const Card(
+                        child: Padding(
+                          padding: EdgeInsets.all(16),
+                          child: Text(
+                            'No eligible members to preview for this selection.',
+                          ),
+                        ),
+                      )
+                    else
+                      ...previews.map((raw) {
+                        final preview = _map(raw);
+                        final member = _map(preview['member']);
+                        final characters =
+                            numberFrom(preview['characters'])?.round() ?? 0;
+                        final valid = preview['valid'] != false;
+                        return Card(
+                          margin: const EdgeInsets.only(bottom: 8),
+                          child: Padding(
+                            padding: const EdgeInsets.all(12),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        titleCaseName(
+                                          _text(member, ['name'], 'Member'),
+                                        ),
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.w800,
+                                        ),
+                                      ),
+                                    ),
+                                    Text(
+                                      _text(member, [
+                                        'phoneMasked',
+                                      ], 'No phone'),
+                                      style: const TextStyle(
+                                        color: AhadiColors.muted,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 6),
+                                Text(_text(preview, ['message'])),
+                                const SizedBox(height: 6),
+                                Text(
+                                  '$characters / $maxCharacters',
+                                  style: TextStyle(
+                                    color: valid
+                                        ? AhadiColors.muted
+                                        : AhadiColors.danger,
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      }),
+                  ],
+                ),
+              ),
+              SafeArea(
+                top: false,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      if (error != null) ...[
+                        Text(
+                          error!,
+                          style: const TextStyle(color: AhadiColors.danger),
+                        ),
+                        const SizedBox(height: 8),
+                      ],
+                      FilledButton.icon(
+                        key: const Key('confirm-send-messages-button'),
+                        onPressed: sending || previews.isEmpty
+                            ? null
+                            : () => _send(previews.length),
+                        icon: const Icon(Icons.send_outlined),
+                        label: Text(
+                          sending
+                              ? 'Sending...'
+                              : 'Send ${previews.length} Messages',
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          );
+        },
+      ),
     );
   }
 }
@@ -1088,10 +1234,9 @@ class _EventHeader extends StatelessWidget {
 }
 
 class _ComposerData {
-  const _ComposerData({required this.recipients, required this.preview});
+  const _ComposerData({required this.recipients});
 
   final List<Map<String, dynamic>> recipients;
-  final Map<String, dynamic> preview;
 }
 
 class _SettingsData {
@@ -1217,6 +1362,12 @@ List<Map<String, dynamic>> _list(Object? value) {
     }).toList();
   }
   return const [];
+}
+
+Map<String, dynamic> _map(Object? value) {
+  if (value is Map<String, dynamic>) return value;
+  if (value is Map) return value.map((key, value) => MapEntry('$key', value));
+  return const {};
 }
 
 String _text(

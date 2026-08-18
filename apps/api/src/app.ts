@@ -3332,6 +3332,22 @@ app.patch('/api/v1/members/:memberId', requireAuth, loadUserContext, requireTena
     const memberId = uuidParamSchema.parse(request.params['memberId'])
     const input = updateMemberSchema.parse(request.body)
     const client = createUserSupabase(request.auth?.accessToken ?? '')
+    if (input.phoneE164) {
+      const { data: duplicate, error: duplicateError } = await client
+        .from('members')
+        .select('id')
+        .eq('tenant_id', tenantId)
+        .eq('phone_e164', input.phoneE164)
+        .eq('status', 'ACTIVE')
+        .neq('id', memberId)
+        .maybeSingle()
+      if (duplicateError) {
+        throwFinancialDatabaseError(duplicateError, 'UPDATE_MEMBER_FAILED')
+      }
+      if (duplicate) {
+        throw new AppError('MEMBER_PHONE_ALREADY_EXISTS', 'Another contact already uses this phone number.')
+      }
+    }
     const update = {
       ...(input.fullName !== undefined ? { full_name: input.fullName } : {}),
       ...(input.phoneE164 !== undefined ? { phone_e164: input.phoneE164 || null } : {}),

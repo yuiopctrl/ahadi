@@ -47,9 +47,9 @@ class _MobileShellState extends State<MobileShell> {
       appBar: PreferredSize(
         preferredSize: const Size.fromHeight(96),
         child: DecoratedBox(
-          decoration: const BoxDecoration(
-            color: AhadiColors.surface,
-            border: Border(bottom: BorderSide(color: AhadiColors.border)),
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.surfaceContainer,
+            border: const Border(bottom: BorderSide(color: AhadiColors.border)),
           ),
           child: SafeArea(
             bottom: false,
