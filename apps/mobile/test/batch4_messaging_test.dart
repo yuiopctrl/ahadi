@@ -39,11 +39,12 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Balance Reminder'), findsWidgets);
-      expect(find.textContaining('salio lako'), findsOneWidget);
       await tester.tap(find.byKey(const Key('send-message-button')));
       await tester.pumpAndSettle();
-      expect(find.text('Confirm Message'), findsOneWidget);
-      await tester.tap(find.textContaining('Send ').last);
+
+      expect(find.text('Preview Messages'), findsOneWidget);
+      expect(find.textContaining('salio lako'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('confirm-send-messages-button')));
       await tester.pumpAndSettle();
 
       expect(api.sendBalanceReminderCalls, 1);

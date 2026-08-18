@@ -1088,14 +1088,42 @@ class FakeAhadiApi implements AhadiApi {
     lastTenantId = tenantId;
     lastEventId = eventId;
     lastSmsPreviewPayload = payload;
+    final templateCode = payload['templateCode'];
+    final ids =
+        (payload['eventMemberIds'] as List?)?.cast<String>() ?? const [];
+    final previews = ids.map((id) {
+      final name = id == 'em-a' ? 'Jane Contact' : 'Unpaid Contact';
+      final message = templateCode == 'PLEDGE_REQUEST'
+          ? 'Ndugu $name, tunaomba uweke ahadi kwa Main Event.'
+          : 'Ndugu $name, salio lako ni TZS 60,000.';
+      return {
+        'templateCode': templateCode,
+        'member': {
+          'eventMemberId': id,
+          'name': name,
+          'phoneMasked': '+255*****678',
+        },
+        'senderId': 'MICHANGO',
+        'message': message,
+        'characters': message.length,
+        'maxCharacters': 159,
+        'remainingCharacters': 159 - message.length,
+        'valid': true,
+        'reason': null,
+      };
+    }).toList();
     return {
-      'templateCode': payload['templateCode'],
-      'validMessages': (payload['eventMemberIds'] as List?)?.length ?? 0,
-      'samplePreview': payload['templateCode'] == 'PLEDGE_REQUEST'
-          ? 'Ndugu Unpaid Contact, tunaomba uweke ahadi kwa Main Event.'
-          : 'Ndugu Jane Contact, salio lako ni TZS 60,000.',
-      'samplePreviewCharacters': 55,
+      'templateCode': templateCode,
+      'selected': ids.length,
+      'eligible': ids.length,
+      'validMessages': ids.length,
+      'overCharacterLimit': 0,
+      'noPhone': 0,
+      'smsDisabled': 0,
+      'recentlySent': 0,
+      'hasPledge': 0,
       'maxCharacters': 159,
+      'previews': previews,
     };
   }
 

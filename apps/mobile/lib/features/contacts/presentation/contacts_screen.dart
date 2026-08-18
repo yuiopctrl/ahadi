@@ -317,8 +317,17 @@ class _ContactFormScreenState extends State<ContactFormScreen> {
         });
       }
       if (mounted) Navigator.of(context).pop(true);
+    } on FormatException {
+      setState(
+        () => error = 'Enter a valid Tanzanian phone number, e.g. 0712345678.',
+      );
     } catch (err) {
-      setState(() => error = err.toString());
+      setState(
+        () => error = friendlyErrorText(
+          err,
+          'Unable to save contact. Please try again.',
+        ),
+      );
     } finally {
       if (mounted) setState(() => saving = false);
     }
