@@ -3331,38 +3331,52 @@ app.patch('/api/v1/members/:memberId', requireAuth, loadUserContext, requireTena
     const tenantId = tenantIdFromRequest(request)
     const memberId = uuidParamSchema.parse(request.params['memberId'])
     const input = updateMemberSchema.parse(request.body)
+
     const client = createUserSupabase(request.auth?.accessToken ?? '')
-    if (input.phoneE164) {
-      const { data: duplicate, error: duplicateError } = await client
-        .from('members')
-        .select('id')
-        .eq('tenant_id', tenantId)
-        .eq('phone_e164', input.phoneE164)
-        .eq('status', 'ACTIVE')
-        .neq('id', memberId)
-        .maybeSingle()
-      if (duplicateError) {
-        throwFinancialDatabaseError(duplicateError, 'UPDATE_MEMBER_FAILED')
-      }
-      if (duplicate) {
-        throw new AppError('MEMBER_PHONE_ALREADY_EXISTS', 'Another contact already uses this phone number.')
-      }
-    }
-    const update = {
-      ...(input.fullName !== undefined ? { full_name: input.fullName } : {}),
-      ...(input.phoneE164 !== undefined ? { phone_e164: input.phoneE164 || null } : {}),
-      ...(input.alternativePhoneE164 !== undefined ? { alternative_phone_e164: input.alternativePhoneE164 || null } : {}),
-      ...(input.email !== undefined ? { email: input.email || null } : {}),
-      ...(input.location !== undefined ? { location: input.location || null } : {}),
-      ...(input.notes !== undefined ? { notes: input.notes || null } : {}),
-      ...(input.preferredLanguage !== undefined ? { preferred_language: input.preferredLanguage } : {}),
-      ...(input.smsEnabled !== undefined ? { sms_enabled: input.smsEnabled } : {}),
-      ...(input.status !== undefined ? { status: input.status, archived_by: input.status === 'ARCHIVED' ? request.auth?.user.id : null } : {}),
-    }
-    const { data, error } = await client.from('members').update(update).eq('tenant_id', tenantId).eq('id', memberId).select('*').single()
+
+    const { data, error } = await client.rpc('rpc_update_member', {
+      p_tenant_id: tenantId,
+      p_member_id: memberId,
+      p_patch: input,
+    })
+
     if (error) {
-      throwFinancialDatabaseError(error, 'UPDATE_MEMBER_FAILED')
+      logDatabaseError(
+        request.requestId,
+        'member-update',
+        error,
+        {
+          tenantId,
+          memberId,
+        },
+      )
+
+      const message = databaseMessage(error).toUpperCase()
+
+      if (
+        error.code === '23505' ||
+        message.includes('MEMBER_PHONE_ALREADY_EXISTS')
+      ) {
+        throw new AppError(
+          'MEMBER_PHONE_ALREADY_EXISTS',
+          'Another contact already uses this phone number.',
+        )
+      }
+
+      if (message.includes('MEMBER_NOT_FOUND')) {
+        throw new AppError(
+          'MEMBER_NOT_FOUND',
+          'Contact was not found.',
+          404,
+        )
+      }
+
+      throwFinancialDatabaseError(
+        error,
+        'UPDATE_MEMBER_FAILED',
+      )
     }
+
     response.json({ data })
   } catch (error) {
     next(error)
