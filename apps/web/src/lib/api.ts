@@ -206,6 +206,14 @@ export const api = {
     apiFetch<{ data: Record<string, unknown> }>(`/events/${eventId}/members`, { tenantId, method: 'POST', body: JSON.stringify(payload) }),
   updateMember: (tenantId: string, memberId: string, payload: Record<string, unknown>) =>
     apiFetch<{ data: Record<string, unknown> }>(`/members/${memberId}`, { tenantId, method: 'PATCH', body: JSON.stringify(payload) }),
+  activity: (tenantId: string, params: Record<string, string | number | undefined> = {}) => {
+    const query = new URLSearchParams()
+    for (const [key, value] of Object.entries(params)) {
+      if (value !== undefined && value !== '') query.set(key, String(value))
+    }
+    const suffix = query.toString()
+    return apiFetch<{ data: Record<string, unknown>[]; pagination: Record<string, unknown> }>(`/activity${suffix ? `?${suffix}` : ''}`, { tenantId })
+  },
   attachEventMember: (tenantId: string, eventId: string, payload: Record<string, unknown>) =>
     apiFetch<{ data: Record<string, unknown> }>(`/events/${eventId}/members/attach`, { tenantId, method: 'POST', body: JSON.stringify(payload) }),
   removeEventMember: (tenantId: string, eventId: string, eventMemberId: string, payload: Record<string, unknown> = {}) =>

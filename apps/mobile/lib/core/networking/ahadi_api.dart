@@ -201,6 +201,18 @@ abstract class AhadiApi {
     String outboxId,
     Map<String, dynamic> payload,
   );
+  Future<Map<String, dynamic>> activity(
+    String tenantId, {
+    String? search,
+    String? action,
+    String? entityType,
+    String? eventId,
+    String? actorUserId,
+    String? dateFrom,
+    String? dateTo,
+    int? limit,
+    int? offset,
+  });
 }
 
 class LoginResult {

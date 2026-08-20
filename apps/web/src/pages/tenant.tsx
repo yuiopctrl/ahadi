@@ -760,6 +760,199 @@ export function ContactDetailPage() {
   )
 }
 
+const activityActionLabels: Record<string, string> = {
+  'contact.created': 'Contact added',
+  'contact.updated': 'Contact edited',
+  'contact.archived': 'Contact archived',
+  'contact.reactivated': 'Contact reactivated',
+  'member.created': 'Member added',
+  'event_member.attached': 'Contact added to event',
+  'event_member.removed': 'Member removed from event',
+  'pledge.upserted': 'Pledge updated',
+  'pledge.cancelled': 'Pledge cancelled',
+  'payment.recorded': 'Payment recorded',
+  'payment.reversed': 'Payment reversed',
+  'event.created': 'Event created',
+  'user.invited': 'User invited',
+  'user.role_changed': 'User role changed',
+}
+
+function activityActionLabel(action: string) {
+  return activityActionLabels[action] ?? action.replaceAll('.', ' ').replaceAll('_', ' ').replace(/(^|\s)\S/g, (match) => match.toUpperCase())
+}
+
+const activityFieldLabels: Record<string, string> = {
+  full_name: 'Full Name',
+  phone_e164: 'Phone',
+  alternative_phone_e164: 'Alternative Phone',
+  email: 'Email',
+  location: 'Location',
+  notes: 'Notes',
+  status: 'Status',
+  sms_enabled: 'SMS Enabled',
+  preferred_language: 'Preferred Language',
+  pledged_amount: 'Pledge Amount',
+  payment_method: 'Payment Method',
+}
+
+function activityFieldLabel(key: string) {
+  return activityFieldLabels[key] ?? key.split('_').filter(Boolean).map((part) => part[0]?.toUpperCase() + part.slice(1)).join(' ')
+}
+
+function activityValueText(value: unknown) {
+  if (value === null || value === undefined) return '—'
+  if (typeof value === 'boolean') return value ? 'Yes' : 'No'
+  const text = String(value).trim()
+  return text ? text : '—'
+}
+
+function activitySubjectLabel(row: Row) {
+  const newValues = jsonRecord(row.newValues ?? row.new_values)
+  const oldValues = jsonRecord(row.oldValues ?? row.old_values)
+  const name = newValues.full_name ?? oldValues.full_name
+  if (typeof name === 'string' && name.trim()) return titleCaseMemberName(name, '')
+  return asString(row.eventName ?? row.event_name)
+}
+
+export function TenantActivityPage() {
+  const session = useSessionStore()
+  const tenantId = session.selectedTenantId
+  const [search, setSearch] = useState('')
+  const [entityType, setEntityType] = useState('')
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
+  const [offset, setOffset] = useState(0)
+  const [selected, setSelected] = useState<Row | null>(null)
+  const pageSize = 20
+
+  function updateSearch(value: string) { setSearch(value); setOffset(0) }
+  function updateEntityType(value: string) { setEntityType(value); setOffset(0) }
+  function updateDateFrom(value: string) { setDateFrom(value); setOffset(0) }
+  function updateDateTo(value: string) { setDateTo(value); setOffset(0) }
+
+  const activity = useQuery({
+    queryKey: ['activity', tenantId, search, entityType, dateFrom, dateTo, offset],
+    queryFn: () => api.activity(tenantId ?? '', { search, entityType, dateFrom, dateTo, limit: pageSize, offset }),
+    enabled: Boolean(tenantId),
+  })
+
+  const rows = activity.data?.data ?? []
+  const pagination = jsonRecord(activity.data?.pagination)
+  const hasMore = pagination.hasMore === true
+  const totalRows = asNumber(pagination.totalRows)
+
+  const columns: Array<DataTableColumn<Row>> = [
+    { key: 'when', header: 'Date & Time', render: (row) => <span>{asDateTime(row.createdAt ?? row.created_at)}</span> },
+    { key: 'user', header: 'User', render: (row) => <span>{asString(row.actorName ?? row.actor_name, 'System')}</span> },
+    { key: 'action', header: 'Action', render: (row) => <span>{activityActionLabel(asString(row.action))}</span> },
+    { key: 'item', header: 'Item', render: (row) => <span>{activitySubjectLabel(row) || '—'}</span> },
+    { key: 'event', header: 'Event', render: (row) => <span>{asString(row.eventName ?? row.event_name, '—')}</span> },
+    { key: 'details', header: 'Details', render: (row) => <button type="button" onClick={() => setSelected(row)}>View</button>, align: 'right' },
+  ]
+
+  if (!tenantId) return <ErrorState title="Unable to load activity" message="Select a tenant first." />
+  if (activity.isLoading) return <LoadingState title="Loading activity" message="Fetching organization activity." />
+  if (activity.isError) return <ErrorState title="Unable to load activity" message={errorMessage(activity.error, 'Activity could not be loaded.')} />
+
+  return (
+    <PageContainer>
+      <PageHeader title="Activity" description="A record of meaningful changes made across your organization." />
+      <DataTable
+        title="Organization Activity"
+        rows={rows}
+        columns={columns}
+        getRowKey={(row) => asString(row.id)}
+        searchValue={search}
+        onSearchChange={updateSearch}
+        searchPlaceholder="Search activity"
+        pageSizeOptions={[pageSize]}
+        initialPageSize={pageSize}
+        filters={(
+          <>
+            <label className="data-table-page-size">
+              <span>Item</span>
+              <select value={entityType} onChange={(event) => updateEntityType(event.target.value)}>
+                <option value="">All</option>
+                <option value="member">Contacts</option>
+                <option value="payment">Payments</option>
+                <option value="pledge">Pledges</option>
+                <option value="event">Events</option>
+                <option value="tenant_user">Users</option>
+              </select>
+            </label>
+            <label className="data-table-page-size">
+              <span>From</span>
+              <input type="date" value={dateFrom} onChange={(event) => updateDateFrom(event.target.value)} />
+            </label>
+            <label className="data-table-page-size">
+              <span>To</span>
+              <input type="date" value={dateTo} onChange={(event) => updateDateTo(event.target.value)} />
+            </label>
+          </>
+        )}
+        emptyTitle="No activity yet."
+        emptyMessage="Meaningful organization changes will appear here as they happen."
+        mobileRender={(row) => (
+          <>
+            <div><span>User</span><strong>{asString(row.actorName ?? row.actor_name, 'System')}</strong></div>
+            <div><span>Action</span><strong>{activityActionLabel(asString(row.action))}{activitySubjectLabel(row) ? `: ${activitySubjectLabel(row)}` : ''}</strong></div>
+            <div><span>When</span><strong>{asDateTime(row.createdAt ?? row.created_at)}</strong></div>
+            <div><span>Details</span><strong><button type="button" onClick={() => setSelected(row)}>View</button></strong></div>
+          </>
+        )}
+      />
+      <div className="inline-actions">
+        <button type="button" disabled={offset === 0} onClick={() => setOffset((current) => Math.max(0, current - pageSize))}>Previous</button>
+        <span>{totalRows ? `${offset + 1}-${Math.min(offset + pageSize, totalRows)} of ${totalRows}` : ''}</span>
+        <button type="button" disabled={!hasMore} onClick={() => setOffset((current) => current + pageSize)}>Next</button>
+      </div>
+      {selected ? <ActivityDetailPanel row={selected} onClose={() => setSelected(null)} /> : null}
+    </PageContainer>
+  )
+}
+
+function ActivityDetailPanel({ row, onClose }: { row: Row; onClose: () => void }) {
+  const newValues = jsonRecord(row.newValues ?? row.new_values)
+  const oldValues = jsonRecord(row.oldValues ?? row.old_values)
+  const changedKeys = Array.from(new Set([...Object.keys(oldValues), ...Object.keys(newValues)])).sort()
+  const reason = asString(row.reason)
+  const eventName = asString(row.eventName ?? row.event_name)
+
+  return (
+    <section className="mobile-sheet form-grid">
+      <div className="panel-header">
+        <div>
+          <h2>{activityActionLabel(asString(row.action))}</h2>
+          <p>{asDateTime(row.createdAt ?? row.created_at)}</p>
+        </div>
+      </div>
+      <div><span>Actor</span><strong>{asString(row.actorName ?? row.actor_name, 'System')}</strong></div>
+      <div><span>Entity</span><strong>{activityFieldLabel(asString(row.entityType ?? row.entity_type))}</strong></div>
+      {eventName ? <div><span>Event</span><strong>{eventName}</strong></div> : null}
+      {reason ? <div><span>Reason</span><strong>{reason}</strong></div> : null}
+      {changedKeys.length ? (
+        <div className="data-table-wrap">
+          <table className="data-table">
+            <thead><tr><th>Field</th><th>Old value</th><th>New value</th></tr></thead>
+            <tbody>
+              {changedKeys.map((key) => (
+                <tr key={key}>
+                  <td>{activityFieldLabel(key)}</td>
+                  <td>{activityValueText(oldValues[key])}</td>
+                  <td><strong>{activityValueText(newValues[key])}</strong></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : null}
+      <div className="sheet-actions">
+        <button type="button" onClick={onClose}>Close</button>
+      </div>
+    </section>
+  )
+}
+
 function CreateEventForm({ tenantId, onCancel, onCreated }: { tenantId: string; onCancel: () => void; onCreated: (created: Row) => Promise<void> }) {
   const [form, setForm] = useState({
     name: '',

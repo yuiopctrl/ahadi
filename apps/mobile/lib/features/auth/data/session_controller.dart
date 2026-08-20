@@ -436,6 +436,31 @@ class SessionController extends ChangeNotifier {
     return _api.availableContactsForEvent(_requireTenantId(), eventId);
   }
 
+  Future<Map<String, dynamic>> activity({
+    String? search,
+    String? action,
+    String? entityType,
+    String? eventId,
+    String? actorUserId,
+    String? dateFrom,
+    String? dateTo,
+    int? limit,
+    int? offset,
+  }) {
+    return _api.activity(
+      _requireTenantId(),
+      search: search,
+      action: action,
+      entityType: entityType,
+      eventId: eventId,
+      actorUserId: actorUserId,
+      dateFrom: dateFrom,
+      dateTo: dateTo,
+      limit: limit,
+      offset: offset,
+    );
+  }
+
   Future<Map<String, dynamic>> eventMemberDetail(
     String eventId,
     String eventMemberId,

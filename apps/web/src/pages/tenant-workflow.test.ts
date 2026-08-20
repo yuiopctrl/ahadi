@@ -82,8 +82,8 @@ test('mobile more opens an overflow menu instead of linking directly to settings
   assert.doesNotMatch(navigation, /to: '\/app\/settings', label: 'More'/)
   assert.match(navigation, /MobileBottomNav\(\{ event, showPlatformLink/)
   assert.match(navigation, /mobile-more-menu/)
-  assert.match(navigation, /overflowNav\(event, showPlatformLink, canManageUsers\)/)
-  for (const label of ['Pledges', 'Outstanding', 'Share List', 'Messages', 'Reports', 'Users & Roles', 'Change PIN', 'Settings']) {
+  assert.match(navigation, /overflowNav\(event, showPlatformLink, canManageUsers, canViewActivity\)/)
+  for (const label of ['Pledges', 'Outstanding', 'Share List', 'Messages', 'Reports', 'Activity', 'Users & Roles', 'Change PIN', 'Settings']) {
     assert.match(navigation, new RegExp(label))
   }
   assert.match(navigation, /permissions\.has\('users\.invite'\) \|\| permissions\.has\('users\.manage_roles'\) \|\| permissions\.has\('users\.suspend'\)/)
@@ -416,4 +416,27 @@ test('dashboard tabs, settings, and event nav active states are stabilized', () 
   assert.match(styles, /\.event-tabs a,[\s\S]*justify-content: center/)
   assert.match(styles, /\.event-tabs a,[\s\S]*text-align: center/)
   assert.match(styles, /@media \(min-width: 960px\)[\s\S]*\.settings-grid[\s\S]*grid-template-columns: repeat\(3, minmax\(0, 1fr\)\)/)
+})
+
+test('organization Activity is server-paginated, tenant-scoped, and gated by audit.view/isOwner', () => {
+  assert.match(routes, /\{ path: 'activity', element: <TenantActivityPage \/> \}/)
+  assert.match(tenantPage, /export function TenantActivityPage\(\)/)
+  assert.match(tenantPage, /queryKey: \['activity', tenantId, search, entityType, dateFrom, dateTo, offset\]/)
+  assert.match(tenantPage, /api\.activity\(tenantId \?\? '', \{ search, entityType, dateFrom, dateTo, limit: pageSize, offset \}\)/)
+  assert.doesNotMatch(tenantPage, /rpc_list_organization_activity/)
+
+  assert.match(navigation, /canViewActivity = permissions\.has\('audit\.view'\) \|\| Boolean\(session\.selectedTenantContext\?\.membership\?\.isOwner\)/)
+  assert.match(navigation, /canViewActivity \? \[\{ to: '\/app\/activity', label: 'Activity', icon: History \}\] : \[\]/)
+
+  assert.match(apiClient, /activity: \(tenantId: string, params: Record<string, string \| number \| undefined> = \{\}\) => \{/)
+})
+
+test('Activity detail humanizes actions and shows old/new field changes without raw JSON', () => {
+  assert.match(tenantPage, /'contact\.updated': 'Contact edited'/)
+  assert.match(tenantPage, /'contact\.archived': 'Contact archived'/)
+  assert.match(tenantPage, /'contact\.reactivated': 'Contact reactivated'/)
+  assert.match(tenantPage, /full_name: 'Full Name'/)
+  assert.match(tenantPage, /phone_e164: 'Phone'/)
+  assert.match(tenantPage, /function ActivityDetailPanel/)
+  assert.doesNotMatch(tenantPage, /JSON\.stringify\(row/)
 })

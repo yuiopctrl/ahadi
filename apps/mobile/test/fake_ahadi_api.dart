@@ -17,6 +17,9 @@ class FakeAhadiApi implements AhadiApi {
   int meCalls = 0;
   int tenantContextCalls = 0;
   int contactsCalls = 0;
+  int activityCalls = 0;
+  String? lastActivitySearch;
+  String? lastActivityEntityType;
   int eventMembersCalls = 0;
   int eventPledgesCalls = 0;
   int eventReportCalls = 0;
@@ -78,6 +81,36 @@ class FakeAhadiApi implements AhadiApi {
       'full_name': 'Jane Contact',
       'phone_e164': '+255712345678',
       'event_count': 1,
+    },
+  ];
+  List<Map<String, dynamic>> activityRows = [
+    {
+      'id': 2,
+      'created_at': '2026-08-20T11:42:00Z',
+      'action': 'contact.updated',
+      'entity_type': 'member',
+      'entity_id': 'member-a',
+      'event_id': null,
+      'event_name': null,
+      'actor_user_id': 'user-owner',
+      'actor_name': 'Fred Mushi',
+      'old_values': {'phone_e164': null},
+      'new_values': {'phone_e164': '+255712345678'},
+      'reason': null,
+    },
+    {
+      'id': 1,
+      'created_at': '2026-08-19T09:15:00Z',
+      'action': 'payment.recorded',
+      'entity_type': 'payment',
+      'entity_id': 'payment-a',
+      'event_id': 'event-1',
+      'event_name': 'Main Event',
+      'actor_user_id': 'user-owner',
+      'actor_name': 'Fred Mushi',
+      'old_values': null,
+      'new_values': {'amount': 50000},
+      'reason': null,
     },
   ];
   List<Map<String, dynamic>> tenantUserRows = [
@@ -400,6 +433,52 @@ class FakeAhadiApi implements AhadiApi {
       );
     }).toList();
     return filtered.skip(offset ?? 0).take(limit ?? filtered.length).toList();
+  }
+
+  @override
+  Future<Map<String, dynamic>> activity(
+    String tenantId, {
+    String? search,
+    String? action,
+    String? entityType,
+    String? eventId,
+    String? actorUserId,
+    String? dateFrom,
+    String? dateTo,
+    int? limit,
+    int? offset,
+  }) async {
+    activityCalls += 1;
+    lastTenantId = tenantId;
+    lastActivitySearch = search;
+    lastActivityEntityType = entityType;
+    final filtered = activityRows.where((row) {
+      if (entityType != null &&
+          entityType.isNotEmpty &&
+          row['entity_type'] != entityType) {
+        return false;
+      }
+      if (action != null && action.isNotEmpty && row['action'] != action) {
+        return false;
+      }
+      final query = search?.trim().toLowerCase() ?? '';
+      if (query.isEmpty) return true;
+      return '${row['actor_name']} ${row['action']}'.toLowerCase().contains(
+        query,
+      );
+    }).toList();
+    final effectiveLimit = limit ?? 20;
+    final effectiveOffset = offset ?? 0;
+    final page = filtered.skip(effectiveOffset).take(effectiveLimit).toList();
+    return {
+      'data': page,
+      'pagination': {
+        'limit': effectiveLimit,
+        'offset': effectiveOffset,
+        'totalRows': filtered.length,
+        'hasMore': effectiveOffset + effectiveLimit < filtered.length,
+      },
+    };
   }
 
   @override
