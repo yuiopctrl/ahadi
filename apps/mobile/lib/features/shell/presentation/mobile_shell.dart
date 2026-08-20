@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/theme/ahadi_theme.dart';
 import '../../../core/widgets/formatters.dart';
+import '../../activity/presentation/activity_screen.dart';
 import '../../auth/data/session_controller.dart';
 import '../../billing/presentation/subscription_screen.dart';
 import '../../contacts/presentation/contacts_screen.dart';
@@ -463,6 +464,10 @@ class _MorePage extends StatelessWidget {
         controller.selectedTenantContext?.isOwner == true ||
         controller.selectedTenantContext?.permissions.contains('users.view') ==
             true;
+    final canViewActivity =
+        controller.selectedTenantContext?.isOwner == true ||
+        controller.selectedTenantContext?.permissions.contains('audit.view') ==
+            true;
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
@@ -565,6 +570,19 @@ class _MorePage extends StatelessWidget {
                 ),
               ),
               const Divider(height: 1),
+              if (canViewActivity) ...[
+                ListTile(
+                  leading: const _MenuIcon(Icons.history_outlined),
+                  title: const Text('Activity'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => ActivityScreen(controller: controller),
+                    ),
+                  ),
+                ),
+                const Divider(height: 1),
+              ],
               ListTile(
                 leading: const _MenuIcon(Icons.credit_card_outlined),
                 title: const Text('Subscription'),

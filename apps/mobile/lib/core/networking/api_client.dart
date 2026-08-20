@@ -747,6 +747,40 @@ class ApiClient implements AhadiApi {
     return jsonMap(json['data']);
   }
 
+  @override
+  Future<Map<String, dynamic>> activity(
+    String tenantId, {
+    String? search,
+    String? action,
+    String? entityType,
+    String? eventId,
+    String? actorUserId,
+    String? dateFrom,
+    String? dateTo,
+    int? limit,
+    int? offset,
+  }) async {
+    final query = Uri(
+      queryParameters: {
+        if (search != null && search.trim().isNotEmpty) 'search': search,
+        if (action != null && action.isNotEmpty) 'action': action,
+        if (entityType != null && entityType.isNotEmpty)
+          'entityType': entityType,
+        if (eventId != null && eventId.isNotEmpty) 'eventId': eventId,
+        if (actorUserId != null && actorUserId.isNotEmpty)
+          'actorUserId': actorUserId,
+        if (dateFrom != null && dateFrom.isNotEmpty) 'dateFrom': dateFrom,
+        if (dateTo != null && dateTo.isNotEmpty) 'dateTo': dateTo,
+        if (limit != null) 'limit': '$limit',
+        if (offset != null) 'offset': '$offset',
+      },
+    ).query;
+    return _request(
+      query.isEmpty ? '/activity' : '/activity?$query',
+      tenantId: tenantId,
+    );
+  }
+
   Future<Map<String, dynamic>> _request(
     String path, {
     String method = 'GET',

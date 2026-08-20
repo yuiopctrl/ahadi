@@ -653,6 +653,18 @@ const listContactsQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).optional().default(20),
   offset: z.coerce.number().int().min(0).optional().default(0),
 })
+const isoDateLikeSchema = z.string().trim().min(1).refine((value) => !Number.isNaN(Date.parse(value)), 'Invalid date')
+const listActivityQuerySchema = z.object({
+  search: z.string().trim().max(160).optional().default(''),
+  action: z.string().trim().max(80).optional(),
+  entityType: z.string().trim().max(80).optional(),
+  eventId: z.string().uuid().optional(),
+  actorUserId: z.string().uuid().optional(),
+  dateFrom: isoDateLikeSchema.optional(),
+  dateTo: isoDateLikeSchema.optional(),
+  limit: z.coerce.number().int().min(1).max(100).optional().default(20),
+  offset: z.coerce.number().int().min(0).optional().default(0),
+})
 const listPledgesQuerySchema = z.object({
   search: z.string().trim().max(160).optional().default(''),
   status: z.string().trim().max(80).optional().default('ALL'),
@@ -4302,6 +4314,37 @@ app.get('/api/v1/receipts/:receiptId/print', requireAuth, loadUserContext, requi
       throwFinancialDatabaseError(error, 'RECEIPT_PRINT_FAILED')
     }
     response.json({ data })
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.get('/api/v1/activity', requireAuth, loadUserContext, requireTenantContext, async (request, response, next) => {
+  try {
+    const tenantId = tenantIdFromRequest(request)
+    const query = listActivityQuerySchema.parse(request.query)
+    const client = createUserSupabase(request.auth?.accessToken ?? '')
+    const { data, error } = await client.rpc('rpc_list_organization_activity', {
+      p_tenant_id: tenantId,
+      p_limit: query.limit,
+      p_offset: query.offset,
+      p_search: query.search || null,
+      p_action: query.action || null,
+      p_entity_type: query.entityType || null,
+      p_event_id: query.eventId || null,
+      p_actor_user_id: query.actorUserId || null,
+      p_date_from: query.dateFrom || null,
+      p_date_to: query.dateTo || null,
+    })
+    if (error) {
+      logDatabaseError(request.requestId, 'activity-list', error, { tenantId })
+      throwFinancialDatabaseError(error, 'ACTIVITY_LIST_FAILED')
+    }
+    const result = jsonRecord(data)
+    response.json({
+      data: jsonArray(result['data']),
+      pagination: jsonRecord(result['pagination']),
+    })
   } catch (error) {
     next(error)
   }

@@ -4,6 +4,7 @@ import {
   CreditCard,
   FileText,
   Gauge,
+  History,
   Home,
   KeyRound,
   LifeBuoy,
@@ -32,7 +33,7 @@ function mobileNav(event: EventSummary | null) {
   ]
 }
 
-function overflowNav(event: EventSummary | null, showPlatformLink = false, canManageUsers = false) {
+function overflowNav(event: EventSummary | null, showPlatformLink = false, canManageUsers = false, canViewActivity = false) {
   const eventBase = event ? `/app/events/${event.id}` : '/app/events'
   return [
     ...(showPlatformLink ? [{ to: '/platform', label: 'Platform Console', icon: ShieldCheck }] : []),
@@ -41,6 +42,7 @@ function overflowNav(event: EventSummary | null, showPlatformLink = false, canMa
     { to: event ? `${eventBase}/share` : '/app/events', label: 'Share List', icon: Share2 },
     { to: event ? `/app/messages?eventId=${event.id}` : '/app/messages', label: 'Messages', icon: MessageSquareText },
     { to: event ? `${eventBase}/reports` : '/app/reports', label: 'Reports', icon: FileText },
+    ...(canViewActivity ? [{ to: '/app/activity', label: 'Activity', icon: History }] : []),
     { to: '/app/settings/billing', label: 'Billing', icon: CreditCard },
     ...(canManageUsers ? [{ to: '/app/users', label: 'Users & Roles', icon: Users }] : []),
     { to: '/app/change-pin', label: 'Change PIN', icon: KeyRound },
@@ -49,7 +51,7 @@ function overflowNav(event: EventSummary | null, showPlatformLink = false, canMa
   ]
 }
 
-function desktopNav(event: EventSummary | null, canManageUsers = false) {
+function desktopNav(event: EventSummary | null, canManageUsers = false, canViewActivity = false) {
   const eventBase = event ? `/app/events/${event.id}` : '/app/events'
   return [
     { to: event ? eventBase : '/app', label: 'Dashboard', icon: Gauge, end: true },
@@ -62,6 +64,7 @@ function desktopNav(event: EventSummary | null, canManageUsers = false) {
     { to: event ? `${eventBase}/payments` : '/app/payments', label: 'Payments', icon: CreditCard },
     { to: event ? `/app/messages?eventId=${event.id}` : '/app/messages', label: 'Messages', icon: MessageSquareText },
     { to: event ? `${eventBase}/reports` : '/app/reports', label: 'Reports', icon: PieChart },
+    ...(canViewActivity ? [{ to: '/app/activity', label: 'Activity', icon: History }] : []),
     { to: '/app/settings/billing', label: 'Billing', icon: CreditCard },
     ...(canManageUsers ? [{ to: '/app/users', label: 'Users & Roles', icon: Users }] : []),
     { to: '/app/change-pin', label: 'Change PIN', icon: KeyRound },
@@ -82,8 +85,9 @@ export function MobileBottomNav({ event, showPlatformLink = false }: { event: Ev
   const session = useSessionStore()
   const permissions = new Set(session.selectedTenantContext?.permissions ?? [])
   const canManageUsers = permissions.has('users.invite') || permissions.has('users.manage_roles') || permissions.has('users.suspend')
+  const canViewActivity = permissions.has('audit.view') || Boolean(session.selectedTenantContext?.membership?.isOwner)
   const primaryItems = useMemo(() => mobileNav(event), [event])
-  const overflowItems = useMemo(() => overflowNav(event, showPlatformLink, canManageUsers), [canManageUsers, event, showPlatformLink])
+  const overflowItems = useMemo(() => overflowNav(event, showPlatformLink, canManageUsers, canViewActivity), [canManageUsers, canViewActivity, event, showPlatformLink])
 
   return (
     <>
@@ -124,7 +128,8 @@ export function DesktopSidebar({ event, events = [], showPlatformLink = false, o
   const session = useSessionStore()
   const permissions = new Set(session.selectedTenantContext?.permissions ?? [])
   const canManageUsers = permissions.has('users.invite') || permissions.has('users.manage_roles') || permissions.has('users.suspend')
-  const items = useMemo(() => desktopNav(event, canManageUsers), [canManageUsers, event])
+  const canViewActivity = permissions.has('audit.view') || Boolean(session.selectedTenantContext?.membership?.isOwner)
+  const items = useMemo(() => desktopNav(event, canManageUsers, canViewActivity), [canManageUsers, canViewActivity, event])
   return (
     <aside className="desktop-sidebar">
       <div className="sidebar-brand">
