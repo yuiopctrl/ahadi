@@ -426,6 +426,22 @@ const smsTemplateSaveSchema = templateBodySchema.extend({
   language: z.enum(['sw', 'en']).default('sw'),
 })
 
+const customTemplateSaveSchema = z.object({
+  name: z.string().trim().min(1).max(60),
+  body: z.string().trim().min(1).max(480),
+  language: z.enum(['sw', 'en']).default('sw'),
+})
+
+const customSmsBulkPreviewSchema = z.object({
+  code: z.string().trim().min(1),
+  eventMemberIds: z.array(z.string().uuid()).min(1),
+  senderId: z.string().trim().min(1).max(40),
+})
+
+const customSmsBulkSendSchema = customSmsBulkPreviewSchema.extend({
+  idempotencyKey: z.string().uuid(),
+})
+
 const smsSettingsSchema = z.object({
   smsEnabled: z.boolean(),
   provider: z.enum(['NEXTSMS', 'WEBBULKSMS']),
@@ -4174,6 +4190,138 @@ app.post('/api/v1/messages/templates/:code/reset', requireAuth, loadUserContext,
       throwFinancialDatabaseError(error, 'SMS_TEMPLATE_RESET_FAILED')
     }
     response.json({ data: jsonRecord(data) })
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.get('/api/v1/messages/templates/custom', requireAuth, loadUserContext, requireTenantContext, async (request, response, next) => {
+  try {
+    const tenantId = tenantIdFromRequest(request)
+    const client = createUserSupabase(request.auth?.accessToken ?? '')
+    const { data, error } = await client.rpc('rpc_list_custom_sms_templates', { p_tenant_id: tenantId })
+    if (error) {
+      throwFinancialDatabaseError(error, 'CUSTOM_SMS_TEMPLATES_LIST_FAILED')
+    }
+    response.json({ data: jsonArray(data) })
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.post('/api/v1/messages/templates/custom', requireAuth, loadUserContext, requireTenantContext, async (request, response, next) => {
+  try {
+    const tenantId = tenantIdFromRequest(request)
+    const input = customTemplateSaveSchema.parse(request.body)
+    const client = createUserSupabase(request.auth?.accessToken ?? '')
+    const { data, error } = await client.rpc('rpc_create_custom_sms_template', {
+      p_tenant_id: tenantId,
+      p_name: input.name,
+      p_body: input.body,
+      p_language: input.language,
+    })
+    if (error) {
+      throwFinancialDatabaseError(error, 'CUSTOM_SMS_TEMPLATE_CREATE_FAILED')
+    }
+    response.status(201).json({ data: jsonRecord(data) })
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.put('/api/v1/messages/templates/custom/:code', requireAuth, loadUserContext, requireTenantContext, async (request, response, next) => {
+  try {
+    const tenantId = tenantIdFromRequest(request)
+    const code = String(request.params['code'] ?? '').trim()
+    const input = customTemplateSaveSchema.parse(request.body)
+    const client = createUserSupabase(request.auth?.accessToken ?? '')
+    const { data, error } = await client.rpc('rpc_update_custom_sms_template', {
+      p_tenant_id: tenantId,
+      p_code: code,
+      p_name: input.name,
+      p_body: input.body,
+    })
+    if (error) {
+      throwFinancialDatabaseError(error, 'CUSTOM_SMS_TEMPLATE_UPDATE_FAILED')
+    }
+    response.json({ data: jsonRecord(data) })
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.delete('/api/v1/messages/templates/custom/:code', requireAuth, loadUserContext, requireTenantContext, async (request, response, next) => {
+  try {
+    const tenantId = tenantIdFromRequest(request)
+    const code = String(request.params['code'] ?? '').trim()
+    const client = createUserSupabase(request.auth?.accessToken ?? '')
+    const { data, error } = await client.rpc('rpc_delete_custom_sms_template', { p_tenant_id: tenantId, p_code: code })
+    if (error) {
+      throwFinancialDatabaseError(error, 'CUSTOM_SMS_TEMPLATE_DELETE_FAILED')
+    }
+    response.json({ data: jsonRecord(data) })
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.get('/api/v1/events/:eventId/messages/all-members', requireAuth, loadUserContext, requireTenantContext, async (request, response, next) => {
+  try {
+    const tenantId = tenantIdFromRequest(request)
+    const eventId = uuidParamSchema.parse(request.params['eventId'])
+    const client = createUserSupabase(request.auth?.accessToken ?? '')
+    const { data, error } = await client.rpc('rpc_list_event_all_members', { p_tenant_id: tenantId, p_event_id: eventId })
+    if (error) {
+      throwFinancialDatabaseError(error, 'ALL_MEMBERS_LIST_FAILED')
+    }
+    response.json({ data: jsonArray(data) })
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.post('/api/v1/events/:eventId/messages/custom/preview/bulk', requireAuth, loadUserContext, requireTenantContext, async (request, response, next) => {
+  try {
+    const tenantId = tenantIdFromRequest(request)
+    const eventId = uuidParamSchema.parse(request.params['eventId'])
+    const input = customSmsBulkPreviewSchema.parse(request.body)
+    const client = createUserSupabase(request.auth?.accessToken ?? '')
+    const { data, error } = await client.rpc('rpc_preview_custom_sms_bulk', {
+      p_tenant_id: tenantId,
+      p_event_id: eventId,
+      p_code: input.code,
+      p_event_member_ids: input.eventMemberIds,
+      p_sender_id: input.senderId,
+    })
+    if (error) {
+      throwFinancialDatabaseError(error, 'CUSTOM_SMS_BULK_PREVIEW_FAILED')
+    }
+    response.json({ data: jsonRecord(data) })
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.post('/api/v1/events/:eventId/messages/custom/bulk', requireAuth, loadUserContext, requireTenantContext, async (request, response, next) => {
+  try {
+    const tenantId = tenantIdFromRequest(request)
+    const eventId = uuidParamSchema.parse(request.params['eventId'])
+    const input = customSmsBulkSendSchema.parse(request.body)
+    const client = createUserSupabase(request.auth?.accessToken ?? '')
+    const { data, error } = await client.rpc('rpc_enqueue_custom_sms_bulk', {
+      p_tenant_id: tenantId,
+      p_event_id: eventId,
+      p_code: input.code,
+      p_event_member_ids: input.eventMemberIds,
+      p_sender_id: input.senderId,
+      p_idempotency_key: input.idempotencyKey,
+      p_max_batch_size: env.BALANCE_REMINDER_MAX_BATCH_SIZE,
+    })
+    if (error) {
+      throwFinancialDatabaseError(error, 'CUSTOM_SMS_BULK_QUEUE_FAILED')
+    }
+    const result = notificationFromEnqueue(data)
+    response.status(201).json({ data: result })
   } catch (error) {
     next(error)
   }

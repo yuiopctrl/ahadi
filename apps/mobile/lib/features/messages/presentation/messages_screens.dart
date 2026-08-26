@@ -84,11 +84,26 @@ class _MessageComposerState extends State<MessageComposer> {
   Timer? debounce;
   String query = '';
   String? error;
+  List<Map<String, dynamic>> customTemplates = [];
+  List<String> senderOptions = [];
+  String? senderId;
+
+  bool get _isCustomType => !_manualTypes.contains(messageType);
+
+  Map<String, dynamic>? get _selectedCustomTemplate {
+    for (final template in customTemplates) {
+      if (_text(template, ['code', 'templateCode']) == messageType) {
+        return template;
+      }
+    }
+    return null;
+  }
 
   @override
   void initState() {
     super.initState();
     future = _load();
+    _loadMeta();
   }
 
   @override
@@ -99,6 +114,7 @@ class _MessageComposerState extends State<MessageComposer> {
       query = '';
       search.clear();
       future = _load();
+      _loadMeta();
     }
   }
 
@@ -109,6 +125,40 @@ class _MessageComposerState extends State<MessageComposer> {
     super.dispose();
   }
 
+  Future<void> _loadMeta() async {
+    try {
+      final results = await Future.wait([
+        widget.controller.customSmsTemplates(),
+        widget.controller.smsProviderOptions(),
+        widget.controller.smsSettings(),
+      ]);
+      if (!mounted) return;
+      final templates = results[0] as List<Map<String, dynamic>>;
+      final providers = _providerOptions(results[1] as Map<String, dynamic>);
+      final settings = results[2] as Map<String, dynamic>;
+      final provider = _text(settings, ['provider', 'smsProvider'], 'NEXTSMS');
+      final defaultSender = _text(
+        settings,
+        ['senderId', 'sender_id'],
+        'MICHANGO',
+      );
+      final senders = _resolveSenderIds(
+        providers: providers,
+        provider: provider,
+        settings: settings,
+      );
+      setState(() {
+        customTemplates = templates;
+        senderOptions = senders;
+        senderId ??= senders.contains(defaultSender)
+            ? defaultSender
+            : senders.firstOrNull;
+      });
+    } catch (_) {
+      // Custom templates are optional; the built-in flow stays usable if this fails.
+    }
+  }
+
   Future<_ComposerData> _load() async {
     final recipients = await _eligibleRecipients();
     return _ComposerData(recipients: recipients);
@@ -117,6 +167,9 @@ class _MessageComposerState extends State<MessageComposer> {
   Future<List<Map<String, dynamic>>> _eligibleRecipients() async {
     if (messageType == 'PLEDGE_REQUEST') {
       return widget.controller.noPledgeMessageRecipients(widget.event.id);
+    }
+    if (_isCustomType && recipientGroup != 'outstanding') {
+      return widget.controller.allEventMembers(widget.event.id);
     }
     final report = await widget.controller.eventReport(
       widget.event.id,
@@ -147,7 +200,11 @@ class _MessageComposerState extends State<MessageComposer> {
     final filtered = rows.where((row) {
       final reason = _text(row, ['ineligibleReason']);
       if (reason.isNotEmpty && reason != 'null') return false;
-      if (query.isEmpty || messageType == 'BALANCE_REMINDER') return true;
+      if (query.isEmpty ||
+          messageType == 'BALANCE_REMINDER' ||
+          (_isCustomType && recipientGroup == 'outstanding')) {
+        return true;
+      }
       final haystack =
           '${_name(row)} ${_text(row, ['phone', 'phone_e164', 'phoneE164'])}'
               .toLowerCase();
@@ -183,6 +240,10 @@ class _MessageComposerState extends State<MessageComposer> {
       setState(() => error = 'No eligible members found.');
       return;
     }
+    if (_isCustomType && (senderId == null || senderId!.isEmpty)) {
+      setState(() => error = 'Select a sender ID.');
+      return;
+    }
     setState(() => error = null);
     final queued = await Navigator.of(context).push<int>(
       MaterialPageRoute(
@@ -191,6 +252,11 @@ class _MessageComposerState extends State<MessageComposer> {
           event: widget.event,
           messageType: messageType,
           targetIds: ids,
+          isCustom: _isCustomType,
+          senderId: _isCustomType ? senderId : null,
+          customTemplateName: _isCustomType
+              ? _text(_selectedCustomTemplate ?? const {}, ['name'])
+              : null,
         ),
       ),
     );
@@ -234,44 +300,85 @@ class _MessageComposerState extends State<MessageComposer> {
                 DropdownButtonFormField<String>(
                   initialValue: messageType,
                   decoration: const InputDecoration(labelText: 'Message Type'),
-                  items: _manualTypes
-                      .map(
-                        (type) => DropdownMenuItem(
-                          value: type,
-                          child: Text(_messageTypeLabel(type)),
-                        ),
-                      )
-                      .toList(),
+                  items: [
+                    ..._manualTypes.map(
+                      (type) => DropdownMenuItem(
+                        value: type,
+                        child: Text(_messageTypeLabel(type)),
+                      ),
+                    ),
+                    ...customTemplates.map((template) {
+                      final code = _text(template, ['code', 'templateCode']);
+                      return DropdownMenuItem(
+                        value: code,
+                        child: Text(_text(template, ['name'], 'Custom template')),
+                      );
+                    }),
+                  ],
                   onChanged: (value) {
                     setState(() {
                       messageType = value ?? 'BALANCE_REMINDER';
-                      recipientGroup = 'eligible';
+                      recipientGroup = _manualTypes.contains(messageType)
+                          ? 'eligible'
+                          : 'outstanding';
                       selected.clear();
                       future = _load();
                     });
                   },
                 ),
+                if (_isCustomType) ...[
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    initialValue: senderOptions.contains(senderId)
+                        ? senderId
+                        : senderOptions.firstOrNull,
+                    decoration: const InputDecoration(labelText: 'Sender ID'),
+                    items: senderOptions
+                        .map(
+                          (value) =>
+                              DropdownMenuItem(value: value, child: Text(value)),
+                        )
+                        .toList(),
+                    onChanged: (value) => setState(() => senderId = value),
+                  ),
+                ],
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
                   initialValue: recipientGroup,
                   decoration: const InputDecoration(labelText: 'Recipients'),
-                  items: [
-                    DropdownMenuItem(
-                      value: 'eligible',
-                      child: Text(
-                        messageType == 'PLEDGE_REQUEST'
-                            ? 'Members Without Pledge'
-                            : 'Members With Outstanding Balance',
-                      ),
-                    ),
-                    const DropdownMenuItem(
-                      value: 'selected',
-                      child: Text('Selected Members'),
-                    ),
-                  ],
+                  items: _isCustomType
+                      ? const [
+                          DropdownMenuItem(
+                            value: 'outstanding',
+                            child: Text('Members With Outstanding Balance'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'all',
+                            child: Text('All Members'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'selected',
+                            child: Text('Selected Members'),
+                          ),
+                        ]
+                      : [
+                          DropdownMenuItem(
+                            value: 'eligible',
+                            child: Text(
+                              messageType == 'PLEDGE_REQUEST'
+                                  ? 'Members Without Pledge'
+                                  : 'Members With Outstanding Balance',
+                            ),
+                          ),
+                          const DropdownMenuItem(
+                            value: 'selected',
+                            child: Text('Selected Members'),
+                          ),
+                        ],
                   onChanged: (value) {
                     setState(() {
-                      recipientGroup = value ?? 'eligible';
+                      recipientGroup =
+                          value ?? (_isCustomType ? 'outstanding' : 'eligible');
                       selected.clear();
                       future = _load();
                     });
@@ -351,12 +458,18 @@ class _MessagePreviewScreen extends StatefulWidget {
     required this.event,
     required this.messageType,
     required this.targetIds,
+    this.isCustom = false,
+    this.senderId,
+    this.customTemplateName,
   });
 
   final SessionController controller;
   final EventSummary event;
   final String messageType;
   final List<String> targetIds;
+  final bool isCustom;
+  final String? senderId;
+  final String? customTemplateName;
 
   @override
   State<_MessagePreviewScreen> createState() => _MessagePreviewScreenState();
@@ -374,6 +487,13 @@ class _MessagePreviewScreenState extends State<_MessagePreviewScreen> {
   }
 
   Future<Map<String, dynamic>> _load() {
+    if (widget.isCustom) {
+      return widget.controller.customSmsBulkPreview(widget.event.id, {
+        'code': widget.messageType,
+        'eventMemberIds': widget.targetIds,
+        'senderId': widget.senderId,
+      });
+    }
     return widget.controller.smsBulkPreview(widget.event.id, {
       'templateCode': widget.messageType,
       'eventMemberIds': widget.targetIds,
@@ -386,7 +506,14 @@ class _MessagePreviewScreenState extends State<_MessagePreviewScreen> {
       error = null;
     });
     try {
-      final response = widget.messageType == 'PLEDGE_REQUEST'
+      final response = widget.isCustom
+          ? await widget.controller.sendCustomSmsBulk(
+              widget.event.id,
+              widget.messageType,
+              widget.targetIds,
+              widget.senderId ?? '',
+            )
+          : widget.messageType == 'PLEDGE_REQUEST'
           ? await widget.controller.sendPledgeRequestBulk(
               widget.event.id,
               widget.targetIds,
@@ -465,8 +592,16 @@ class _MessagePreviewScreenState extends State<_MessagePreviewScreen> {
                         AhadiInfoRow(label: 'Event', value: widget.event.name),
                         AhadiInfoRow(
                           label: 'Type',
-                          value: _messageTypeLabel(widget.messageType),
+                          value:
+                              (widget.customTemplateName?.isNotEmpty ?? false)
+                              ? widget.customTemplateName!
+                              : _messageTypeLabel(widget.messageType),
                         ),
+                        if (widget.isCustom)
+                          AhadiInfoRow(
+                            label: 'Sender ID',
+                            value: widget.senderId ?? '-',
+                          ),
                         AhadiInfoRow(
                           label: 'Recipients',
                           value: '${previews.length}',
@@ -660,7 +795,7 @@ class _MessageHistoryState extends State<MessageHistory> {
               else ...[
                 ...visible.map(
                   (campaign) => AhadiListRow(
-                    title: _messageTypeLabel(campaign.templateCode),
+                    title: campaign.displayLabel,
                     subtitle: '${campaign.total} recipients',
                     status: campaign.primaryStatus,
                     meta:
@@ -770,10 +905,7 @@ class _MessageDetailScreenState extends State<_MessageDetailScreen> {
           AhadiSectionCard(
             title: 'Message',
             children: [
-              AhadiInfoRow(
-                label: 'Type',
-                value: _messageTypeLabel(c.templateCode),
-              ),
+              AhadiInfoRow(label: 'Type', value: c.displayLabel),
               AhadiInfoRow(label: 'Event', value: c.eventName),
               AhadiInfoRow(label: 'Created', value: dateText(c.createdAt)),
               AhadiInfoRow(label: 'Sender', value: c.senderId),
@@ -858,6 +990,7 @@ class _MessagingSettingsScreenState extends State<MessagingSettingsScreen> {
       widget.controller.smsSettings(),
       widget.controller.smsProviderOptions(),
       widget.controller.smsTemplates(),
+      widget.controller.customSmsTemplates(),
     ]);
     final settings = results[0] as Map<String, dynamic>;
     provider = _text(settings, ['provider', 'smsProvider'], 'NEXTSMS');
@@ -868,29 +1001,69 @@ class _MessagingSettingsScreenState extends State<MessagingSettingsScreen> {
       settings: settings,
       providers: _providerOptions(results[1] as Map<String, dynamic>),
       templates: (results[2] as List<Map<String, dynamic>>),
+      customTemplates: (results[3] as List<Map<String, dynamic>>),
     );
   }
 
+  Future<void> _openCustomTemplateEditor([
+    Map<String, dynamic>? template,
+  ]) async {
+    final changed = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => CustomTemplateEditorScreen(
+          controller: widget.controller,
+          template: template,
+        ),
+      ),
+    );
+    if (changed == true) {
+      setState(() => future = _load());
+    }
+  }
+
+  Future<void> _deleteCustomTemplate(Map<String, dynamic> template) async {
+    final code = _text(template, ['code', 'templateCode']);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Template'),
+        content: Text(
+          'Delete "${_text(template, ['name'], code)}"? This cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await widget.controller.deleteCustomSmsTemplate(code);
+      if (mounted) setState(() => future = _load());
+    } catch (err) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            friendlyErrorText(err, 'Template could not be deleted.'),
+          ),
+        ),
+      );
+    }
+  }
+
   List<String> _senders(_SettingsData data) {
-    final selectedProvider = provider;
-    final fromProvider = data.providers
-        .where(
-          (row) =>
-              _text(row, ['provider', 'providerCode', 'code']) ==
-              selectedProvider,
-        )
-        .expand(
-          (row) =>
-              _list(row['senderIds'])
-                  .map((sender) => _text(sender, ['senderId', 'id', 'code'])),
-        )
-        .where((value) => value.isNotEmpty)
-        .toSet()
-        .toList();
-    if (fromProvider.isNotEmpty) return fromProvider;
-    return _list(data.settings['allowedSenderIds'])
-        .map((row) => row.values.first.toString())
-        .toList();
+    return _resolveSenderIds(
+      providers: data.providers,
+      provider: provider,
+      settings: data.settings,
+    );
   }
 
   Future<void> _save() async {
@@ -925,6 +1098,10 @@ class _MessagingSettingsScreenState extends State<MessagingSettingsScreen> {
   @override
   Widget build(BuildContext context) {
     final canManage = _can(widget.controller, 'messages.manage_settings');
+    final canManageTemplates = _can(
+      widget.controller,
+      'messages.manage_templates',
+    );
     return Scaffold(
       backgroundColor: AhadiColors.background,
       appBar: AppBar(title: const Text('Messaging')),
@@ -1038,6 +1215,53 @@ class _MessagingSettingsScreenState extends State<MessagingSettingsScreen> {
                       ),
                     )
                     .toList(),
+              ),
+              AhadiSectionCard(
+                title: 'Custom Templates',
+                children: [
+                  if (data.customTemplates.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.only(bottom: 10),
+                      child: Text(
+                        'No custom templates yet.',
+                        style: TextStyle(color: AhadiColors.muted),
+                      ),
+                    ),
+                  ...data.customTemplates.map(
+                    (template) => Padding(
+                      padding: const EdgeInsets.only(bottom: 10),
+                      child: Material(
+                        color: AhadiColors.surface,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          side: const BorderSide(color: AhadiColors.border),
+                        ),
+                        clipBehavior: Clip.antiAlias,
+                        child: ListTile(
+                          title: Text(
+                            _text(template, ['name'], 'Custom template'),
+                            style: const TextStyle(fontWeight: FontWeight.w800),
+                          ),
+                          subtitle: Text(_text(template, ['body'])),
+                          trailing: canManageTemplates
+                              ? IconButton(
+                                  icon: const Icon(Icons.delete_outline),
+                                  onPressed: () =>
+                                      _deleteCustomTemplate(template),
+                                )
+                              : null,
+                          onTap: () => _openCustomTemplateEditor(template),
+                        ),
+                      ),
+                    ),
+                  ),
+                  if (canManageTemplates)
+                    OutlinedButton.icon(
+                      onPressed: () => _openCustomTemplateEditor(),
+                      icon: const Icon(Icons.add),
+                      label: const Text('Add Template'),
+                    ),
+                ],
               ),
             ],
           );
@@ -1208,6 +1432,140 @@ class _SmsTemplateScreenState extends State<SmsTemplateScreen> {
   }
 }
 
+class CustomTemplateEditorScreen extends StatefulWidget {
+  const CustomTemplateEditorScreen({
+    super.key,
+    required this.controller,
+    this.template,
+  });
+
+  final SessionController controller;
+  final Map<String, dynamic>? template;
+
+  @override
+  State<CustomTemplateEditorScreen> createState() =>
+      _CustomTemplateEditorScreenState();
+}
+
+class _CustomTemplateEditorScreenState
+    extends State<CustomTemplateEditorScreen> {
+  late final TextEditingController name;
+  late final TextEditingController body;
+  bool saving = false;
+  String? error;
+
+  bool get isEditing => widget.template != null;
+
+  @override
+  void initState() {
+    super.initState();
+    name = TextEditingController(text: _text(widget.template ?? {}, ['name']));
+    body = TextEditingController(text: _text(widget.template ?? {}, ['body']));
+  }
+
+  @override
+  void dispose() {
+    name.dispose();
+    body.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    if (name.text.trim().isEmpty || body.text.trim().isEmpty) {
+      setState(() => error = 'Title and message are required.');
+      return;
+    }
+    setState(() {
+      saving = true;
+      error = null;
+    });
+    try {
+      final payload = {'name': name.text.trim(), 'body': body.text.trim()};
+      if (isEditing) {
+        final code = _text(widget.template!, ['code', 'templateCode']);
+        await widget.controller.updateCustomSmsTemplate(code, payload);
+      } else {
+        await widget.controller.createCustomSmsTemplate(payload);
+      }
+      if (mounted) Navigator.of(context).pop(true);
+    } catch (err) {
+      setState(
+        () => error = friendlyErrorText(err, 'Template could not be saved.'),
+      );
+    } finally {
+      if (mounted) setState(() => saving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: AhadiColors.background,
+      appBar: AppBar(
+        title: Text(isEditing ? 'Edit Custom Template' : 'New Custom Template'),
+      ),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          AhadiSectionCard(
+            title: 'Template',
+            children: [
+              TextField(
+                controller: name,
+                decoration: const InputDecoration(labelText: 'Title'),
+                onChanged: (_) => setState(() {}),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: body,
+                minLines: 5,
+                maxLines: 8,
+                decoration: const InputDecoration(labelText: 'Message'),
+                onChanged: (_) => setState(() {}),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                '${body.text.length} characters',
+                style: const TextStyle(color: AhadiColors.muted),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'Use {{member_name}} to insert the recipient\'s name.',
+                style: AhadiTypography.label,
+              ),
+            ],
+          ),
+          if (error != null)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Text(
+                error!,
+                style: const TextStyle(color: AhadiColors.danger),
+              ),
+            ),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: saving ? null : () => Navigator.of(context).pop(),
+                  child: const Text('Cancel'),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: FilledButton(
+                  onPressed: saving ? null : _save,
+                  child: Text(saving ? 'Saving...' : 'Save'),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _EventHeader extends StatelessWidget {
   const _EventHeader({required this.event});
 
@@ -1244,17 +1602,20 @@ class _SettingsData {
     required this.settings,
     required this.providers,
     required this.templates,
+    required this.customTemplates,
   });
 
   final Map<String, dynamic> settings;
   final List<Map<String, dynamic>> providers;
   final List<Map<String, dynamic>> templates;
+  final List<Map<String, dynamic>> customTemplates;
 }
 
 class _MessageCampaign {
   const _MessageCampaign({
     required this.id,
     required this.templateCode,
+    required this.templateName,
     required this.eventName,
     required this.createdAt,
     required this.provider,
@@ -1266,6 +1627,7 @@ class _MessageCampaign {
 
   final String id;
   final String templateCode;
+  final String templateName;
   final String eventName;
   final String createdAt;
   final String provider;
@@ -1275,6 +1637,9 @@ class _MessageCampaign {
   final Map<String, int> statusCounts;
 
   int get total => recipients.length;
+
+  String get displayLabel =>
+      templateName.isNotEmpty ? templateName : _messageTypeLabel(templateCode);
 
   String get primaryStatus {
     if (statusCounts.containsKey('FAILED')) return 'FAILED';
@@ -1330,6 +1695,7 @@ List<_MessageCampaign> _groupCampaigns(List<Map<String, dynamic>> rows) {
     return _MessageCampaign(
       id: entry.key,
       templateCode: _text(first, ['template_code', 'templateCode']),
+      templateName: _text(first, ['template_name', 'templateName']),
       eventName: _text(first, ['event_name', 'eventName'], '-'),
       createdAt: _text(first, ['created_at', 'createdAt']),
       provider: _text(first, ['provider'], '-'),
@@ -1349,6 +1715,28 @@ List<Map<String, dynamic>> _providerOptions(Map<String, dynamic> data) {
   final options = _list(data['options']);
   if (options.isNotEmpty) return options;
   return data.isEmpty ? const [] : [data];
+}
+
+List<String> _resolveSenderIds({
+  required List<Map<String, dynamic>> providers,
+  required String? provider,
+  required Map<String, dynamic> settings,
+}) {
+  final fromProvider = providers
+      .where(
+        (row) => _text(row, ['provider', 'providerCode', 'code']) == provider,
+      )
+      .expand(
+        (row) => _list(row['senderIds'])
+            .map((sender) => _text(sender, ['senderId', 'id', 'code'])),
+      )
+      .where((value) => value.isNotEmpty)
+      .toSet()
+      .toList();
+  if (fromProvider.isNotEmpty) return fromProvider;
+  return _list(settings['allowedSenderIds'])
+      .map((row) => row.values.first.toString())
+      .toList();
 }
 
 List<Map<String, dynamic>> _list(Object? value) {

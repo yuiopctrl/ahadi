@@ -610,6 +610,52 @@ class SessionController extends ChangeNotifier {
     return _api.noPledgeMessageRecipients(_requireTenantId(), eventId);
   }
 
+  Future<List<Map<String, dynamic>>> allEventMembers(String eventId) {
+    return _api.allEventMembers(_requireTenantId(), eventId);
+  }
+
+  Future<List<Map<String, dynamic>>> customSmsTemplates() {
+    return _api.customSmsTemplates(_requireTenantId());
+  }
+
+  Future<Map<String, dynamic>> createCustomSmsTemplate(
+    Map<String, dynamic> payload,
+  ) {
+    return _api.createCustomSmsTemplate(_requireTenantId(), payload);
+  }
+
+  Future<Map<String, dynamic>> updateCustomSmsTemplate(
+    String code,
+    Map<String, dynamic> payload,
+  ) {
+    return _api.updateCustomSmsTemplate(_requireTenantId(), code, payload);
+  }
+
+  Future<Map<String, dynamic>> deleteCustomSmsTemplate(String code) {
+    return _api.deleteCustomSmsTemplate(_requireTenantId(), code);
+  }
+
+  Future<Map<String, dynamic>> customSmsBulkPreview(
+    String eventId,
+    Map<String, dynamic> payload,
+  ) {
+    return _api.customSmsBulkPreview(_requireTenantId(), eventId, payload);
+  }
+
+  Future<Map<String, dynamic>> sendCustomSmsBulk(
+    String eventId,
+    String code,
+    List<String> eventMemberIds,
+    String senderId,
+  ) {
+    return _api.sendCustomSmsBulk(_requireTenantId(), eventId, {
+      'code': code,
+      'eventMemberIds': eventMemberIds,
+      'senderId': senderId,
+      'idempotencyKey': _uuidV4(),
+    });
+  }
+
   Future<Map<String, dynamic>> smsBulkPreview(
     String eventId,
     Map<String, dynamic> payload,
