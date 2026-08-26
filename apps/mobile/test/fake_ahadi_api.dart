@@ -1267,6 +1267,145 @@ class FakeAhadiApi implements AhadiApi {
       ),
     );
   }
+
+  final customTemplates = <Map<String, dynamic>>[];
+
+  @override
+  Future<List<Map<String, dynamic>>> allEventMembers(
+    String tenantId,
+    String eventId,
+  ) async {
+    lastTenantId = tenantId;
+    lastEventId = eventId;
+    return [
+      {
+        'eventMemberId': 'em-a',
+        'memberId': 'member-a',
+        'fullName': 'Jane Contact',
+        'phone': '+255712345678',
+        'maskedPhone': '+255*****678',
+        'ineligibleReason': null,
+      },
+      {
+        'eventMemberId': 'em-b',
+        'memberId': 'member-b',
+        'fullName': 'Unpaid Contact',
+        'phone': '+255712345679',
+        'maskedPhone': '+255*****679',
+        'ineligibleReason': null,
+      },
+    ];
+  }
+
+  @override
+  Future<List<Map<String, dynamic>>> customSmsTemplates(
+    String tenantId,
+  ) async {
+    lastTenantId = tenantId;
+    return List<Map<String, dynamic>>.from(customTemplates);
+  }
+
+  @override
+  Future<Map<String, dynamic>> createCustomSmsTemplate(
+    String tenantId,
+    Map<String, dynamic> payload,
+  ) async {
+    lastTenantId = tenantId;
+    final template = {
+      'code': 'CUSTOM_${customTemplates.length + 1}',
+      'name': payload['name'],
+      'body': payload['body'],
+      'language': payload['language'] ?? 'sw',
+    };
+    customTemplates.add(template);
+    return template;
+  }
+
+  @override
+  Future<Map<String, dynamic>> updateCustomSmsTemplate(
+    String tenantId,
+    String code,
+    Map<String, dynamic> payload,
+  ) async {
+    lastTenantId = tenantId;
+    final index = customTemplates.indexWhere((t) => t['code'] == code);
+    final template = {
+      'code': code,
+      'name': payload['name'],
+      'body': payload['body'],
+    };
+    if (index >= 0) {
+      customTemplates[index] = template;
+    }
+    return template;
+  }
+
+  @override
+  Future<Map<String, dynamic>> deleteCustomSmsTemplate(
+    String tenantId,
+    String code,
+  ) async {
+    lastTenantId = tenantId;
+    customTemplates.removeWhere((t) => t['code'] == code);
+    return {'deleted': true, 'code': code};
+  }
+
+  @override
+  Future<Map<String, dynamic>> customSmsBulkPreview(
+    String tenantId,
+    String eventId,
+    Map<String, dynamic> payload,
+  ) async {
+    lastTenantId = tenantId;
+    lastEventId = eventId;
+    final code = payload['code'];
+    final ids =
+        (payload['eventMemberIds'] as List?)?.cast<String>() ?? const [];
+    final previews = ids.map((id) {
+      final name = id == 'em-a' ? 'Jane Contact' : 'Unpaid Contact';
+      final message = 'Ndugu $name, karibu.';
+      return {
+        'templateCode': code,
+        'member': {
+          'eventMemberId': id,
+          'name': name,
+          'phoneMasked': '+255*****678',
+        },
+        'senderId': payload['senderId'],
+        'message': message,
+        'characters': message.length,
+        'maxCharacters': 159,
+        'remainingCharacters': 159 - message.length,
+        'valid': true,
+        'reason': null,
+      };
+    }).toList();
+    return {
+      'templateCode': code,
+      'selected': ids.length,
+      'eligible': ids.length,
+      'validMessages': ids.length,
+      'overCharacterLimit': 0,
+      'noPhone': 0,
+      'smsDisabled': 0,
+      'recentlySent': 0,
+      'hasPledge': 0,
+      'maxCharacters': 159,
+      'previews': previews,
+    };
+  }
+
+  @override
+  Future<Map<String, dynamic>> sendCustomSmsBulk(
+    String tenantId,
+    String eventId,
+    Map<String, dynamic> payload,
+  ) async {
+    lastTenantId = tenantId;
+    lastEventId = eventId;
+    lastSmsSendPayload = payload;
+    return {'queued': (payload['eventMemberIds'] as List?)?.length ?? 0};
+  }
 }
 
 String _compactPhoneSearch(String value) {

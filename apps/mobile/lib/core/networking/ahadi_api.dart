@@ -181,6 +181,34 @@ abstract class AhadiApi {
     String tenantId,
     String eventId,
   );
+  Future<List<Map<String, dynamic>>> allEventMembers(
+    String tenantId,
+    String eventId,
+  );
+  Future<List<Map<String, dynamic>>> customSmsTemplates(String tenantId);
+  Future<Map<String, dynamic>> createCustomSmsTemplate(
+    String tenantId,
+    Map<String, dynamic> payload,
+  );
+  Future<Map<String, dynamic>> updateCustomSmsTemplate(
+    String tenantId,
+    String code,
+    Map<String, dynamic> payload,
+  );
+  Future<Map<String, dynamic>> deleteCustomSmsTemplate(
+    String tenantId,
+    String code,
+  );
+  Future<Map<String, dynamic>> customSmsBulkPreview(
+    String tenantId,
+    String eventId,
+    Map<String, dynamic> payload,
+  );
+  Future<Map<String, dynamic>> sendCustomSmsBulk(
+    String tenantId,
+    String eventId,
+    Map<String, dynamic> payload,
+  );
   Future<Map<String, dynamic>> smsBulkPreview(
     String tenantId,
     String eventId,

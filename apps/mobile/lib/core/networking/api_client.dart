@@ -703,6 +703,101 @@ class ApiClient implements AhadiApi {
   }
 
   @override
+  Future<List<Map<String, dynamic>>> allEventMembers(
+    String tenantId,
+    String eventId,
+  ) async {
+    final json = await _request(
+      '/events/$eventId/messages/all-members',
+      tenantId: tenantId,
+    );
+    return objectList(json['data']);
+  }
+
+  @override
+  Future<List<Map<String, dynamic>>> customSmsTemplates(
+    String tenantId,
+  ) async {
+    final json = await _request(
+      '/messages/templates/custom',
+      tenantId: tenantId,
+    );
+    return objectList(json['data']);
+  }
+
+  @override
+  Future<Map<String, dynamic>> createCustomSmsTemplate(
+    String tenantId,
+    Map<String, dynamic> payload,
+  ) async {
+    final json = await _request(
+      '/messages/templates/custom',
+      method: 'POST',
+      tenantId: tenantId,
+      body: payload,
+    );
+    return jsonMap(json['data']);
+  }
+
+  @override
+  Future<Map<String, dynamic>> updateCustomSmsTemplate(
+    String tenantId,
+    String code,
+    Map<String, dynamic> payload,
+  ) async {
+    final json = await _request(
+      '/messages/templates/custom/$code',
+      method: 'PUT',
+      tenantId: tenantId,
+      body: payload,
+    );
+    return jsonMap(json['data']);
+  }
+
+  @override
+  Future<Map<String, dynamic>> deleteCustomSmsTemplate(
+    String tenantId,
+    String code,
+  ) async {
+    final json = await _request(
+      '/messages/templates/custom/$code',
+      method: 'DELETE',
+      tenantId: tenantId,
+    );
+    return jsonMap(json['data']);
+  }
+
+  @override
+  Future<Map<String, dynamic>> customSmsBulkPreview(
+    String tenantId,
+    String eventId,
+    Map<String, dynamic> payload,
+  ) async {
+    final json = await _request(
+      '/events/$eventId/messages/custom/preview/bulk',
+      method: 'POST',
+      tenantId: tenantId,
+      body: payload,
+    );
+    return jsonMap(json['data']);
+  }
+
+  @override
+  Future<Map<String, dynamic>> sendCustomSmsBulk(
+    String tenantId,
+    String eventId,
+    Map<String, dynamic> payload,
+  ) async {
+    final json = await _request(
+      '/events/$eventId/messages/custom/bulk',
+      method: 'POST',
+      tenantId: tenantId,
+      body: payload,
+    );
+    return jsonMap(json['data']);
+  }
+
+  @override
   Future<Map<String, dynamic>> sendPledgeRequestBulk(
     String tenantId,
     String eventId,
