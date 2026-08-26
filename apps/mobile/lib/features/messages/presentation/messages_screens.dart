@@ -99,6 +99,29 @@ class _MessageComposerState extends State<MessageComposer> {
     return null;
   }
 
+  List<DropdownMenuItem<String>> _messageTypeItems() {
+    final seen = <String>{};
+    final items = <DropdownMenuItem<String>>[];
+    for (final type in _manualTypes) {
+      if (seen.add(type)) {
+        items.add(
+          DropdownMenuItem(value: type, child: Text(_messageTypeLabel(type))),
+        );
+      }
+    }
+    for (final template in customTemplates) {
+      final code = _text(template, ['code', 'templateCode']);
+      if (code.isEmpty || !seen.add(code)) continue;
+      items.add(
+        DropdownMenuItem(
+          value: code,
+          child: Text(_text(template, ['name'], 'Custom template')),
+        ),
+      );
+    }
+    return items;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -300,21 +323,7 @@ class _MessageComposerState extends State<MessageComposer> {
                 DropdownButtonFormField<String>(
                   initialValue: messageType,
                   decoration: const InputDecoration(labelText: 'Message Type'),
-                  items: [
-                    ..._manualTypes.map(
-                      (type) => DropdownMenuItem(
-                        value: type,
-                        child: Text(_messageTypeLabel(type)),
-                      ),
-                    ),
-                    ...customTemplates.map((template) {
-                      final code = _text(template, ['code', 'templateCode']);
-                      return DropdownMenuItem(
-                        value: code,
-                        child: Text(_text(template, ['name'], 'Custom template')),
-                      );
-                    }),
-                  ],
+                  items: _messageTypeItems(),
                   onChanged: (value) {
                     setState(() {
                       messageType = value ?? 'BALANCE_REMINDER';
