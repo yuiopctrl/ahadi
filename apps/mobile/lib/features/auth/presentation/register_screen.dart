@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/localization/app_locale.dart';
 import '../../../core/theme/ahadi_theme.dart';
 import '../data/phone_normalization.dart';
 import '../data/session_controller.dart';
@@ -142,7 +143,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
       animation: widget.controller,
       builder: (context, _) {
         return Scaffold(
-          appBar: AppBar(title: const Text('Create Account')),
+          appBar: AppBar(title: Text(context.t('auth.createAccount'))),
           body: ListView(
             padding: const EdgeInsets.all(20),
             children: [
@@ -181,30 +182,28 @@ class _RegisterScreenState extends State<RegisterScreen> {
             controller: phone,
             enabled: !busy,
             keyboardType: TextInputType.phone,
-            decoration: const InputDecoration(
-              labelText: 'Phone Number',
+            decoration: InputDecoration(
+              labelText: context.t('auth.phoneNumber'),
               hintText: '0712 345 678',
             ),
           ),
           const SizedBox(height: 16),
           FilledButton(
             onPressed: busy ? null : _start,
-            child: Text(busy ? 'Checking...' : 'Continue'),
+            child: Text(busy ? context.t('auth.checking') : context.t('auth.continue')),
           ),
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Back to Login'),
+            child: Text(context.t('auth.backToLogin')),
           ),
         ];
       case _RegisterStep.existing:
         return [
-          const Text(
-            'This phone number already has an Ahadi account.\nLog in using your PIN.',
-          ),
+          Text(context.t('auth.existingAccountMessage')),
           const SizedBox(height: 16),
           FilledButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Back to Login'),
+            child: Text(context.t('auth.backToLogin')),
           ),
           TextButton(
             onPressed: () => Navigator.of(context).pushReplacement(
@@ -212,19 +211,19 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 builder: (_) => ForgotPinScreen(controller: widget.controller),
               ),
             ),
-            child: const Text('Forgot PIN?'),
+            child: Text(context.t('auth.forgotPin')),
           ),
         ];
       case _RegisterStep.otp:
         return [
-          Text('Code sent to ${phone.text}'),
+          Text('${context.t('auth.codeSentTo')} ${phone.text}'),
           const SizedBox(height: 12),
           TextField(
             controller: otp,
             enabled: !busy,
             maxLength: 6,
             keyboardType: TextInputType.number,
-            decoration: const InputDecoration(labelText: 'Six-digit code'),
+            decoration: InputDecoration(labelText: context.t('auth.sixDigitCode')),
             onChanged: (value) {
               if (value.length == 6) _verifyOtp();
             },
@@ -232,7 +231,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
           const SizedBox(height: 12),
           FilledButton(
             onPressed: busy || otp.text.length != 6 ? null : _verifyOtp,
-            child: Text(busy ? 'Verifying...' : 'Verify code'),
+            child: Text(busy ? context.t('auth.verifying') : context.t('auth.verifyCode')),
           ),
         ];
       case _RegisterStep.pin:
@@ -242,13 +241,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
           PinInput(
             key: confirmPinKey,
             enabled: !busy,
-            label: 'Confirm PIN',
+            label: context.t('auth.confirmPin'),
             onCompleted: (_) => _setPin(),
           ),
           const SizedBox(height: 16),
           FilledButton(
             onPressed: busy ? null : _setPin,
-            child: Text(busy ? 'Saving...' : 'Continue'),
+            child: Text(busy ? context.t('auth.saving') : context.t('auth.continue')),
           ),
         ];
       case _RegisterStep.profile:
@@ -256,19 +255,19 @@ class _RegisterScreenState extends State<RegisterScreen> {
           TextField(
             controller: fullName,
             enabled: !busy,
-            decoration: const InputDecoration(labelText: 'Full Name'),
+            decoration: InputDecoration(labelText: context.t('auth.fullName')),
           ),
           const SizedBox(height: 12),
           TextField(
             controller: email,
             enabled: !busy,
             keyboardType: TextInputType.emailAddress,
-            decoration: const InputDecoration(labelText: 'Email'),
+            decoration: InputDecoration(labelText: context.t('auth.email')),
           ),
           const SizedBox(height: 16),
           FilledButton(
             onPressed: busy ? null : _saveProfile,
-            child: Text(busy ? 'Saving...' : 'Continue'),
+            child: Text(busy ? context.t('auth.saving') : context.t('auth.continue')),
           ),
         ];
       case _RegisterStep.invitations:
@@ -287,11 +286,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
         ];
       case _RegisterStep.welcome:
         return [
-          const Text('You are not currently a member of an organization.'),
+          Text(context.t('auth.notAMemberYet')),
           const SizedBox(height: 16),
           FilledButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Create Organization'),
+            child: Text(context.t('auth.createOrganization')),
           ),
         ];
     }
@@ -299,29 +298,25 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   String _title() {
     return switch (step) {
-      _RegisterStep.phone => 'Create Account',
-      _RegisterStep.existing => 'Account exists',
-      _RegisterStep.otp => 'Verify phone',
-      _RegisterStep.pin => 'Set PIN',
-      _RegisterStep.profile => 'Complete Profile',
-      _RegisterStep.invitations => "You're Invited",
-      _RegisterStep.welcome => 'Welcome to Ahadi',
+      _RegisterStep.phone => context.t('auth.createAccount'),
+      _RegisterStep.existing => context.t('auth.accountExists'),
+      _RegisterStep.otp => context.t('auth.verifyPhone'),
+      _RegisterStep.pin => context.t('auth.setPin'),
+      _RegisterStep.profile => context.t('auth.completeProfile'),
+      _RegisterStep.invitations => context.t('auth.youreInvited'),
+      _RegisterStep.welcome => context.t('auth.welcomeToAhadi'),
     };
   }
 
   String _subtitle() {
     return switch (step) {
-      _RegisterStep.phone =>
-        'Enter your phone number to start account verification.',
-      _RegisterStep.existing =>
-        'Use normal login for returning Ahadi accounts.',
-      _RegisterStep.otp => 'Enter the code sent by SMS.',
-      _RegisterStep.pin => 'Create a secure 4-digit PIN.',
-      _RegisterStep.profile => 'This name is used across your Ahadi account.',
-      _RegisterStep.invitations =>
-        'Review organization invitations for your verified phone.',
-      _RegisterStep.welcome =>
-        'Create an organization only after your account is ready.',
+      _RegisterStep.phone => context.t('auth.phoneStepHint'),
+      _RegisterStep.existing => context.t('auth.existingStepHint'),
+      _RegisterStep.otp => context.t('auth.otpStepHint'),
+      _RegisterStep.pin => context.t('auth.pinStepHint'),
+      _RegisterStep.profile => context.t('auth.profileStepHint'),
+      _RegisterStep.invitations => context.t('auth.invitationsStepHint'),
+      _RegisterStep.welcome => context.t('auth.welcomeStepHint'),
     };
   }
 }

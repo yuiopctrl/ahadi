@@ -1,0 +1,138 @@
+import 'app_locale.dart';
+
+/// UI translation table. Keys are dotted by feature area; each entry maps
+/// [AppLanguage.sw] and [AppLanguage.en] to the display string.
+const Map<String, Map<AppLanguage, String>> appTranslations = {
+  // --- common ---
+  'common.signOut': {AppLanguage.sw: 'Toka', AppLanguage.en: 'Sign out'},
+  'common.cancel': {AppLanguage.sw: 'Ghairi', AppLanguage.en: 'Cancel'},
+  'common.save': {AppLanguage.sw: 'Hifadhi', AppLanguage.en: 'Save'},
+  'common.retry': {AppLanguage.sw: 'Jaribu tena', AppLanguage.en: 'Try again'},
+  'common.create': {AppLanguage.sw: 'Unda', AppLanguage.en: 'Create'},
+  'common.noEventSelected': {
+    AppLanguage.sw: 'Hakuna tukio lililochaguliwa',
+    AppLanguage.en: 'No event selected',
+  },
+
+  // --- shell / navigation ---
+  'shell.nav.home': {AppLanguage.sw: 'Nyumbani', AppLanguage.en: 'Home'},
+  'shell.nav.events': {AppLanguage.sw: 'Matukio', AppLanguage.en: 'Events'},
+  'shell.nav.payments': {AppLanguage.sw: 'Malipo', AppLanguage.en: 'Payments'},
+  'shell.nav.more': {AppLanguage.sw: 'Zaidi', AppLanguage.en: 'More'},
+  'shell.organizations': {
+    AppLanguage.sw: 'Mashirika',
+    AppLanguage.en: 'Organizations',
+  },
+  'shell.createAnotherOrganization': {
+    AppLanguage.sw: 'Unda shirika lingine',
+    AppLanguage.en: 'Create another organization',
+  },
+  'shell.events': {AppLanguage.sw: 'Matukio', AppLanguage.en: 'Events'},
+  'shell.createEvent': {
+    AppLanguage.sw: 'Unda Tukio',
+    AppLanguage.en: 'Create Event',
+  },
+  'shell.createEventHint': {
+    AppLanguage.sw: 'Unda tukio ili kuanza shughuli.',
+    AppLanguage.en: 'Create an event to begin operations.',
+  },
+  'shell.changePin': {AppLanguage.sw: 'Badilisha PIN', AppLanguage.en: 'Change PIN'},
+  'shell.ahadiUser': {AppLanguage.sw: 'Mtumiaji wa Ahadi', AppLanguage.en: 'Ahadi user'},
+  'shell.invitationSingular': {
+    AppLanguage.sw: 'Kuna mwaliko wa shirika',
+    AppLanguage.en: 'Organization invitation available',
+  },
+  'shell.invitationPlural': {
+    AppLanguage.sw: 'Mialiko {count} ya mashirika',
+    AppLanguage.en: '{count} organization invitations',
+  },
+  'shell.more.messages': {AppLanguage.sw: 'Ujumbe', AppLanguage.en: 'Messages'},
+  'shell.more.contacts': {AppLanguage.sw: 'Mawasiliano', AppLanguage.en: 'Contacts'},
+  'shell.more.pledges': {AppLanguage.sw: 'Ahadi', AppLanguage.en: 'Pledges'},
+  'shell.more.receipts': {AppLanguage.sw: 'Risiti', AppLanguage.en: 'Receipts'},
+  'shell.more.outstanding': {AppLanguage.sw: 'Deni Lililobaki', AppLanguage.en: 'Outstanding'},
+  'shell.more.shareList': {AppLanguage.sw: 'Shiriki Orodha', AppLanguage.en: 'Share List'},
+  'shell.more.usersRoles': {AppLanguage.sw: 'Watumiaji na Majukumu', AppLanguage.en: 'Users & Roles'},
+  'shell.more.reports': {AppLanguage.sw: 'Ripoti', AppLanguage.en: 'Reports'},
+  'shell.more.activity': {AppLanguage.sw: 'Shughuli', AppLanguage.en: 'Activity'},
+  'shell.more.subscription': {AppLanguage.sw: 'Usajili', AppLanguage.en: 'Subscription'},
+  'shell.more.settings': {AppLanguage.sw: 'Mipangilio', AppLanguage.en: 'Settings'},
+  'shell.more.profile': {AppLanguage.sw: 'Wasifu', AppLanguage.en: 'Profile'},
+
+  // --- settings ---
+  'settings.title': {AppLanguage.sw: 'Mipangilio', AppLanguage.en: 'Settings'},
+  'settings.messaging': {AppLanguage.sw: 'Ujumbe', AppLanguage.en: 'Messaging'},
+  'settings.language': {AppLanguage.sw: 'Lugha', AppLanguage.en: 'Language'},
+  'settings.languageHint': {
+    AppLanguage.sw: 'Chagua lugha ya maonyesho ya programu.',
+    AppLanguage.en: 'Choose the app display language.',
+  },
+  'settings.language.sw': {AppLanguage.sw: 'Kiswahili', AppLanguage.en: 'Kiswahili'},
+  'settings.language.en': {AppLanguage.sw: 'Kiingereza', AppLanguage.en: 'English'},
+
+  // --- auth ---
+  'auth.signIn': {AppLanguage.sw: 'Ingia', AppLanguage.en: 'Sign in'},
+  'auth.signInHint': {
+    AppLanguage.sw: 'Tumia namba yako ya simu iliyothibitishwa na PIN ya tarakimu 4.',
+    AppLanguage.en: 'Use your verified phone number and 4 digit PIN.',
+  },
+  'auth.phoneNumber': {AppLanguage.sw: 'Namba ya simu', AppLanguage.en: 'Phone number'},
+  'auth.login': {AppLanguage.sw: 'Ingia', AppLanguage.en: 'Login'},
+  'auth.forgotPin': {AppLanguage.sw: 'Umesahau PIN?', AppLanguage.en: 'Forgot PIN?'},
+  'auth.newToAhadi': {AppLanguage.sw: 'Mgeni kwa Ahadi?', AppLanguage.en: 'New to Ahadi?'},
+  'auth.createAccount': {AppLanguage.sw: 'Fungua Akaunti', AppLanguage.en: 'Create Account'},
+  'auth.checking': {AppLanguage.sw: 'Inaangalia...', AppLanguage.en: 'Checking...'},
+  'auth.continue': {AppLanguage.sw: 'Endelea', AppLanguage.en: 'Continue'},
+  'auth.backToLogin': {AppLanguage.sw: 'Rudi Kuingia', AppLanguage.en: 'Back to Login'},
+  'auth.existingAccountMessage': {
+    AppLanguage.sw: 'Namba hii ya simu tayari ina akaunti ya Ahadi.\nIngia kwa kutumia PIN yako.',
+    AppLanguage.en: 'This phone number already has an Ahadi account.\nLog in using your PIN.',
+  },
+  'auth.codeSentTo': {AppLanguage.sw: 'Msimbo umetumwa kwa', AppLanguage.en: 'Code sent to'},
+  'auth.sixDigitCode': {AppLanguage.sw: 'Msimbo wa tarakimu sita', AppLanguage.en: 'Six-digit code'},
+  'auth.verifying': {AppLanguage.sw: 'Inathibitisha...', AppLanguage.en: 'Verifying...'},
+  'auth.verifyCode': {AppLanguage.sw: 'Thibitisha Msimbo', AppLanguage.en: 'Verify code'},
+  'auth.confirmPin': {AppLanguage.sw: 'Thibitisha PIN', AppLanguage.en: 'Confirm PIN'},
+  'auth.saving': {AppLanguage.sw: 'Inahifadhi...', AppLanguage.en: 'Saving...'},
+  'auth.fullName': {AppLanguage.sw: 'Jina Kamili', AppLanguage.en: 'Full Name'},
+  'auth.email': {AppLanguage.sw: 'Barua Pepe', AppLanguage.en: 'Email'},
+  'auth.notAMemberYet': {
+    AppLanguage.sw: 'Kwa sasa wewe si mwanachama wa shirika lolote.',
+    AppLanguage.en: 'You are not currently a member of an organization.',
+  },
+  'auth.createOrganization': {AppLanguage.sw: 'Unda Shirika', AppLanguage.en: 'Create Organization'},
+  'auth.accountExists': {AppLanguage.sw: 'Akaunti ipo', AppLanguage.en: 'Account exists'},
+  'auth.verifyPhone': {AppLanguage.sw: 'Thibitisha simu', AppLanguage.en: 'Verify phone'},
+  'auth.setPin': {AppLanguage.sw: 'Weka PIN', AppLanguage.en: 'Set PIN'},
+  'auth.completeProfile': {AppLanguage.sw: 'Kamilisha Wasifu', AppLanguage.en: 'Complete Profile'},
+  'auth.youreInvited': {AppLanguage.sw: 'Umealikwa', AppLanguage.en: "You're Invited"},
+  'auth.welcomeToAhadi': {AppLanguage.sw: 'Karibu Ahadi', AppLanguage.en: 'Welcome to Ahadi'},
+  'auth.phoneStepHint': {
+    AppLanguage.sw: 'Weka namba yako ya simu kuanza uthibitishaji wa akaunti.',
+    AppLanguage.en: 'Enter your phone number to start account verification.',
+  },
+  'auth.existingStepHint': {
+    AppLanguage.sw: 'Tumia kuingia kwa kawaida kwa akaunti za Ahadi zilizopo.',
+    AppLanguage.en: 'Use normal login for returning Ahadi accounts.',
+  },
+  'auth.otpStepHint': {
+    AppLanguage.sw: 'Weka msimbo uliotumwa kwa SMS.',
+    AppLanguage.en: 'Enter the code sent by SMS.',
+  },
+  'auth.pinStepHint': {
+    AppLanguage.sw: 'Unda PIN salama ya tarakimu 4.',
+    AppLanguage.en: 'Create a secure 4-digit PIN.',
+  },
+  'auth.profileStepHint': {
+    AppLanguage.sw: 'Jina hili linatumika katika akaunti yako yote ya Ahadi.',
+    AppLanguage.en: 'This name is used across your Ahadi account.',
+  },
+  'auth.invitationsStepHint': {
+    AppLanguage.sw: 'Angalia mialiko ya mashirika kwa namba yako ya simu iliyothibitishwa.',
+    AppLanguage.en: 'Review organization invitations for your verified phone.',
+  },
+  'auth.welcomeStepHint': {
+    AppLanguage.sw: 'Unda shirika baada tu ya akaunti yako kuwa tayari.',
+    AppLanguage.en: 'Create an organization only after your account is ready.',
+  },
+};

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/localization/app_locale.dart';
 import '../../../core/theme/ahadi_theme.dart';
 import '../../../core/widgets/formatters.dart';
 import '../../activity/presentation/activity_screen.dart';
@@ -33,9 +34,11 @@ class _MobileShellState extends State<MobileShell> {
   @override
   Widget build(BuildContext context) {
     final tenantName =
-        widget.controller.selectedTenantContext?.tenantName ?? 'Organizations';
+        widget.controller.selectedTenantContext?.tenantName ??
+        context.t('shell.organizations');
     final eventName =
-        widget.controller.selectedEvent?.name ?? 'No event selected';
+        widget.controller.selectedEvent?.name ??
+        context.t('common.noEventSelected');
     final pages = [
       DashboardScreen(controller: widget.controller),
       EventsScreen(controller: widget.controller),
@@ -215,8 +218,13 @@ class _MobileShellState extends State<MobileShell> {
                 ),
                 title: Text(
                   widget.controller.userContext!.pendingInvitations.length == 1
-                      ? 'Organization invitation available'
-                      : '${widget.controller.userContext!.pendingInvitations.length} organization invitations',
+                      ? context.t('shell.invitationSingular')
+                      : context
+                            .t('shell.invitationPlural')
+                            .replaceFirst(
+                              '{count}',
+                              '${widget.controller.userContext!.pendingInvitations.length}',
+                            ),
                   style: const TextStyle(fontWeight: FontWeight.w700),
                 ),
                 trailing: const Icon(Icons.chevron_right),
@@ -234,26 +242,26 @@ class _MobileShellState extends State<MobileShell> {
       bottomNavigationBar: NavigationBar(
         selectedIndex: index,
         onDestinationSelected: (value) => setState(() => index = value),
-        destinations: const [
+        destinations: [
           NavigationDestination(
-            icon: Icon(Icons.home_outlined),
-            selectedIcon: Icon(Icons.home),
-            label: 'Home',
+            icon: const Icon(Icons.home_outlined),
+            selectedIcon: const Icon(Icons.home),
+            label: context.t('shell.nav.home'),
           ),
           NavigationDestination(
-            icon: Icon(Icons.event_outlined),
-            selectedIcon: Icon(Icons.event),
-            label: 'Events',
+            icon: const Icon(Icons.event_outlined),
+            selectedIcon: const Icon(Icons.event),
+            label: context.t('shell.nav.events'),
           ),
           NavigationDestination(
-            icon: Icon(Icons.payments_outlined),
-            selectedIcon: Icon(Icons.payments),
-            label: 'Payments',
+            icon: const Icon(Icons.payments_outlined),
+            selectedIcon: const Icon(Icons.payments),
+            label: context.t('shell.nav.payments'),
           ),
           NavigationDestination(
-            icon: Icon(Icons.more_horiz),
-            selectedIcon: Icon(Icons.more),
-            label: 'More',
+            icon: const Icon(Icons.more_horiz),
+            selectedIcon: const Icon(Icons.more),
+            label: context.t('shell.nav.more'),
           ),
         ],
       ),
@@ -271,7 +279,7 @@ class _MobileShellState extends State<MobileShell> {
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
             children: [
               Text(
-                'Organizations',
+                context.t('shell.organizations'),
                 style: Theme.of(context).textTheme.titleLarge
                     ?.copyWith(fontWeight: FontWeight.w800),
               ),
@@ -300,7 +308,7 @@ class _MobileShellState extends State<MobileShell> {
               const Divider(),
               ListTile(
                 leading: const Icon(Icons.add_business_outlined),
-                title: const Text('Create another organization'),
+                title: Text(context.t('shell.createAnotherOrganization')),
                 onTap: () {
                   Navigator.of(context).pop();
                   Navigator.of(context).push(
@@ -332,7 +340,7 @@ class _MobileShellState extends State<MobileShell> {
     final profile = widget.controller.userContext?.profile;
     final name = profile?.fullName.isNotEmpty == true
         ? profile!.fullName
-        : 'Ahadi user';
+        : context.t('shell.ahadiUser');
     showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
@@ -363,7 +371,7 @@ class _MobileShellState extends State<MobileShell> {
               const Divider(),
               ListTile(
                 leading: const _MenuIcon(Icons.pin_outlined),
-                title: const Text('Change PIN'),
+                title: Text(context.t('shell.changePin')),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () {
                   Navigator.of(context).pop();
@@ -378,7 +386,7 @@ class _MobileShellState extends State<MobileShell> {
               const Divider(height: 1),
               ListTile(
                 leading: const _MenuIcon(Icons.logout_outlined),
-                title: const Text('Sign out'),
+                title: Text(context.t('common.signOut')),
                 onTap: () async {
                   final navigator = Navigator.of(context, rootNavigator: true);
                   Navigator.of(context).pop();
@@ -405,15 +413,15 @@ class _MobileShellState extends State<MobileShell> {
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
             children: [
               Text(
-                'Events',
+                context.t('shell.events'),
                 style: Theme.of(context).textTheme.titleLarge
                     ?.copyWith(fontWeight: FontWeight.w800),
               ),
               const SizedBox(height: 8),
               if (events.isEmpty)
-                const ListTile(
-                  title: Text('No event selected'),
-                  subtitle: Text('Create an event to begin operations.'),
+                ListTile(
+                  title: Text(context.t('common.noEventSelected')),
+                  subtitle: Text(context.t('shell.createEventHint')),
                 )
               else
                 ...events.map((event) {
@@ -439,7 +447,7 @@ class _MobileShellState extends State<MobileShell> {
               const Divider(),
               ListTile(
                 leading: const Icon(Icons.add),
-                title: const Text('Create Event'),
+                title: Text(context.t('shell.createEvent')),
                 onTap: () {
                   Navigator.of(context).pop();
                   setState(() => index = 1);
@@ -472,7 +480,7 @@ class _MorePage extends StatelessWidget {
       padding: const EdgeInsets.all(16),
       children: [
         Text(
-          'More',
+          context.t('shell.nav.more'),
           style: Theme.of(context).textTheme.headlineSmall
               ?.copyWith(fontWeight: FontWeight.w800),
         ),
@@ -482,7 +490,7 @@ class _MorePage extends StatelessWidget {
             children: [
               ListTile(
                 leading: const _MenuIcon(Icons.sms_outlined),
-                title: const Text('Messages'),
+                title: Text(context.t('shell.more.messages')),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () => Navigator.of(context).push(
                   MaterialPageRoute(
@@ -493,7 +501,7 @@ class _MorePage extends StatelessWidget {
               const Divider(height: 1),
               ListTile(
                 leading: const _MenuIcon(Icons.contacts_outlined),
-                title: const Text('Contacts'),
+                title: Text(context.t('shell.more.contacts')),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () => Navigator.of(context).push(
                   MaterialPageRoute(
@@ -504,7 +512,7 @@ class _MorePage extends StatelessWidget {
               const Divider(height: 1),
               ListTile(
                 leading: const _MenuIcon(Icons.volunteer_activism_outlined),
-                title: const Text('Pledges'),
+                title: Text(context.t('shell.more.pledges')),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () => Navigator.of(context).push(
                   MaterialPageRoute(
@@ -515,7 +523,7 @@ class _MorePage extends StatelessWidget {
               const Divider(height: 1),
               ListTile(
                 leading: const _MenuIcon(Icons.receipt_long_outlined),
-                title: const Text('Receipts'),
+                title: Text(context.t('shell.more.receipts')),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () => Navigator.of(context).push(
                   MaterialPageRoute(
@@ -526,7 +534,7 @@ class _MorePage extends StatelessWidget {
               const Divider(height: 1),
               ListTile(
                 leading: const _MenuIcon(Icons.trending_down_outlined),
-                title: const Text('Outstanding'),
+                title: Text(context.t('shell.more.outstanding')),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () => Navigator.of(context).push(
                   MaterialPageRoute(
@@ -537,7 +545,7 @@ class _MorePage extends StatelessWidget {
               const Divider(height: 1),
               ListTile(
                 leading: const _MenuIcon(Icons.share_outlined),
-                title: const Text('Share List'),
+                title: Text(context.t('shell.more.shareList')),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () => Navigator.of(context).push(
                   MaterialPageRoute(
@@ -549,7 +557,7 @@ class _MorePage extends StatelessWidget {
               if (canViewUsers) ...[
                 ListTile(
                   leading: const _MenuIcon(Icons.group_outlined),
-                  title: const Text('Users & Roles'),
+                  title: Text(context.t('shell.more.usersRoles')),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () => Navigator.of(context).push(
                     MaterialPageRoute(
@@ -561,7 +569,7 @@ class _MorePage extends StatelessWidget {
               ],
               ListTile(
                 leading: const _MenuIcon(Icons.analytics_outlined),
-                title: const Text('Reports'),
+                title: Text(context.t('shell.more.reports')),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () => Navigator.of(context).push(
                   MaterialPageRoute(
@@ -573,7 +581,7 @@ class _MorePage extends StatelessWidget {
               if (canViewActivity) ...[
                 ListTile(
                   leading: const _MenuIcon(Icons.history_outlined),
-                  title: const Text('Activity'),
+                  title: Text(context.t('shell.more.activity')),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () => Navigator.of(context).push(
                     MaterialPageRoute(
@@ -585,7 +593,7 @@ class _MorePage extends StatelessWidget {
               ],
               ListTile(
                 leading: const _MenuIcon(Icons.credit_card_outlined),
-                title: const Text('Subscription'),
+                title: Text(context.t('shell.more.subscription')),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () => Navigator.of(context).push(
                   MaterialPageRoute(
@@ -596,7 +604,7 @@ class _MorePage extends StatelessWidget {
               const Divider(height: 1),
               ListTile(
                 leading: const _MenuIcon(Icons.settings_outlined),
-                title: const Text('Settings'),
+                title: Text(context.t('shell.more.settings')),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () => Navigator.of(context).push(
                   MaterialPageRoute(
@@ -607,12 +615,12 @@ class _MorePage extends StatelessWidget {
               const Divider(height: 1),
               ListTile(
                 leading: const _MenuIcon(Icons.person_outline, round: true),
-                title: const Text('Profile'),
+                title: Text(context.t('shell.more.profile')),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () => Navigator.of(context).push(
                   MaterialPageRoute(
                     builder: (_) => Scaffold(
-                      appBar: AppBar(title: const Text('Profile')),
+                      appBar: AppBar(title: Text(context.t('shell.more.profile'))),
                       body: ProfileScreen(controller: controller),
                     ),
                   ),
@@ -621,7 +629,7 @@ class _MorePage extends StatelessWidget {
               const Divider(height: 1),
               ListTile(
                 leading: const _MenuIcon(Icons.logout_outlined),
-                title: const Text('Sign out'),
+                title: Text(context.t('common.signOut')),
                 onTap: () async {
                   await controller.signOut();
                   if (context.mounted) {
@@ -671,9 +679,10 @@ class _SettingsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final locale = AppLocaleScope.of(context);
     return Scaffold(
       backgroundColor: AhadiColors.background,
-      appBar: AppBar(title: const Text('Settings')),
+      appBar: AppBar(title: Text(context.t('settings.title'))),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
@@ -682,7 +691,7 @@ class _SettingsScreen extends StatelessWidget {
               children: [
                 ListTile(
                   leading: const _MenuIcon(Icons.sms_outlined),
-                  title: const Text('Messaging'),
+                  title: Text(context.t('settings.messaging')),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () => Navigator.of(context).push(
                     MaterialPageRoute(
@@ -692,6 +701,48 @@ class _SettingsScreen extends StatelessWidget {
                   ),
                 ),
               ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const _MenuIcon(Icons.language_outlined),
+                      const SizedBox(width: 12),
+                      Text(
+                        context.t('settings.language'),
+                        style: const TextStyle(fontWeight: FontWeight.w800),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    context.t('settings.languageHint'),
+                    style: const TextStyle(color: AhadiColors.muted),
+                  ),
+                  const SizedBox(height: 12),
+                  SegmentedButton<AppLanguage>(
+                    segments: [
+                      ButtonSegment(
+                        value: AppLanguage.sw,
+                        label: Text(context.t('settings.language.sw')),
+                      ),
+                      ButtonSegment(
+                        value: AppLanguage.en,
+                        label: Text(context.t('settings.language.en')),
+                      ),
+                    ],
+                    selected: {locale.language},
+                    onSelectionChanged: (selection) =>
+                        locale.setLanguage(selection.first),
+                  ),
+                ],
+              ),
             ),
           ),
         ],

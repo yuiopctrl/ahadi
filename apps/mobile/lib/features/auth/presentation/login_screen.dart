@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/localization/app_locale.dart';
 import '../../../core/theme/ahadi_theme.dart';
 import '../../../core/widgets/brand_header.dart';
 import '../data/session_controller.dart';
@@ -70,14 +71,14 @@ class _LoginScreenState extends State<LoginScreen> {
                           const BrandHeader(),
                           const SizedBox(height: 32),
                           Text(
-                            'Sign in',
+                            context.t('auth.signIn'),
                             textAlign: TextAlign.center,
                             style: Theme.of(context).textTheme.headlineSmall
                                 ?.copyWith(fontWeight: FontWeight.w800),
                           ),
                           const SizedBox(height: 8),
                           Text(
-                            'Use your verified phone number and 4 digit PIN.',
+                            context.t('auth.signInHint'),
                             textAlign: TextAlign.center,
                             style: Theme.of(context).textTheme.bodyMedium
                                 ?.copyWith(color: AhadiColors.muted),
@@ -89,8 +90,8 @@ class _LoginScreenState extends State<LoginScreen> {
                             enabled: !widget.controller.isSubmitting,
                             keyboardType: TextInputType.phone,
                             textInputAction: TextInputAction.next,
-                            decoration: const InputDecoration(
-                              labelText: 'Phone number',
+                            decoration: InputDecoration(
+                              labelText: context.t('auth.phoneNumber'),
                               hintText: '0712 345 678',
                             ),
                           ),
@@ -126,7 +127,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                       color: Colors.white,
                                     ),
                                   )
-                                : const Text('Login'),
+                                : Text(context.t('auth.login')),
                           ),
                           TextButton(
                             onPressed: widget.controller.isSubmitting
@@ -140,12 +141,12 @@ class _LoginScreenState extends State<LoginScreen> {
                                       ),
                                     );
                                   },
-                            child: const Text('Forgot PIN?'),
+                            child: Text(context.t('auth.forgotPin')),
                           ),
                           const Divider(height: 28),
                           Center(
                             child: Text(
-                              'New to Ahadi?',
+                              context.t('auth.newToAhadi'),
                               style: Theme.of(context).textTheme.bodyMedium
                                   ?.copyWith(color: AhadiColors.muted),
                             ),
@@ -163,7 +164,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                     ),
                                   ),
                             icon: const Icon(Icons.person_add_alt_1_outlined),
-                            label: const Text('Create Account'),
+                            label: Text(context.t('auth.createAccount')),
                           ),
                         ],
                       ),
