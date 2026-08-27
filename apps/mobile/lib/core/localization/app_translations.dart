@@ -272,4 +272,32 @@ const Map<String, Map<AppLanguage, String>> appTranslations = {
   'eventDetail.member': {AppLanguage.sw: 'Mwanachama', AppLanguage.en: 'Member'},
   'eventDetail.searchExistingContact': {AppLanguage.sw: 'Tafuta mawasiliano yaliyopo', AppLanguage.en: 'Search existing contact'},
   'eventDetail.noAvailableContacts': {AppLanguage.sw: 'Hakuna mawasiliano yanayopatikana.', AppLanguage.en: 'No available contacts found.'},
+
+  // --- contacts ---
+  'contacts.addContact': {AppLanguage.sw: 'Ongeza Mawasiliano', AppLanguage.en: 'Add Contact'},
+  'contacts.editContact': {AppLanguage.sw: 'Hariri Mawasiliano', AppLanguage.en: 'Edit Contact'},
+  'contacts.searchHint': {AppLanguage.sw: 'Tafuta jina au namba ya simu', AppLanguage.en: 'Search name or phone'},
+  'contacts.noCreatePermission': {
+    AppLanguage.sw: 'Jukumu lako halina ruhusa ya kuongeza mawasiliano.',
+    AppLanguage.en: 'Your role does not include permission to add contacts.',
+  },
+  'contacts.noContactsFound': {AppLanguage.sw: 'Hakuna mawasiliano yaliyopatikana.', AppLanguage.en: 'No contacts found.'},
+  'contacts.alternativePhone': {AppLanguage.sw: 'Simu Mbadala', AppLanguage.en: 'Alternative Phone'},
+  'contacts.location': {AppLanguage.sw: 'Mahali', AppLanguage.en: 'Location'},
+  'contacts.saveContact': {AppLanguage.sw: 'Hifadhi Mawasiliano', AppLanguage.en: 'Save Contact'},
+  'contacts.invalidPhone': {
+    AppLanguage.sw: 'Weka namba sahihi ya simu ya Tanzania, mfano 0712345678.',
+    AppLanguage.en: 'Enter a valid Tanzanian phone number, e.g. 0712345678.',
+  },
+  'contacts.saveContactError': {
+    AppLanguage.sw: 'Imeshindwa kuhifadhi mawasiliano. Tafadhali jaribu tena.',
+    AppLanguage.en: 'Unable to save contact. Please try again.',
+  },
+  'contacts.contactInformation': {AppLanguage.sw: 'Taarifa za Mawasiliano', AppLanguage.en: 'Contact Information'},
+  'contacts.phone': {AppLanguage.sw: 'Simu', AppLanguage.en: 'Phone'},
+  'contacts.notSet': {AppLanguage.sw: 'Haijawekwa', AppLanguage.en: 'Not set'},
+  'contacts.notAttachedToEvent': {
+    AppLanguage.sw: 'Mawasiliano haya hayajaunganishwa na tukio lolote bado.',
+    AppLanguage.en: 'This contact is not attached to any event yet.',
+  },
 };
