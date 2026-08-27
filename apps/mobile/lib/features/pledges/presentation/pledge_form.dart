@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/localization/app_locale.dart';
 import '../../../core/theme/ahadi_theme.dart';
 import '../../../core/widgets/formatters.dart';
 import '../../auth/data/session_controller.dart';
@@ -65,7 +66,7 @@ class _PledgeFormState extends State<PledgeForm> {
             ? null
             : () => setState(() => open = true),
         icon: const Icon(Icons.add),
-        label: const Text('Record Pledge'),
+        label: Text(context.t('pledges.recordPledge')),
       );
     }
     return Card(
@@ -75,7 +76,7 @@ class _PledgeFormState extends State<PledgeForm> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text(
-              'Record Pledge',
+              context.t('pledges.recordPledge'),
               style: Theme.of(context).textTheme.titleMedium
                   ?.copyWith(fontWeight: FontWeight.w800),
             ),
@@ -84,17 +85,17 @@ class _PledgeFormState extends State<PledgeForm> {
               TextField(
                 controller: memberSearch,
                 onChanged: (_) => setState(() {}),
-                decoration: const InputDecoration(
-                  labelText: 'Search name or phone',
-                  prefixIcon: Icon(Icons.search),
-                  helperText: 'Choose a member from this event.',
+                decoration: InputDecoration(
+                  labelText: context.t('contacts.searchHint'),
+                  prefixIcon: const Icon(Icons.search),
+                  helperText: context.t('pledges.chooseMemberHint'),
                 ),
               ),
               const SizedBox(height: 8),
               if (matchingMembers.isEmpty)
-                const Text(
-                  'No event members match your search.',
-                  style: TextStyle(color: AhadiColors.muted),
+                Text(
+                  context.t('pledges.noMembersMatch'),
+                  style: const TextStyle(color: AhadiColors.muted),
                 )
               else
                 ...matchingMembers.map((member) {
@@ -103,7 +104,7 @@ class _PledgeFormState extends State<PledgeForm> {
                     contentPadding: EdgeInsets.zero,
                     title: Text(titleCaseName(member['full_name'])),
                     subtitle: Text(
-                      stringFrom(member, 'phone_e164', 'No phone'),
+                      stringFrom(member, 'phone_e164', context.t('contacts.noPhone')),
                     ),
                     trailing: const Icon(Icons.chevron_right),
                     onTap: () => setState(() => eventMemberId = id),
@@ -111,7 +112,7 @@ class _PledgeFormState extends State<PledgeForm> {
                 }),
             ] else
               AhadiSectionCard(
-                title: 'Selected Member',
+                title: context.t('pledges.selectedMember'),
                 children: [
                   Row(
                     children: [
@@ -130,7 +131,7 @@ class _PledgeFormState extends State<PledgeForm> {
                               stringFrom(
                                 selectedMember,
                                 'phone_e164',
-                                'No phone',
+                                context.t('contacts.noPhone'),
                               ),
                               style: const TextStyle(color: AhadiColors.muted),
                             ),
@@ -142,7 +143,7 @@ class _PledgeFormState extends State<PledgeForm> {
                           eventMemberId = null;
                           memberSearch.clear();
                         }),
-                        child: const Text('Change'),
+                        child: Text(context.t('pledges.change')),
                       ),
                     ],
                   ),
@@ -153,27 +154,27 @@ class _PledgeFormState extends State<PledgeForm> {
               controller: amount,
               keyboardType: TextInputType.number,
               inputFormatters: const [MoneyInputFormatter()],
-              decoration: const InputDecoration(
-                labelText: 'Pledge Amount',
+              decoration: InputDecoration(
+                labelText: context.t('pledges.pledgeAmount'),
                 prefixText: 'TZS ',
               ),
             ),
             const SizedBox(height: 12),
             TextField(
               controller: dueDate,
-              decoration: const InputDecoration(
-                labelText: 'Due Date YYYY-MM-DD (optional)',
+              decoration: InputDecoration(
+                labelText: context.t('pledges.dueDateOptional'),
               ),
             ),
             const SizedBox(height: 6),
             Text(
-              'Default due date: ${dateText(widget.event.pledgeDeadline)}',
+              '${context.t('pledges.defaultDueDate')} ${dateText(widget.event.pledgeDeadline)}',
               style: const TextStyle(color: AhadiColors.muted),
             ),
             const SizedBox(height: 12),
             TextField(
               controller: notes,
-              decoration: const InputDecoration(labelText: 'Notes (optional)'),
+              decoration: InputDecoration(labelText: context.t('pledges.notesOptional')),
             ),
             if (error != null) ...[
               const SizedBox(height: 8),
@@ -185,14 +186,14 @@ class _PledgeFormState extends State<PledgeForm> {
                 Expanded(
                   child: OutlinedButton(
                     onPressed: () => setState(() => open = false),
-                    child: const Text('Cancel'),
+                    child: Text(context.t('common.cancel')),
                   ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: FilledButton(
                     onPressed: saving ? null : _submit,
-                    child: Text(saving ? 'Saving...' : 'Save'),
+                    child: Text(saving ? context.t('auth.saving') : context.t('common.save')),
                   ),
                 ),
               ],
