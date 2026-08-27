@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../../core/localization/app_locale.dart';
 import '../../../core/theme/ahadi_theme.dart';
 import '../../../core/widgets/formatters.dart';
 import '../../auth/data/session_controller.dart';
@@ -20,19 +21,19 @@ class ReportsScreen extends StatelessWidget {
     final event = controller.selectedEvent;
     return Scaffold(
       backgroundColor: AhadiColors.background,
-      appBar: AppBar(title: const Text('Reports')),
+      appBar: AppBar(title: Text(context.t('shell.more.reports'))),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
           _ReportsHeader(event: event),
           const SizedBox(height: 16),
           _ReportSection(
-            title: 'Event Reports',
+            title: context.t('reports.eventReports'),
             children: [
               _ReportTile(
                 icon: Icons.query_stats_outlined,
-                title: 'Financial Summary',
-                subtitle: 'Pledged, received, outstanding and collection rate',
+                title: context.t('reports.financialSummary'),
+                subtitle: context.t('reports.financialSummarySubtitle'),
                 enabled: event != null,
                 onTap: () => _open(
                   context,
@@ -41,37 +42,37 @@ class ReportsScreen extends StatelessWidget {
               ),
               _ReportTile(
                 icon: Icons.volunteer_activism_outlined,
-                title: 'Pledges',
-                subtitle: 'Member pledge rows with paid and outstanding totals',
+                title: context.t('shell.more.pledges'),
+                subtitle: context.t('reports.pledgesSubtitle'),
                 enabled: event != null,
                 onTap: () =>
                     _open(context, PledgeReportScreen(controller: controller)),
               ),
               _ReportTile(
                 icon: Icons.payments_outlined,
-                title: 'Payments',
-                subtitle: 'Recorded payments and receipt references',
+                title: context.t('shell.nav.payments'),
+                subtitle: context.t('reports.paymentsSubtitle'),
                 enabled: event != null,
                 onTap: () => _open(
                   context,
                   PaymentsScreen(
                     controller: controller,
-                    appBar: AppBar(title: const Text('Payments Report')),
+                    appBar: AppBar(title: Text(context.t('reports.paymentsReportTitle'))),
                   ),
                 ),
               ),
               _ReportTile(
                 icon: Icons.trending_down_outlined,
-                title: 'Outstanding',
-                subtitle: 'Members with unpaid balances',
+                title: context.t('shell.more.outstanding'),
+                subtitle: context.t('reports.outstandingSubtitle'),
                 enabled: event != null,
                 onTap: () =>
                     _open(context, OutstandingScreen(controller: controller)),
               ),
               _ReportTile(
                 icon: Icons.receipt_long_outlined,
-                title: 'Receipts',
-                subtitle: 'Receipt history including reversed receipts',
+                title: context.t('shell.more.receipts'),
+                subtitle: context.t('reports.receiptsSubtitle'),
                 enabled: event != null,
                 onTap: () =>
                     _open(context, ReceiptsScreen(controller: controller)),
@@ -80,13 +81,12 @@ class ReportsScreen extends StatelessWidget {
           ),
           const SizedBox(height: 16),
           _ReportSection(
-            title: 'Organization Reports',
+            title: context.t('reports.organizationReports'),
             children: [
               _ReportTile(
                 icon: Icons.event_note_outlined,
-                title: 'Events Summary',
-                subtitle:
-                    'Server-provided event totals across this organization',
+                title: context.t('reports.eventsSummary'),
+                subtitle: context.t('reports.eventsSummarySubtitle'),
                 enabled: controller.selectedTenantContext != null,
                 onTap: () => _open(
                   context,
@@ -158,13 +158,13 @@ class _FinancialSummaryReportScreenState
     final event = widget.controller.selectedEvent;
     return Scaffold(
       backgroundColor: AhadiColors.background,
-      appBar: AppBar(title: const Text('Financial Summary')),
+      appBar: AppBar(title: Text(context.t('reports.financialSummary'))),
       body: RefreshIndicator(
         onRefresh: _refresh,
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            _EventHeader(title: 'Financial Summary', event: event),
+            _EventHeader(title: context.t('reports.financialSummary'), event: event),
             const SizedBox(height: 12),
             FutureBuilder<Map<String, dynamic>>(
               future: future,
@@ -174,7 +174,7 @@ class _FinancialSummaryReportScreenState
                 }
                 if (snapshot.hasError) {
                   return _ErrorCard(
-                    message: friendlyErrorText(snapshot.error),
+                    message: friendlyErrorText(snapshot.error, context.t('reports.loadError')),
                     onRetry: _refresh,
                   );
                 }
@@ -205,25 +205,25 @@ class _FinancialSummaryReportScreenState
                     const SizedBox(height: 12),
                     _MetricGrid(
                       metrics: [
-                        _Metric('Total Pledged', moneyText(pledged)),
-                        _Metric('Received', moneyText(received)),
-                        _Metric('Outstanding', moneyText(outstanding)),
-                        _Metric('Collection Rate', '${rate.round()}%'),
+                        _Metric(context.t('dashboard.totalPledged'), moneyText(pledged)),
+                        _Metric(context.t('dashboard.received'), moneyText(received)),
+                        _Metric(context.t('dashboard.outstanding'), moneyText(outstanding)),
+                        _Metric(context.t('reports.collectionRate'), '${rate.round()}%'),
                       ],
                     ),
                     const SizedBox(height: 12),
                     _MetricGrid(
                       metrics: [
                         _Metric(
-                          'Members',
+                          context.t('dashboard.members'),
                           '${numberFrom(summary['memberCount'] ?? event?.memberCount)?.round() ?? 0}',
                         ),
                         _Metric(
-                          'With Pledge',
+                          context.t('reports.withPledge'),
                           '${numberFrom(summary['membersWithPledges'])?.round() ?? 0}',
                         ),
                         _Metric(
-                          'Without Pledge',
+                          context.t('reports.withoutPledge'),
                           '${numberFrom(summary['membersWithoutPledges'])?.round() ?? 0}',
                         ),
                       ],
@@ -319,10 +319,10 @@ class _PledgeReportScreenState extends State<PledgeReportScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            _SortOption('Member A-Z', 'MEMBER', 'ASC'),
-            _SortOption('Highest Pledged', 'PLEDGED', 'DESC'),
-            _SortOption('Highest Outstanding', 'OUTSTANDING', 'DESC'),
-            _SortOption('Due Date', 'DUE_DATE', 'ASC'),
+            _SortOption(context.t('reports.sort.memberAZ'), 'MEMBER', 'ASC'),
+            _SortOption(context.t('reports.sort.highestPledged'), 'PLEDGED', 'DESC'),
+            _SortOption(context.t('reports.sort.highestOutstanding'), 'OUTSTANDING', 'DESC'),
+            _SortOption(context.t('reports.sort.dueDate'), 'DUE_DATE', 'ASC'),
           ],
         ),
       ),
@@ -341,28 +341,28 @@ class _PledgeReportScreenState extends State<PledgeReportScreen> {
     final event = widget.controller.selectedEvent;
     return Scaffold(
       backgroundColor: AhadiColors.background,
-      appBar: AppBar(title: const Text('Pledges Report')),
+      appBar: AppBar(title: Text(context.t('reports.pledgesReport'))),
       body: RefreshIndicator(
         onRefresh: _refresh,
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            _EventHeader(title: 'Pledges', event: event),
+            _EventHeader(title: context.t('shell.more.pledges'), event: event),
             const SizedBox(height: 12),
             TextField(
               key: const Key('reports-pledges-search'),
               controller: search,
               onChanged: _searchChanged,
-              decoration: const InputDecoration(
-                labelText: 'Search name or phone',
-                prefixIcon: Icon(Icons.search),
+              decoration: InputDecoration(
+                labelText: context.t('contacts.searchHint'),
+                prefixIcon: const Icon(Icons.search),
               ),
             ),
             const SizedBox(height: 8),
             OutlinedButton.icon(
               onPressed: _chooseSort,
               icon: const Icon(Icons.sort),
-              label: Text(_sortLabel(sort, direction)),
+              label: Text(_sortLabel(context, sort, direction)),
             ),
             const SizedBox(height: 12),
             FutureBuilder<Map<String, dynamic>>(
@@ -373,26 +373,26 @@ class _PledgeReportScreenState extends State<PledgeReportScreen> {
                 }
                 if (snapshot.hasError) {
                   return _ErrorCard(
-                    message: friendlyErrorText(snapshot.error),
+                    message: friendlyErrorText(snapshot.error, context.t('reports.loadError')),
                     onRetry: _refresh,
                   );
                 }
                 final report = snapshot.data ?? _emptyReport();
                 final summary = _jsonMap(report['summary']);
                 final rows = _objectList(report['data']);
-                if (rows.isEmpty) return const _EmptyCard('No pledges found.');
+                if (rows.isEmpty) return _EmptyCard(context.t('reports.noPledgesFound'));
                 return Column(
                   children: [
                     _MetricGrid(
                       metrics: [
                         _Metric(
-                          'Pledges',
+                          context.t('shell.more.pledges'),
                           '${numberFrom(summary['pledgeCount'])?.round() ?? rows.length}',
                         ),
-                        _Metric('Pledged', moneyText(summary['totalPledged'])),
-                        _Metric('Paid', moneyText(summary['totalPaid'])),
+                        _Metric(context.t('common.pledged'), moneyText(summary['totalPledged'])),
+                        _Metric(context.t('billing.paid'), moneyText(summary['totalPaid'])),
                         _Metric(
-                          'Outstanding',
+                          context.t('dashboard.outstanding'),
                           moneyText(summary['totalOutstanding']),
                         ),
                       ],
@@ -443,23 +443,23 @@ class EventsSummaryReportScreen extends StatelessWidget {
     final events = controller.selectedTenantContext?.events ?? const [];
     return Scaffold(
       backgroundColor: AhadiColors.background,
-      appBar: AppBar(title: const Text('Events Summary')),
+      appBar: AppBar(title: Text(context.t('reports.eventsSummary'))),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
           Text(
-            'Events Summary',
+            context.t('reports.eventsSummary'),
             style: Theme.of(context).textTheme.headlineSmall
                 ?.copyWith(fontWeight: FontWeight.w900),
           ),
           const SizedBox(height: 4),
           Text(
-            controller.selectedTenantContext?.tenantName ?? 'Organization',
+            controller.selectedTenantContext?.tenantName ?? context.t('billing.organization'),
             style: const TextStyle(color: AhadiColors.muted),
           ),
           const SizedBox(height: 12),
           if (events.isEmpty)
-            const _EmptyCard('No events available for this organization.')
+            _EmptyCard(context.t('reports.noEventsForOrg'))
           else
             for (final event in events) ...[
               _EventSummaryReportCard(event: event),
@@ -482,15 +482,15 @@ class _ReportsHeader extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Reports',
+          context.t('shell.more.reports'),
           style: Theme.of(context).textTheme.headlineSmall
               ?.copyWith(fontWeight: FontWeight.w900),
         ),
         const SizedBox(height: 4),
         Text(
           event == null
-              ? 'Select an event to open event reports.'
-              : 'Selected event: ${event!.name}',
+              ? context.t('reports.selectEventHint')
+              : '${context.t('reports.selectedEvent')} ${event!.name}',
           style: const TextStyle(color: AhadiColors.muted),
         ),
       ],
@@ -595,7 +595,7 @@ class _EventHeader extends StatelessWidget {
         ),
         const SizedBox(height: 4),
         Text(
-          event?.name ?? 'No event selected',
+          event?.name ?? context.t('common.noEventSelected'),
           style: const TextStyle(color: AhadiColors.muted),
         ),
       ],
@@ -615,11 +615,11 @@ class _EventMetaCard extends StatelessWidget {
         padding: const EdgeInsets.all(14),
         child: Column(
           children: [
-            _InfoLine(label: 'Event Name', value: event?.name ?? 'Not set'),
-            _InfoLine(label: 'Status', value: event?.status ?? 'Not set'),
-            _InfoLine(label: 'Event Date', value: dateText(event?.eventDate)),
+            _InfoLine(label: context.t('events.eventName'), value: event?.name ?? context.t('contacts.notSet')),
+            _InfoLine(label: context.t('eventDetail.status'), value: event?.status ?? context.t('contacts.notSet')),
+            _InfoLine(label: context.t('reports.eventDateLabel'), value: dateText(event?.eventDate)),
             _InfoLine(
-              label: 'Pledge Deadline',
+              label: context.t('events.pledgeDeadlineShort'),
               value: dateText(event?.pledgeDeadline),
             ),
           ],
@@ -757,7 +757,7 @@ class _PledgeReportCard extends StatelessWidget {
             ),
             const SizedBox(height: 4),
             Text(
-              _text(pledge, ['phone'], 'No phone'),
+              _text(pledge, ['phone'], context.t('contacts.noPhone')),
               style: const TextStyle(color: AhadiColors.muted),
             ),
             const SizedBox(height: 10),
@@ -768,7 +768,7 @@ class _PledgeReportCard extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             Text(
-              'Due ${dateText(_text(pledge, ['effectiveDueDate', 'dueDate']))}',
+              '${context.t('eventDetail.due')} ${dateText(_text(pledge, ['effectiveDueDate', 'dueDate']))}',
               style: const TextStyle(color: AhadiColors.muted),
             ),
           ],
@@ -808,7 +808,7 @@ class _EventSummaryReportCard extends StatelessWidget {
             ),
             const SizedBox(height: 6),
             Text(
-              '${event.memberCount ?? 0} members • Collection $rate%',
+              '${event.memberCount ?? 0} ${context.t('dashboard.members').toLowerCase()} • ${context.t('reports.collection')} $rate%',
               style: const TextStyle(color: AhadiColors.muted),
             ),
             const SizedBox(height: 10),
@@ -840,13 +840,13 @@ class _ThreeAmounts extends StatelessWidget {
     return Row(
       children: [
         Expanded(
-          child: _TinyAmount(label: 'Pledged', value: pledged),
+          child: _TinyAmount(label: context.t('common.pledged'), value: pledged),
         ),
         Expanded(
-          child: _TinyAmount(label: 'Paid', value: paid),
+          child: _TinyAmount(label: context.t('billing.paid'), value: paid),
         ),
         Expanded(
-          child: _TinyAmount(label: 'Outstanding', value: outstanding),
+          child: _TinyAmount(label: context.t('dashboard.outstanding'), value: outstanding),
         ),
       ],
     );
@@ -904,21 +904,21 @@ class _PaginationControls extends StatelessWidget {
         children: [
           IconButton.outlined(
             onPressed: onPrevious,
-            tooltip: 'Previous page',
+            tooltip: context.t('common.previousPage'),
             icon: const Icon(Icons.chevron_left),
           ),
           Expanded(
             child: Text(
               totalPages == null
-                  ? 'Page $page'
-                  : 'Page $page of ${totalPages.round()}',
+                  ? '${context.t('common.page')} $page'
+                  : '${context.t('common.page')} $page ${context.t('common.of')} ${totalPages.round()}',
               textAlign: TextAlign.center,
               style: const TextStyle(color: AhadiColors.muted),
             ),
           ),
           IconButton.outlined(
             onPressed: onNext,
-            tooltip: 'Next page',
+            tooltip: context.t('common.nextPage'),
             icon: const Icon(Icons.chevron_right),
           ),
         ],
@@ -972,7 +972,7 @@ class _ErrorCard extends StatelessWidget {
           children: [
             Text(message, style: const TextStyle(color: AhadiColors.danger)),
             const SizedBox(height: 12),
-            OutlinedButton(onPressed: onRetry, child: const Text('Retry')),
+            OutlinedButton(onPressed: onRetry, child: Text(context.t('common.retry'))),
           ],
         ),
       ),
@@ -1012,11 +1012,11 @@ bool _hasNext(Map<String, dynamic> report) {
   return _objectList(report['data']).length >= _reportPageSize;
 }
 
-String _sortLabel(String sort, String direction) {
-  if (sort == 'PLEDGED') return 'Highest Pledged';
-  if (sort == 'OUTSTANDING') return 'Highest Outstanding';
-  if (sort == 'DUE_DATE') return 'Due Date';
-  return direction == 'DESC' ? 'Member Z-A' : 'Member A-Z';
+String _sortLabel(BuildContext context, String sort, String direction) {
+  if (sort == 'PLEDGED') return context.t('reports.sort.highestPledged');
+  if (sort == 'OUTSTANDING') return context.t('reports.sort.highestOutstanding');
+  if (sort == 'DUE_DATE') return context.t('reports.sort.dueDate');
+  return direction == 'DESC' ? context.t('reports.sort.memberZA') : context.t('reports.sort.memberAZ');
 }
 
 String _text(
