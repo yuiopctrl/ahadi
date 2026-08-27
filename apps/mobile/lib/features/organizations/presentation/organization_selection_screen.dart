@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/localization/app_locale.dart';
 import '../../../core/theme/ahadi_theme.dart';
 import '../../auth/data/session_controller.dart';
 import '../../auth/domain/auth_models.dart';
@@ -19,7 +20,7 @@ class OrganizationSelectionScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Choose Organization')),
+      appBar: AppBar(title: Text(context.t('organizations.chooseOrganization'))),
       body: SafeArea(
         child: ListView.separated(
           padding: const EdgeInsets.all(16),
@@ -36,7 +37,7 @@ class OrganizationSelectionScreen extends StatelessWidget {
                   ),
                 ),
                 icon: const Icon(Icons.add_business_outlined),
-                label: const Text('Create another organization'),
+                label: Text(context.t('shell.createAnotherOrganization')),
               );
             }
             final membership = memberships[index];
@@ -48,7 +49,7 @@ class OrganizationSelectionScreen extends StatelessWidget {
                   style: const TextStyle(fontWeight: FontWeight.w800),
                 ),
                 subtitle: Text(
-                  membership.subscription?.planName ?? 'Ahadi workspace',
+                  membership.subscription?.planName ?? context.t('organizations.ahadiWorkspace'),
                 ),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () => controller.selectTenant(membership.tenantId),
@@ -70,12 +71,12 @@ class EmptyOrganizationsScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Organizations'),
+        title: Text(context.t('shell.organizations')),
         actions: [
           IconButton(
             onPressed: controller.signOut,
             icon: const Icon(Icons.logout),
-            tooltip: 'Sign out',
+            tooltip: context.t('common.signOut'),
           ),
         ],
       ),
@@ -91,13 +92,13 @@ class EmptyOrganizationsScreen extends StatelessWidget {
             ),
             const SizedBox(height: 16),
             Text(
-              'Create or join an organization',
+              context.t('organizations.createOrJoin'),
               style: Theme.of(context).textTheme.headlineSmall
                   ?.copyWith(fontWeight: FontWeight.w800),
             ),
             const SizedBox(height: 8),
             Text(
-              'This account does not belong to an active Ahadi organization yet.',
+              context.t('organizations.noActiveOrgHint'),
               style: Theme.of(context).textTheme.bodyMedium
                   ?.copyWith(color: AhadiColors.muted),
             ),
@@ -110,7 +111,7 @@ class EmptyOrganizationsScreen extends StatelessWidget {
                 ),
               ),
               icon: const Icon(Icons.add_business_outlined),
-              label: const Text('Create organization'),
+              label: Text(context.t('organizations.createOrganization')),
             ),
           ],
         ),
@@ -129,12 +130,12 @@ class InvitationsReviewScreen extends StatelessWidget {
     final invitations = controller.userContext?.pendingInvitations ?? const [];
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Invitations'),
+        title: Text(context.t('organizations.invitations')),
         actions: [
           IconButton(
             onPressed: controller.signOut,
             icon: const Icon(Icons.logout),
-            tooltip: 'Sign out',
+            tooltip: context.t('common.signOut'),
           ),
         ],
       ),
@@ -142,13 +143,13 @@ class InvitationsReviewScreen extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(16, 18, 16, 24),
         children: [
           Text(
-            invitations.length == 1 ? "You're Invited" : 'Invitations',
+            invitations.length == 1 ? context.t('auth.youreInvited') : context.t('organizations.invitations'),
             style: Theme.of(context).textTheme.headlineSmall
                 ?.copyWith(fontWeight: FontWeight.w800),
           ),
           const SizedBox(height: 8),
           Text(
-            'Accept an invitation to join an existing Ahadi organization.',
+            context.t('organizations.acceptInvitationHint'),
             style: Theme.of(context).textTheme.bodyMedium
                 ?.copyWith(color: AhadiColors.muted),
           ),

@@ -300,4 +300,38 @@ const Map<String, Map<AppLanguage, String>> appTranslations = {
     AppLanguage.sw: 'Mawasiliano haya hayajaunganishwa na tukio lolote bado.',
     AppLanguage.en: 'This contact is not attached to any event yet.',
   },
+
+  // --- profile ---
+  'profile.currentPin': {AppLanguage.sw: 'PIN ya Sasa', AppLanguage.en: 'Current PIN'},
+  'profile.savePin': {AppLanguage.sw: 'Hifadhi PIN', AppLanguage.en: 'Save PIN'},
+  'profile.noEmailAdded': {AppLanguage.sw: 'Hakuna barua pepe iliyowekwa', AppLanguage.en: 'No email added'},
+  'profile.editProfile': {AppLanguage.sw: 'Hariri Wasifu', AppLanguage.en: 'Edit Profile'},
+  'profile.saveProfile': {AppLanguage.sw: 'Hifadhi Wasifu', AppLanguage.en: 'Save Profile'},
+
+  // --- organizations ---
+  'organizations.chooseOrganization': {AppLanguage.sw: 'Chagua Shirika', AppLanguage.en: 'Choose Organization'},
+  'organizations.ahadiWorkspace': {AppLanguage.sw: 'Nafasi ya kazi ya Ahadi', AppLanguage.en: 'Ahadi workspace'},
+  'organizations.createOrJoin': {AppLanguage.sw: 'Unda au jiunge na shirika', AppLanguage.en: 'Create or join an organization'},
+  'organizations.noActiveOrgHint': {
+    AppLanguage.sw: 'Akaunti hii bado haijaunganishwa na shirika hai la Ahadi.',
+    AppLanguage.en: 'This account does not belong to an active Ahadi organization yet.',
+  },
+  'organizations.createOrganization': {AppLanguage.sw: 'Unda Shirika', AppLanguage.en: 'Create organization'},
+  'organizations.invitations': {AppLanguage.sw: 'Mialiko', AppLanguage.en: 'Invitations'},
+  'organizations.acceptInvitationHint': {
+    AppLanguage.sw: 'Kubali mwaliko kujiunga na shirika la Ahadi lililopo.',
+    AppLanguage.en: 'Accept an invitation to join an existing Ahadi organization.',
+  },
+  'organizations.createOrganizationTitle': {AppLanguage.sw: 'Unda Shirika', AppLanguage.en: 'Create Organization'},
+  'organizations.package': {AppLanguage.sw: 'Kifurushi', AppLanguage.en: 'Package'},
+  'organizations.organizationDetails': {AppLanguage.sw: 'Taarifa za Shirika', AppLanguage.en: 'Organization details'},
+  'organizations.organizationName': {AppLanguage.sw: 'Jina la Shirika', AppLanguage.en: 'Organization name'},
+  'organizations.organizationPhone': {AppLanguage.sw: 'Simu ya Shirika', AppLanguage.en: 'Organization phone'},
+  'organizations.organizationEmail': {AppLanguage.sw: 'Barua Pepe ya Shirika', AppLanguage.en: 'Organization email'},
+  'organizations.firstEvent': {AppLanguage.sw: 'Tukio la Kwanza', AppLanguage.en: 'First event'},
+  'organizations.accountOwner': {AppLanguage.sw: 'Mmiliki wa Akaunti', AppLanguage.en: 'Account owner'},
+  'organizations.noPlansAvailable': {
+    AppLanguage.sw: 'Hakuna vifurushi vya umma vinavyopatikana. Wasiliana na msaada wa Ahadi kabla ya kuunda shirika.',
+    AppLanguage.en: 'No public packages are available. Contact Ahadi support before creating an organization.',
+  },
 };
