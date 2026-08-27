@@ -2,55 +2,57 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../../core/localization/app_locale.dart';
 import '../../../core/theme/ahadi_theme.dart';
 import '../../../core/widgets/formatters.dart';
 import '../../auth/data/session_controller.dart';
 
-const _actionLabels = <String, String>{
-  'contact.created': 'Contact added',
-  'contact.updated': 'Contact edited',
-  'contact.archived': 'Contact archived',
-  'contact.reactivated': 'Contact reactivated',
-  'member.created': 'Member added',
-  'event_member.attached': 'Contact added to event',
-  'event_member.removed': 'Member removed from event',
-  'pledge.upserted': 'Pledge updated',
-  'pledge.cancelled': 'Pledge cancelled',
-  'payment.recorded': 'Payment recorded',
-  'payment.reversed': 'Payment reversed',
-  'event.created': 'Event created',
-  'user.invited': 'User invited',
-  'user.role_changed': 'User role changed',
+const _actionKeys = <String, String>{
+  'contact.created': 'activity.action.contactCreated',
+  'contact.updated': 'activity.action.contactUpdated',
+  'contact.archived': 'activity.action.contactArchived',
+  'contact.reactivated': 'activity.action.contactReactivated',
+  'member.created': 'activity.action.memberCreated',
+  'event_member.attached': 'activity.action.eventMemberAttached',
+  'event_member.removed': 'activity.action.eventMemberRemoved',
+  'pledge.upserted': 'activity.action.pledgeUpserted',
+  'pledge.cancelled': 'activity.action.pledgeCancelled',
+  'payment.recorded': 'activity.action.paymentRecorded',
+  'payment.reversed': 'activity.action.paymentReversed',
+  'event.created': 'activity.action.eventCreated',
+  'user.invited': 'activity.action.userInvited',
+  'user.role_changed': 'activity.action.userRoleChanged',
 };
 
-String activityActionLabel(String action) {
-  return _actionLabels[action] ??
-      action
-          .replaceAll('.', ' ')
-          .replaceAll('_', ' ')
-          .split(' ')
-          .where((part) => part.isNotEmpty)
-          .map((part) => '${part[0].toUpperCase()}${part.substring(1)}')
-          .join(' ');
+String activityActionLabel(BuildContext context, String action) {
+  final key = _actionKeys[action];
+  if (key != null) return context.t(key);
+  return action
+      .replaceAll('.', ' ')
+      .replaceAll('_', ' ')
+      .split(' ')
+      .where((part) => part.isNotEmpty)
+      .map((part) => '${part[0].toUpperCase()}${part.substring(1)}')
+      .join(' ');
 }
 
-const _fieldLabels = <String, String>{
-  'full_name': 'Full Name',
-  'phone_e164': 'Phone',
-  'alternative_phone_e164': 'Alternative Phone',
-  'email': 'Email',
-  'location': 'Location',
-  'notes': 'Notes',
-  'status': 'Status',
-  'sms_enabled': 'SMS Enabled',
-  'preferred_language': 'Preferred Language',
-  'pledged_amount': 'Pledge Amount',
-  'payment_method': 'Payment Method',
+const _fieldKeys = <String, String>{
+  'full_name': 'auth.fullName',
+  'phone_e164': 'contacts.phone',
+  'alternative_phone_e164': 'contacts.alternativePhone',
+  'email': 'auth.email',
+  'location': 'contacts.location',
+  'notes': 'activity.field.notes',
+  'status': 'eventDetail.status',
+  'sms_enabled': 'activity.field.smsEnabled',
+  'preferred_language': 'activity.field.preferredLanguage',
+  'pledged_amount': 'pledges.pledgeAmount',
+  'payment_method': 'activity.field.paymentMethod',
 };
 
-String activityFieldLabel(String key) {
-  final mapped = _fieldLabels[key];
-  if (mapped != null) return mapped;
+String activityFieldLabel(BuildContext context, String key) {
+  final mapped = _fieldKeys[key];
+  if (mapped != null) return context.t(mapped);
   return key
       .split('_')
       .where((part) => part.isNotEmpty)
@@ -58,15 +60,15 @@ String activityFieldLabel(String key) {
       .join(' ');
 }
 
-String _activityValueText(Object? value) {
+String _activityValueText(BuildContext context, Object? value) {
   if (value == null) return '—';
-  if (value is bool) return value ? 'Yes' : 'No';
+  if (value is bool) return value ? context.t('common.yes') : context.t('common.no');
   final text = value.toString().trim();
   return text.isEmpty ? '—' : text;
 }
 
-String activityDateTimeText(String? value) {
-  if (value == null || value.isEmpty) return 'Not set';
+String activityDateTimeText(BuildContext context, String? value) {
+  if (value == null || value.isEmpty) return context.t('activity.notSet');
   final parsed = DateTime.tryParse(value)?.toLocal();
   if (parsed == null) return value;
   const months = [
@@ -177,7 +179,7 @@ class _ActivityScreenState extends State<ActivityScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AhadiColors.background,
-      appBar: AppBar(title: const Text('Activity')),
+      appBar: AppBar(title: Text(context.t('shell.more.activity'))),
       body: RefreshIndicator(
         onRefresh: _refresh,
         child: FutureBuilder<Map<String, dynamic>>(
@@ -199,33 +201,33 @@ class _ActivityScreenState extends State<ActivityScreen> {
                 AhadiSearchField(
                   controller: search,
                   onChanged: _onSearch,
-                  label: 'Search activity',
+                  label: context.t('activity.searchActivity'),
                 ),
                 const SizedBox(height: 12),
                 FilterTabs<String>(
                   selected: entityType,
                   onChanged: _onEntityTypeChanged,
-                  items: const [
-                    FilterTabItem(value: _EntityTypeFilter.all, label: 'All'),
+                  items: [
+                    FilterTabItem(value: _EntityTypeFilter.all, label: context.t('common.all')),
                     FilterTabItem(
                       value: _EntityTypeFilter.member,
-                      label: 'Contacts',
+                      label: context.t('shell.more.contacts'),
                     ),
                     FilterTabItem(
                       value: _EntityTypeFilter.payment,
-                      label: 'Payments',
+                      label: context.t('shell.nav.payments'),
                     ),
                     FilterTabItem(
                       value: _EntityTypeFilter.pledge,
-                      label: 'Pledges',
+                      label: context.t('shell.more.pledges'),
                     ),
                     FilterTabItem(
                       value: _EntityTypeFilter.event,
-                      label: 'Events',
+                      label: context.t('shell.nav.events'),
                     ),
                     FilterTabItem(
                       value: _EntityTypeFilter.tenantUser,
-                      label: 'Users',
+                      label: context.t('activity.users'),
                     ),
                   ],
                 ),
@@ -237,15 +239,15 @@ class _ActivityScreenState extends State<ActivityScreen> {
                   ErrorPanel(
                     message: friendlyErrorText(
                       snapshot.error,
-                      'Unable to load activity. Please try again.',
+                      context.t('activity.loadError'),
                     ),
                     onRetry: () => setState(() => future = _load()),
                   )
                 else if (rows.isEmpty)
-                  const Card(
+                  Card(
                     child: Padding(
-                      padding: EdgeInsets.all(16),
-                      child: Text('No activity yet.'),
+                      padding: const EdgeInsets.all(16),
+                      child: Text(context.t('activity.noActivityYet')),
                     ),
                   )
                 else ...[
@@ -288,14 +290,14 @@ class _ActivityRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final action = stringFrom(row, 'action');
-    final actorName = stringFrom(row, 'actor_name', 'Unknown user');
+    final actorName = stringFrom(row, 'actor_name', context.t('activity.unknownUser'));
     final entityLabel = _subjectLabel(row);
     return AhadiListRow(
       title: actorName,
       subtitle: entityLabel.isEmpty
-          ? activityActionLabel(action)
-          : '${activityActionLabel(action)}: $entityLabel',
-      meta: activityDateTimeText(stringFrom(row, 'created_at')),
+          ? activityActionLabel(context, action)
+          : '${activityActionLabel(context, action)}: $entityLabel',
+      meta: activityDateTimeText(context, stringFrom(row, 'created_at')),
       onTap: onTap,
     );
   }
@@ -335,42 +337,42 @@ class ActivityDetailScreen extends StatelessWidget {
 
     return Scaffold(
       backgroundColor: AhadiColors.background,
-      appBar: AppBar(title: const Text('Activity Detail')),
+      appBar: AppBar(title: Text(context.t('activity.activityDetail'))),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
           Text(
-            activityActionLabel(action),
+            activityActionLabel(context, action),
             style: Theme.of(context).textTheme.headlineSmall
                 ?.copyWith(fontWeight: FontWeight.w900),
           ),
           const SizedBox(height: 16),
           AhadiSectionCard(
-            title: 'Details',
+            title: context.t('activity.details'),
             children: [
               AhadiInfoRow(
-                label: 'Actor',
-                value: stringFrom(row, 'actor_name', 'Unknown user'),
+                label: context.t('activity.actor'),
+                value: stringFrom(row, 'actor_name', context.t('activity.unknownUser')),
               ),
               AhadiInfoRow(
-                label: 'Date & Time',
-                value: activityDateTimeText(stringFrom(row, 'created_at')),
+                label: context.t('activity.dateAndTime'),
+                value: activityDateTimeText(context, stringFrom(row, 'created_at')),
               ),
-              AhadiInfoRow(label: 'Action', value: activityActionLabel(action)),
+              AhadiInfoRow(label: context.t('activity.action'), value: activityActionLabel(context, action)),
               AhadiInfoRow(
-                label: 'Entity',
-                value: activityFieldLabel(stringFrom(row, 'entity_type')),
+                label: context.t('activity.entity'),
+                value: activityFieldLabel(context, stringFrom(row, 'entity_type')),
               ),
               if (eventName.isNotEmpty)
-                AhadiInfoRow(label: 'Event', value: eventName),
+                AhadiInfoRow(label: context.t('activity.event'), value: eventName),
               if (reason.isNotEmpty)
-                AhadiInfoRow(label: 'Reason', value: reason),
+                AhadiInfoRow(label: context.t('activity.reason'), value: reason),
             ],
           ),
           if (changedKeys.isNotEmpty) ...[
             const SizedBox(height: 16),
             Text(
-              'Changes',
+              context.t('activity.changes'),
               style: Theme.of(context).textTheme.titleMedium
                   ?.copyWith(fontWeight: FontWeight.w800),
             ),
@@ -384,14 +386,14 @@ class ActivityDetailScreen extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          activityFieldLabel(key),
+                          activityFieldLabel(context, key),
                           style: const TextStyle(color: AhadiColors.muted),
                         ),
                         const SizedBox(height: 4),
                         Row(
                           children: [
                             Expanded(
-                              child: Text(_activityValueText(oldValues[key])),
+                              child: Text(_activityValueText(context, oldValues[key])),
                             ),
                             const Padding(
                               padding: EdgeInsets.symmetric(horizontal: 8),
@@ -403,7 +405,7 @@ class ActivityDetailScreen extends StatelessWidget {
                             ),
                             Expanded(
                               child: Text(
-                                _activityValueText(newValues[key]),
+                                _activityValueText(context, newValues[key]),
                                 style: const TextStyle(
                                   fontWeight: FontWeight.w800,
                                 ),
@@ -449,11 +451,11 @@ class _ActivityPaginationControls extends StatelessWidget {
             key: const Key('activity-previous-page'),
             onPressed: onPrevious,
             icon: const Icon(Icons.chevron_left),
-            tooltip: 'Previous page',
+            tooltip: context.t('common.previousPage'),
           ),
           Expanded(
             child: Text(
-              'Page ${page + 1}',
+              '${context.t('common.page')} ${page + 1}',
               textAlign: TextAlign.center,
               style: const TextStyle(color: AhadiColors.muted),
             ),
@@ -462,7 +464,7 @@ class _ActivityPaginationControls extends StatelessWidget {
             key: const Key('activity-next-page'),
             onPressed: onNext,
             icon: const Icon(Icons.chevron_right),
-            tooltip: 'Next page',
+            tooltip: context.t('common.nextPage'),
           ),
         ],
       ),
