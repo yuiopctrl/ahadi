@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/localization/app_locale.dart';
 import '../../../core/theme/ahadi_theme.dart';
 import '../../../core/widgets/formatters.dart';
 import '../../auth/domain/auth_models.dart';
@@ -23,7 +24,7 @@ class SubscriptionPlanCard extends StatelessWidget {
     final borderColor = selected || current
         ? AhadiColors.primary
         : AhadiColors.border;
-    final title = current ? '${plan.name} · Current' : plan.name;
+    final title = current ? '${plan.name} · ${context.t('billing.current')}' : plan.name;
     final body = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -43,14 +44,14 @@ class SubscriptionPlanCard extends StatelessWidget {
         ),
         const SizedBox(height: 8),
         Text(
-          _planPrice(plan),
+          _planPrice(context, plan),
           style: AhadiTypography.financialValue.copyWith(
             color: AhadiColors.text,
           ),
         ),
         const SizedBox(height: 8),
         Text(
-          '${_billingInterval(plan.billingInterval)} billing · ${plan.trialDays} trial days',
+          '${_billingInterval(context, plan.billingInterval)} ${context.t('billing.billingTrialDays').replaceFirst('{days}', '${plan.trialDays}')}',
           style: AhadiTypography.secondary,
         ),
         if ((plan.description ?? '').trim().isNotEmpty) ...[
@@ -62,9 +63,9 @@ class SubscriptionPlanCard extends StatelessWidget {
           spacing: 8,
           runSpacing: 8,
           children: [
-            _LimitChip(text: _activeEventLimit(plan.maxActiveEvents)),
-            _LimitChip(text: '${plan.maxUsers} users'),
-            _LimitChip(text: '${plan.maxMembers} members'),
+            _LimitChip(text: _activeEventLimit(context, plan.maxActiveEvents)),
+            _LimitChip(text: '${plan.maxUsers} ${context.t('billing.users')}'),
+            _LimitChip(text: '${plan.maxMembers} ${context.t('dashboard.members').toLowerCase()}'),
             _LimitChip(text: '${plan.includedSms} SMS'),
           ],
         ),
@@ -125,20 +126,22 @@ class _LimitChip extends StatelessWidget {
   }
 }
 
-String _planPrice(SubscriptionPlan plan) {
+String _planPrice(BuildContext context, SubscriptionPlan plan) {
   final amount = plan.priceAmount;
   final price = plan.currency.toUpperCase() == 'TZS'
       ? moneyText(amount)
       : '${plan.currency.toUpperCase()} ${amount.round()}';
-  return '$price / ${_billingInterval(plan.billingInterval)}';
+  return '$price / ${_billingInterval(context, plan.billingInterval)}';
 }
 
-String _billingInterval(String value) {
-  return value.toLowerCase().replaceAll('_', ' ');
+String _billingInterval(BuildContext context, String value) {
+  final key = 'billing.interval.${value.toUpperCase()}';
+  final translated = context.t(key);
+  return translated == key ? value.toLowerCase().replaceAll('_', ' ') : translated;
 }
 
-String _activeEventLimit(int value) {
-  if (value <= 0) return 'No active events';
-  if (value == 1) return '1 active event';
-  return '$value active events';
+String _activeEventLimit(BuildContext context, int value) {
+  if (value <= 0) return context.t('billing.noActiveEvents');
+  if (value == 1) return context.t('billing.oneActiveEvent');
+  return context.t('billing.activeEventsCount').replaceFirst('{count}', '$value');
 }

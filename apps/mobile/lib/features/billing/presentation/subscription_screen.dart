@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/localization/app_locale.dart';
 import '../../../core/theme/ahadi_theme.dart';
 import '../../../core/widgets/formatters.dart';
 import '../../auth/data/session_controller.dart';
@@ -28,7 +29,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AhadiColors.background,
-      appBar: AppBar(title: const Text('Subscription')),
+      appBar: AppBar(title: Text(context.t('shell.more.subscription'))),
       body: FutureBuilder<Map<String, dynamic>>(
         future: billingFuture,
         builder: (context, snapshot) {
@@ -37,7 +38,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
           }
           if (snapshot.hasError) {
             return _StateCard(
-              title: 'Unable to load subscription',
+              title: context.t('billing.unableToLoadSubscription'),
               message: snapshot.error.toString(),
             );
           }
@@ -71,7 +72,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                   subscription: subscription,
                   tenantName:
                       widget.controller.selectedTenantContext?.tenantName ??
-                      'Organization',
+                      context.t('billing.organization'),
                 ),
                 const SizedBox(height: 12),
                 _UsageCard(subscription: subscription),
@@ -96,15 +97,15 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                     );
                   },
                   icon: const Icon(Icons.compare_arrows_outlined),
-                  label: const Text('Change Plan'),
+                  label: Text(context.t('billing.changePlan')),
                 ),
                 const SizedBox(height: 18),
-                Text('Invoices', style: AhadiTypography.sectionTitle),
+                Text(context.t('billing.invoices'), style: AhadiTypography.sectionTitle),
                 const SizedBox(height: 8),
                 if (invoices.isEmpty)
-                  const _StateCard(
-                    title: 'No subscription invoices yet',
-                    message: 'Invoices will appear here when a trial conversion or package renewal is issued.',
+                  _StateCard(
+                    title: context.t('billing.noInvoicesYet'),
+                    message: context.t('billing.noInvoicesHint'),
                   )
                 else
                   ...invoices.map(
@@ -158,7 +159,7 @@ class _PlanComparisonScreenState extends State<PlanComparisonScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AhadiColors.background,
-      appBar: AppBar(title: const Text('Change Plan')),
+      appBar: AppBar(title: Text(context.t('billing.changePlan'))),
       body: FutureBuilder<List<SubscriptionPlan>>(
         future: plansFuture,
         builder: (context, snapshot) {
@@ -167,7 +168,7 @@ class _PlanComparisonScreenState extends State<PlanComparisonScreen> {
           }
           if (snapshot.hasError) {
             return _StateCard(
-              title: 'Unable to load packages',
+              title: context.t('billing.unableToLoadPackages'),
               message: snapshot.error.toString(),
             );
           }
@@ -175,15 +176,15 @@ class _PlanComparisonScreenState extends State<PlanComparisonScreen> {
           return ListView(
             padding: const EdgeInsets.all(16),
             children: [
-              const _StateCard(
-                title: 'Package changes',
-                message: 'Plan switching is handled through Ahadi billing until automated upgrade and downgrade payment flows are enabled.',
+              _StateCard(
+                title: context.t('billing.packageChanges'),
+                message: context.t('billing.packageChangesHint'),
               ),
               const SizedBox(height: 12),
               if (plans.isEmpty)
-                const _StateCard(
-                  title: 'No packages available',
-                  message: 'Public packages will appear here when configured.',
+                _StateCard(
+                  title: context.t('billing.noPackagesAvailable'),
+                  message: context.t('billing.noPackagesHint'),
                 )
               else
                 ...plans.map(
@@ -218,10 +219,10 @@ class _CurrentSubscriptionCard extends StatelessWidget {
         ? 'UNKNOWN'
         : subscription.status;
     final renewalLabel = status == 'TRIAL'
-        ? 'Trial ends'
+        ? context.t('billing.trialEnds')
         : status == 'ACTIVE'
-        ? 'Renews'
-        : 'Access through';
+        ? context.t('billing.renews')
+        : context.t('billing.accessThrough');
     final renewalDate = status == 'TRIAL'
         ? subscription.trialEndsAt
         : subscription.currentPeriodEnd;
@@ -233,7 +234,7 @@ class _CurrentSubscriptionCard extends StatelessWidget {
           const SizedBox(height: 8),
           Text(
             subscription.planName.isEmpty
-                ? 'No package selected'
+                ? context.t('billing.noPackageSelected')
                 : subscription.planName,
             style: Theme.of(context).textTheme.headlineSmall
                 ?.copyWith(fontWeight: FontWeight.w800),
@@ -275,7 +276,7 @@ class _UsageCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Usage & limits', style: AhadiTypography.sectionTitle),
+          Text(context.t('billing.usageAndLimits'), style: AhadiTypography.sectionTitle),
           const SizedBox(height: 12),
           LinearProgressIndicator(
             value: progress,
@@ -287,11 +288,11 @@ class _UsageCard extends StatelessWidget {
             spacing: 8,
             runSpacing: 8,
             children: [
-              _LimitPill(label: 'Used event slots', value: used.toString()),
-              _LimitPill(label: 'Max event slots', value: limit.toString()),
-              _LimitPill(label: 'Available slots', value: available.toString()),
+              _LimitPill(label: context.t('billing.usedEventSlots'), value: used.toString()),
+              _LimitPill(label: context.t('billing.maxEventSlots'), value: limit.toString()),
+              _LimitPill(label: context.t('billing.availableSlots'), value: available.toString()),
               _LimitPill(
-                label: 'Included SMS',
+                label: context.t('billing.includedSms'),
                 value: _number(subscription.limits, [
                   'includedSms',
                   'included_sms',
@@ -324,16 +325,16 @@ class _BillingStatsCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Billing', style: AhadiTypography.sectionTitle),
+          Text(context.t('billing.billing'), style: AhadiTypography.sectionTitle),
           const SizedBox(height: 10),
-          _InfoRow(label: 'Open balance', value: moneyText(openBalance)),
+          _InfoRow(label: context.t('billing.openBalance'), value: moneyText(openBalance)),
           _InfoRow(
-            label: 'Payable invoices',
+            label: context.t('billing.payableInvoices'),
             value: payableInvoiceCount.toString(),
           ),
-          _InfoRow(label: 'Verified payments', value: paymentCount.toString()),
+          _InfoRow(label: context.t('billing.verifiedPayments'), value: paymentCount.toString()),
           _InfoRow(
-            label: 'Pending attempts',
+            label: context.t('billing.pendingAttempts'),
             value: pendingIntentCount.toString(),
           ),
         ],
@@ -361,7 +362,7 @@ class _InvoiceCard extends StatelessWidget {
                   _text(invoice, [
                     'invoice_number',
                     'invoiceNumber',
-                  ], 'Invoice'),
+                  ], context.t('billing.invoice')),
                   style: AhadiTypography.cardTitle,
                 ),
               ),
@@ -370,19 +371,19 @@ class _InvoiceCard extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           _InfoRow(
-            label: 'Total',
+            label: context.t('billing.total'),
             value: moneyText(invoice['total_amount'] ?? invoice['totalAmount']),
           ),
           _InfoRow(
-            label: 'Paid',
+            label: context.t('billing.paid'),
             value: moneyText(invoice['amount_paid'] ?? invoice['amountPaid']),
           ),
           _InfoRow(
-            label: 'Balance',
+            label: context.t('billing.balance'),
             value: moneyText(invoice['amount_due'] ?? invoice['amountDue']),
           ),
           _InfoRow(
-            label: 'Due',
+            label: context.t('eventDetail.due'),
             value: dateText(_text(invoice, ['due_date', 'dueDate'], '')),
           ),
         ],
