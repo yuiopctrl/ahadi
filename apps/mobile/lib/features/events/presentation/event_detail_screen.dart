@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../../core/localization/app_locale.dart';
 import '../../../core/theme/ahadi_theme.dart';
 import '../../../core/widgets/formatters.dart';
 import '../../auth/data/session_controller.dart';
@@ -85,10 +86,10 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
             true;
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Event Details'),
+        title: Text(context.t('eventDetail.title')),
         actions: [
           if (canEdit)
-            TextButton(onPressed: _editEvent, child: const Text('Edit')),
+            TextButton(onPressed: _editEvent, child: Text(context.t('common.edit'))),
         ],
       ),
       body: FutureBuilder<_EventDetailData>(
@@ -109,11 +110,11 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
                 _EventHeader(event: event, summary: data.summary),
                 const SizedBox(height: 12),
                 FilterTabs<int>(
-                  items: const [
-                    FilterTabItem(value: 0, label: 'Overview'),
-                    FilterTabItem(value: 1, label: 'Members'),
-                    FilterTabItem(value: 2, label: 'Pledges'),
-                    FilterTabItem(value: 3, label: 'Payments'),
+                  items: [
+                    FilterTabItem(value: 0, label: context.t('eventDetail.overview')),
+                    FilterTabItem(value: 1, label: context.t('dashboard.members')),
+                    FilterTabItem(value: 2, label: context.t('shell.more.pledges')),
+                    FilterTabItem(value: 3, label: context.t('shell.nav.payments')),
                   ],
                   selected: tabIndex,
                   onChanged: (value) => setState(() => tabIndex = value),
@@ -211,13 +212,13 @@ class _EditEventScreenState extends State<EditEventScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Edit Event')),
+      appBar: AppBar(title: Text(context.t('eventDetail.editEvent'))),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
           TextField(
             controller: name,
-            decoration: const InputDecoration(labelText: 'Event Name'),
+            decoration: InputDecoration(labelText: context.t('events.eventName')),
           ),
           const SizedBox(height: 12),
           DropdownButtonFormField<String>(
@@ -226,48 +227,48 @@ class _EditEventScreenState extends State<EditEventScreen> {
                 .map(
                   (type) => DropdownMenuItem(
                     value: type,
-                    child: Text(type.replaceAll('_', ' ')),
+                    child: Text(context.t('events.type.$type')),
                   ),
                 )
                 .toList(),
             onChanged: (value) =>
                 setState(() => eventType = value ?? 'WEDDING'),
-            decoration: const InputDecoration(labelText: 'Event Type'),
+            decoration: InputDecoration(labelText: context.t('events.eventType')),
           ),
           if (eventType == 'OTHER') ...[
             const SizedBox(height: 12),
             TextField(
               controller: customType,
-              decoration: const InputDecoration(labelText: 'Custom Event Type'),
+              decoration: InputDecoration(labelText: context.t('events.customEventType')),
             ),
           ],
           const SizedBox(height: 12),
           TextField(
             controller: eventDate,
-            decoration: const InputDecoration(
-              labelText: 'Event Date YYYY-MM-DD',
+            decoration: InputDecoration(
+              labelText: context.t('events.eventDate'),
             ),
           ),
           const SizedBox(height: 12),
           TextField(
             controller: venue,
-            decoration: const InputDecoration(labelText: 'Venue'),
+            decoration: InputDecoration(labelText: context.t('events.venue')),
           ),
           const SizedBox(height: 12),
           TextField(
             controller: targetAmount,
             keyboardType: TextInputType.number,
             inputFormatters: const [MoneyInputFormatter()],
-            decoration: const InputDecoration(
-              labelText: 'Target Amount',
+            decoration: InputDecoration(
+              labelText: context.t('events.targetAmount'),
               prefixText: 'TZS ',
             ),
           ),
           const SizedBox(height: 12),
           TextField(
             controller: pledgeDeadline,
-            decoration: const InputDecoration(
-              labelText: 'Pledge Deadline YYYY-MM-DD',
+            decoration: InputDecoration(
+              labelText: context.t('events.pledgeDeadline'),
             ),
           ),
           if (error != null) ...[
@@ -280,14 +281,14 @@ class _EditEventScreenState extends State<EditEventScreen> {
               Expanded(
                 child: OutlinedButton(
                   onPressed: saving ? null : () => Navigator.of(context).pop(),
-                  child: const Text('Cancel'),
+                  child: Text(context.t('common.cancel')),
                 ),
               ),
               const SizedBox(width: 12),
               Expanded(
                 child: FilledButton(
                   onPressed: saving ? null : _save,
-                  child: Text(saving ? 'Saving...' : 'Save Changes'),
+                  child: Text(saving ? context.t('auth.saving') : context.t('eventDetail.saveChanges')),
                 ),
               ),
             ],
@@ -366,7 +367,7 @@ class _EventHeader extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             Text(
-              '${event.eventType} · ${dateText(event.eventDate)}',
+              '${context.t('events.type.${event.eventType}')} · ${dateText(event.eventDate)}',
               style: const TextStyle(color: AhadiColors.muted),
             ),
             if (event.venue != null && event.venue!.isNotEmpty)
@@ -402,23 +403,23 @@ class _OverviewTab extends StatelessWidget {
           child: Column(
             children: [
               ListTile(
-                title: const Text('Status'),
+                title: Text(context.t('eventDetail.status')),
                 trailing: StatusPill(status: event.status),
               ),
               ListTile(
-                title: const Text('Pledge deadline'),
+                title: Text(context.t('events.pledgeDeadlineShort')),
                 trailing: Text(dateText(event.pledgeDeadline)),
               ),
               ListTile(
-                title: const Text('Target amount'),
+                title: Text(context.t('events.targetAmount')),
                 trailing: Text(moneyText(event.targetAmount)),
               ),
               ListTile(
-                title: const Text('Members'),
+                title: Text(context.t('dashboard.members')),
                 trailing: Text(data.members.length.toString()),
               ),
               ListTile(
-                title: const Text('Pledges'),
+                title: Text(context.t('shell.more.pledges')),
                 trailing: Text(data.pledges.length.toString()),
               ),
             ],
@@ -477,7 +478,7 @@ class _MembersTabState extends State<_MembersTab> {
           FilledButton.icon(
             onPressed: () => setState(() => pickerOpen = !pickerOpen),
             icon: const Icon(Icons.add),
-            label: const Text('Add Member'),
+            label: Text(context.t('eventDetail.addMember')),
           ),
         if (pickerOpen)
           _AvailableContactPicker(
@@ -490,9 +491,9 @@ class _MembersTabState extends State<_MembersTab> {
           ),
         const SizedBox(height: 8),
         TextField(
-          decoration: const InputDecoration(
-            labelText: 'Search members',
-            prefixIcon: Icon(Icons.search),
+          decoration: InputDecoration(
+            labelText: context.t('eventDetail.searchMembers'),
+            prefixIcon: const Icon(Icons.search),
           ),
           onChanged: (value) => setState(() {
             query = value;
@@ -501,17 +502,17 @@ class _MembersTabState extends State<_MembersTab> {
         ),
         const SizedBox(height: 8),
         if (filtered.isEmpty)
-          const Card(
+          Card(
             child: Padding(
-              padding: EdgeInsets.all(16),
-              child: Text('No event members found.'),
+              padding: const EdgeInsets.all(16),
+              child: Text(context.t('eventDetail.noMembersFound')),
             ),
           )
         else ...[
           ...visible.map(
             (member) => AhadiListRow(
               title: titleCaseName(member['full_name']),
-              subtitle: stringFrom(member, 'phone_e164', 'No phone'),
+              subtitle: stringFrom(member, 'phone_e164', context.t('contacts.noPhone')),
               status: stringFrom(member, 'pledge_status', 'NO PLEDGE'),
               financialSummary: FinancialSummary(
                 pledged: member['pledged_amount'],
@@ -519,7 +520,7 @@ class _MembersTabState extends State<_MembersTab> {
                 outstanding: member['outstanding_amount'],
               ),
               meta: (numberFrom(member['pledged_amount']) ?? 0) <= 0
-                  ? 'No pledge'
+                  ? context.t('eventDetail.noPledge')
                   : null,
               onTap: () => Navigator.of(context).push(
                 MaterialPageRoute(
@@ -536,7 +537,7 @@ class _MembersTabState extends State<_MembersTab> {
             page: effectivePage,
             totalPages: totalPages,
             totalRows: filtered.length,
-            label: 'members',
+            label: context.t('dashboard.members').toLowerCase(),
             onPrevious: effectivePage == 0
                 ? null
                 : () => setState(() => page = effectivePage - 1),
@@ -589,7 +590,7 @@ class _EventMemberDetailScreenState extends State<EventMemberDetailScreen> {
             ) ==
             true;
     return Scaffold(
-      appBar: AppBar(title: const Text('Member Details')),
+      appBar: AppBar(title: Text(context.t('eventDetail.memberDetails'))),
       body: FutureBuilder<Map<String, dynamic>>(
         future: future,
         builder: (context, snapshot) {
@@ -622,12 +623,12 @@ class _EventMemberDetailScreenState extends State<EventMemberDetailScreen> {
               ),
               const SizedBox(height: 4),
               Text(
-                stringFrom(member, 'phone_e164', 'No phone'),
+                stringFrom(member, 'phone_e164', context.t('contacts.noPhone')),
                 style: const TextStyle(color: AhadiColors.muted),
               ),
               const SizedBox(height: 16),
               AhadiSectionCard(
-                title: 'Financial Summary',
+                title: context.t('eventDetail.financialSummary'),
                 children: [
                   FinancialSummary(
                     pledged: member['pledged_amount'],
@@ -638,22 +639,22 @@ class _EventMemberDetailScreenState extends State<EventMemberDetailScreen> {
                 ],
               ),
               AhadiSectionCard(
-                title: 'Pledge',
+                title: context.t('eventDetail.pledge'),
                 children: [
                   AhadiInfoRow(
-                    label: 'Amount',
+                    label: context.t('eventDetail.amount'),
                     value: moneyText(pledge['pledged_amount']),
                   ),
                   AhadiInfoRow(
-                    label: 'Due Date',
+                    label: context.t('eventDetail.dueDate'),
                     value: dateText(stringFrom(pledge, 'due_date')),
                   ),
                   Row(
                     children: [
-                      const Expanded(
+                      Expanded(
                         child: Text(
-                          'Status',
-                          style: TextStyle(color: AhadiColors.muted),
+                          context.t('eventDetail.status'),
+                          style: const TextStyle(color: AhadiColors.muted),
                         ),
                       ),
                       StatusPill(
@@ -668,7 +669,7 @@ class _EventMemberDetailScreenState extends State<EventMemberDetailScreen> {
                 ],
               ),
               AhadiSectionCard(
-                title: 'Event',
+                title: context.t('shell.nav.events'),
                 children: [
                   Text(
                     widget.event.name,
@@ -676,13 +677,13 @@ class _EventMemberDetailScreenState extends State<EventMemberDetailScreen> {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    '${widget.event.eventType} · ${dateText(widget.event.eventDate)}',
+                    '${context.t('events.type.${widget.event.eventType}')} · ${dateText(widget.event.eventDate)}',
                     style: const TextStyle(color: AhadiColors.muted),
                   ),
                 ],
               ),
               AhadiSectionCard(
-                title: 'Actions',
+                title: context.t('eventDetail.actions'),
                 children: [
                   if (memberId.isNotEmpty)
                     OutlinedButton.icon(
@@ -695,7 +696,7 @@ class _EventMemberDetailScreenState extends State<EventMemberDetailScreen> {
                         ),
                       ),
                       icon: const Icon(Icons.person_outline),
-                      label: const Text('View Contact'),
+                      label: Text(context.t('eventDetail.viewContact')),
                     ),
                   if (pledgeId.isNotEmpty) ...[
                     const SizedBox(height: 8),
@@ -722,7 +723,7 @@ class _EventMemberDetailScreenState extends State<EventMemberDetailScreen> {
                         ),
                       ),
                       icon: const Icon(Icons.receipt_long_outlined),
-                      label: const Text('View / Edit Pledge'),
+                      label: Text(context.t('eventDetail.viewEditPledge')),
                     ),
                   ],
                   if (error != null) ...[
@@ -738,7 +739,7 @@ class _EventMemberDetailScreenState extends State<EventMemberDetailScreen> {
                       onPressed: () =>
                           _confirmRemove(titleCaseName(member['full_name'])),
                       icon: const Icon(Icons.person_remove_outlined),
-                      label: const Text('Remove from Event'),
+                      label: Text(context.t('eventDetail.removeFromEvent')),
                     ),
                   ],
                 ],
@@ -754,16 +755,21 @@ class _EventMemberDetailScreenState extends State<EventMemberDetailScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('Remove $name from ${widget.event.name}?'),
-        content: const Text('This removes the contact from this event only.'),
+        title: Text(
+          context
+              .t('eventDetail.removeConfirmTitle')
+              .replaceFirst('{name}', name)
+              .replaceFirst('{event}', widget.event.name),
+        ),
+        content: Text(context.t('eventDetail.removeConfirmBody')),
         actions: [
           OutlinedButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
+            child: Text(context.t('common.cancel')),
           ),
           FilledButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Remove'),
+            child: Text(context.t('eventDetail.remove')),
           ),
         ],
       ),
@@ -829,8 +835,8 @@ class _AvailableContactPickerState extends State<_AvailableContactPicker> {
             return Column(
               children: [
                 TextField(
-                  decoration: const InputDecoration(
-                    labelText: 'Search existing contact',
+                  decoration: InputDecoration(
+                    labelText: context.t('eventDetail.searchExistingContact'),
                   ),
                   onChanged: (value) => setState(() => query = value),
                 ),
@@ -840,9 +846,9 @@ class _AvailableContactPickerState extends State<_AvailableContactPicker> {
                     style: const TextStyle(color: AhadiColors.danger),
                   ),
                 if (rows.isEmpty)
-                  const Padding(
-                    padding: EdgeInsets.all(12),
-                    child: Text('No available contacts found.'),
+                  Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Text(context.t('eventDetail.noAvailableContacts')),
                   )
                 else
                   ...rows
@@ -851,7 +857,7 @@ class _AvailableContactPickerState extends State<_AvailableContactPicker> {
                         (row) => ListTile(
                           title: Text(titleCaseName(row['full_name'])),
                           subtitle: Text(
-                            stringFrom(row, 'phone_e164', 'No phone'),
+                            stringFrom(row, 'phone_e164', context.t('contacts.noPhone')),
                           ),
                           trailing: const Icon(Icons.add),
                           onTap: () async {
@@ -930,9 +936,9 @@ class _PledgesTabState extends State<_PledgesTab> {
           ),
         const SizedBox(height: 8),
         TextField(
-          decoration: const InputDecoration(
-            labelText: 'Search pledges',
-            prefixIcon: Icon(Icons.search),
+          decoration: InputDecoration(
+            labelText: context.t('eventDetail.searchPledges'),
+            prefixIcon: const Icon(Icons.search),
           ),
           onChanged: (value) => setState(() {
             query = value;
@@ -941,10 +947,10 @@ class _PledgesTabState extends State<_PledgesTab> {
         ),
         const SizedBox(height: 8),
         if (filtered.isEmpty)
-          const Card(
+          Card(
             child: Padding(
-              padding: EdgeInsets.all(16),
-              child: Text('No pledges found for this event.'),
+              padding: const EdgeInsets.all(16),
+              child: Text(context.t('eventDetail.noPledgesFound')),
             ),
           )
         else ...[
@@ -953,14 +959,14 @@ class _PledgesTabState extends State<_PledgesTab> {
               title: titleCaseName(
                 pledge['member_name'] ?? pledge['full_name'],
               ),
-              subtitle: stringFrom(pledge, 'phone_e164', 'No phone'),
+              subtitle: stringFrom(pledge, 'phone_e164', context.t('contacts.noPhone')),
               status: stringFrom(pledge, 'status', 'PENDING'),
               financialSummary: FinancialSummary(
                 pledged: pledge['pledged_amount'],
                 received: pledge['total_allocated'] ?? pledge['paid_amount'],
                 outstanding: pledge['outstanding_amount'],
               ),
-              meta: 'Due ${dateText(stringFrom(pledge, 'due_date'))}',
+              meta: '${context.t('eventDetail.due')} ${dateText(stringFrom(pledge, 'due_date'))}',
               onTap: () => Navigator.of(context).push(
                 MaterialPageRoute(
                   builder: (_) => PledgeDetailScreen(
@@ -977,7 +983,7 @@ class _PledgesTabState extends State<_PledgesTab> {
             page: effectivePage,
             totalPages: totalPages,
             totalRows: filtered.length,
-            label: 'pledges',
+            label: context.t('shell.more.pledges').toLowerCase(),
             onPrevious: effectivePage == 0
                 ? null
                 : () => setState(() => page = effectivePage - 1),
@@ -1057,13 +1063,13 @@ class _PaymentsTabState extends State<_PaymentsTab> {
     if (recorded != null && mounted) await _refresh();
   }
 
-  String _methodLabel(Map<String, dynamic> payment) {
+  String _methodLabel(BuildContext context, Map<String, dynamic> payment) {
     final raw = stringFrom(
       payment,
       'paymentMethod',
       stringFrom(payment, 'payment_method'),
     );
-    if (raw.isEmpty) return 'Payment';
+    if (raw.isEmpty) return context.t('eventDetail.payment');
     return raw
         .replaceAll('_', ' ')
         .toLowerCase()
@@ -1092,14 +1098,14 @@ class _PaymentsTabState extends State<_PaymentsTab> {
           FilledButton.icon(
             onPressed: _record,
             icon: const Icon(Icons.add),
-            label: const Text('Record Payment'),
+            label: Text(context.t('eventDetail.recordPayment')),
           ),
         const SizedBox(height: 8),
         TextField(
           controller: search,
-          decoration: const InputDecoration(
-            labelText: 'Search payments',
-            prefixIcon: Icon(Icons.search),
+          decoration: InputDecoration(
+            labelText: context.t('eventDetail.searchPayments'),
+            prefixIcon: const Icon(Icons.search),
           ),
           onChanged: _searchChanged,
         ),
@@ -1111,10 +1117,10 @@ class _PaymentsTabState extends State<_PaymentsTab> {
             final report = snapshot.data!;
             final rows = objectList(report['data']);
             if (rows.isEmpty) {
-              return const Card(
+              return Card(
                 child: Padding(
-                  padding: EdgeInsets.all(16),
-                  child: Text('No payments found for this event.'),
+                  padding: const EdgeInsets.all(16),
+                  child: Text(context.t('eventDetail.noPaymentsFound')),
                 ),
               );
             }
@@ -1128,10 +1134,10 @@ class _PaymentsTabState extends State<_PaymentsTab> {
                 ...rows.map(
                   (payment) => AhadiListRow(
                     title: titleCaseName(
-                      stringFrom(payment, 'member', 'Member'),
+                      stringFrom(payment, 'member', context.t('eventDetail.member')),
                     ),
                     subtitle:
-                        '${moneyText(payment['amount'])}\n${_methodLabel(payment)} • ${dateText(stringFrom(payment, 'date', stringFrom(payment, 'payment_date')))}',
+                        '${moneyText(payment['amount'])}\n${_methodLabel(context, payment)} • ${dateText(stringFrom(payment, 'date', stringFrom(payment, 'payment_date')))}',
                     status: stringFrom(payment, 'status', 'CONFIRMED'),
                     onTap: () => Navigator.of(context).push(
                       MaterialPageRoute(
@@ -1147,7 +1153,7 @@ class _PaymentsTabState extends State<_PaymentsTab> {
                   page: page - 1,
                   totalPages: totalPages,
                   totalRows: totalRows,
-                  label: 'payments',
+                  label: context.t('shell.nav.payments').toLowerCase(),
                   onPrevious: page <= 1
                       ? null
                       : () => setState(() {
@@ -1197,11 +1203,11 @@ class _EventListPaginationControls extends StatelessWidget {
           IconButton.outlined(
             onPressed: onPrevious,
             icon: const Icon(Icons.chevron_left),
-            tooltip: 'Previous page',
+            tooltip: context.t('common.previousPage'),
           ),
           Expanded(
             child: Text(
-              'Page ${page + 1} of $totalPages · $totalRows $label',
+              '${context.t('common.page')} ${page + 1} ${context.t('common.of')} $totalPages · $totalRows $label',
               textAlign: TextAlign.center,
               style: const TextStyle(color: AhadiColors.muted),
             ),
@@ -1209,7 +1215,7 @@ class _EventListPaginationControls extends StatelessWidget {
           IconButton.outlined(
             onPressed: onNext,
             icon: const Icon(Icons.chevron_right),
-            tooltip: 'Next page',
+            tooltip: context.t('common.nextPage'),
           ),
         ],
       ),
