@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../core/localization/app_locale.dart';
 import '../../../core/theme/ahadi_theme.dart';
 import '../../../core/widgets/formatters.dart';
+import '../../../core/widgets/language_toggle.dart';
 import '../../activity/presentation/activity_screen.dart';
 import '../../auth/data/session_controller.dart';
 import '../../billing/presentation/subscription_screen.dart';
@@ -679,7 +680,6 @@ class _SettingsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final locale = AppLocaleScope.of(context);
     return Scaffold(
       backgroundColor: AhadiColors.background,
       appBar: AppBar(title: Text(context.t('settings.title'))),
@@ -726,20 +726,9 @@ class _SettingsScreen extends StatelessWidget {
                     style: const TextStyle(color: AhadiColors.muted),
                   ),
                   const SizedBox(height: 12),
-                  SegmentedButton<AppLanguage>(
-                    segments: [
-                      ButtonSegment(
-                        value: AppLanguage.sw,
-                        label: Text(context.t('settings.language.sw')),
-                      ),
-                      ButtonSegment(
-                        value: AppLanguage.en,
-                        label: Text(context.t('settings.language.en')),
-                      ),
-                    ],
-                    selected: {locale.language},
-                    onSelectionChanged: (selection) =>
-                        locale.setLanguage(selection.first),
+                  LanguageToggle(
+                    swLabel: context.t('settings.language.sw'),
+                    enLabel: context.t('settings.language.en'),
                   ),
                 ],
               ),

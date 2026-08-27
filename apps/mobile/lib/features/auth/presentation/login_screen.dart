@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../core/localization/app_locale.dart';
 import '../../../core/theme/ahadi_theme.dart';
 import '../../../core/widgets/brand_header.dart';
+import '../../../core/widgets/language_toggle.dart';
 import '../data/session_controller.dart';
 import 'forgot_pin_screen.dart';
 import 'pin_input.dart';
@@ -51,7 +52,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
                   child: Align(
                     alignment: Alignment.topRight,
-                    child: _LanguageToggle(
+                    child: LanguageToggle(
                       key: const Key('login-language-switcher'),
                     ),
                   ),
@@ -205,60 +206,3 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 }
 
-class _LanguageToggle extends StatelessWidget {
-  const _LanguageToggle({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    final current = context.appLanguage;
-    final controller = AppLocaleScope.of(context);
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        _LanguageOption(
-          label: 'SW',
-          selected: current == AppLanguage.sw,
-          onTap: () => controller.setLanguage(AppLanguage.sw),
-        ),
-        const Padding(
-          padding: EdgeInsets.symmetric(horizontal: 6),
-          child: Text('|', style: TextStyle(color: AhadiColors.border)),
-        ),
-        _LanguageOption(
-          label: 'EN',
-          selected: current == AppLanguage.en,
-          onTap: () => controller.setLanguage(AppLanguage.en),
-        ),
-      ],
-    );
-  }
-}
-
-class _LanguageOption extends StatelessWidget {
-  const _LanguageOption({
-    required this.label,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 2),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontWeight: selected ? FontWeight.w800 : FontWeight.w500,
-            color: selected ? AhadiColors.primary : AhadiColors.muted,
-          ),
-        ),
-      ),
-    );
-  }
-}
