@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../../core/localization/app_locale.dart';
 import '../../../core/theme/ahadi_theme.dart';
 import '../../../core/widgets/formatters.dart';
 import '../../auth/data/session_controller.dart';
@@ -28,23 +29,23 @@ class _MessagesScreenState extends State<MessagesScreen> {
     final event = widget.controller.selectedEvent;
     return Scaffold(
       backgroundColor: AhadiColors.background,
-      appBar: AppBar(title: const Text('Messages')),
+      appBar: AppBar(title: Text(context.t('messages.title'))),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
           _EventHeader(event: event),
           const SizedBox(height: 12),
           FilterTabs<String>(
-            items: const [
-              FilterTabItem(value: 'compose', label: 'Compose'),
-              FilterTabItem(value: 'history', label: 'History'),
+            items: [
+              FilterTabItem(value: 'compose', label: context.t('messages.compose')),
+              FilterTabItem(value: 'history', label: context.t('messages.history')),
             ],
             selected: tab,
             onChanged: (value) => setState(() => tab = value),
           ),
           const SizedBox(height: 12),
           if (event == null)
-            const ErrorPanel(message: 'Select an event to use messaging.')
+            ErrorPanel(message: context.t('messages.selectEventHint'))
           else if (tab == 'compose')
             MessageComposer(
               controller: widget.controller,
@@ -105,7 +106,7 @@ class _MessageComposerState extends State<MessageComposer> {
     for (final type in _manualTypes) {
       if (seen.add(type)) {
         items.add(
-          DropdownMenuItem(value: type, child: Text(_messageTypeLabel(type))),
+          DropdownMenuItem(value: type, child: Text(_messageTypeLabel(context, type))),
         );
       }
     }
@@ -115,7 +116,7 @@ class _MessageComposerState extends State<MessageComposer> {
       items.add(
         DropdownMenuItem(
           value: code,
-          child: Text(_text(template, ['name'], 'Custom template')),
+          child: Text(_text(template, ['name'], context.t('messages.customTemplate'))),
         ),
       );
     }
@@ -229,7 +230,7 @@ class _MessageComposerState extends State<MessageComposer> {
         return true;
       }
       final haystack =
-          '${_name(row)} ${_text(row, ['phone', 'phone_e164', 'phoneE164'])}'
+          '${_name(context, row)} ${_text(row, ['phone', 'phone_e164', 'phoneE164'])}'
               .toLowerCase();
       return haystack.contains(query.toLowerCase()) ||
           compactPhoneSearch(haystack).contains(compactPhoneSearch(query));
@@ -260,11 +261,11 @@ class _MessageComposerState extends State<MessageComposer> {
   Future<void> _openPreview(_ComposerData data) async {
     final ids = _targetIds(data.recipients);
     if (ids.isEmpty) {
-      setState(() => error = 'No eligible members found.');
+      setState(() => error = context.t('messages.noEligibleMembers'));
       return;
     }
     if (_isCustomType && (senderId == null || senderId!.isEmpty)) {
-      setState(() => error = 'Select a sender ID.');
+      setState(() => error = context.t('messages.selectSenderId'));
       return;
     }
     setState(() => error = null);
@@ -288,7 +289,11 @@ class _MessageComposerState extends State<MessageComposer> {
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Messages queued successfully. $queued recipients.'),
+          content: Text(
+            context
+                .t('messages.queuedSuccessfully')
+                .replaceFirst('{count}', '$queued'),
+          ),
         ),
       );
     }
@@ -305,7 +310,7 @@ class _MessageComposerState extends State<MessageComposer> {
           return ErrorPanel(
             message: friendlyErrorText(
               snapshot.error,
-              'Unable to load messaging data.',
+              context.t('messages.loadError'),
             ),
             onRetry: _reload,
           );
@@ -318,11 +323,11 @@ class _MessageComposerState extends State<MessageComposer> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             AhadiSectionCard(
-              title: 'Send Message',
+              title: context.t('messages.sendMessage'),
               children: [
                 DropdownButtonFormField<String>(
                   initialValue: messageType,
-                  decoration: const InputDecoration(labelText: 'Message Type'),
+                  decoration: InputDecoration(labelText: context.t('messages.messageType')),
                   items: _messageTypeItems(),
                   onChanged: (value) {
                     setState(() {
@@ -341,7 +346,7 @@ class _MessageComposerState extends State<MessageComposer> {
                     initialValue: senderOptions.contains(senderId)
                         ? senderId
                         : senderOptions.firstOrNull,
-                    decoration: const InputDecoration(labelText: 'Sender ID'),
+                    decoration: InputDecoration(labelText: context.t('messages.senderId')),
                     items: senderOptions
                         .map(
                           (value) =>
@@ -354,20 +359,20 @@ class _MessageComposerState extends State<MessageComposer> {
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
                   initialValue: recipientGroup,
-                  decoration: const InputDecoration(labelText: 'Recipients'),
+                  decoration: InputDecoration(labelText: context.t('messages.recipients_label')),
                   items: _isCustomType
-                      ? const [
+                      ? [
                           DropdownMenuItem(
                             value: 'outstanding',
-                            child: Text('Members With Outstanding Balance'),
+                            child: Text(context.t('messages.membersWithOutstandingBalance')),
                           ),
                           DropdownMenuItem(
                             value: 'all',
-                            child: Text('All Members'),
+                            child: Text(context.t('messages.allMembers')),
                           ),
                           DropdownMenuItem(
                             value: 'selected',
-                            child: Text('Selected Members'),
+                            child: Text(context.t('messages.selectedMembers')),
                           ),
                         ]
                       : [
@@ -375,13 +380,13 @@ class _MessageComposerState extends State<MessageComposer> {
                             value: 'eligible',
                             child: Text(
                               messageType == 'PLEDGE_REQUEST'
-                                  ? 'Members Without Pledge'
-                                  : 'Members With Outstanding Balance',
+                                  ? context.t('messages.membersWithoutPledge')
+                                  : context.t('messages.membersWithOutstandingBalance'),
                             ),
                           ),
-                          const DropdownMenuItem(
+                          DropdownMenuItem(
                             value: 'selected',
-                            child: Text('Selected Members'),
+                            child: Text(context.t('messages.selectedMembers')),
                           ),
                         ],
                   onChanged: (value) {
@@ -395,14 +400,14 @@ class _MessageComposerState extends State<MessageComposer> {
                 ),
                 const SizedBox(height: 12),
                 AhadiInfoRow(
-                  label: 'Eligible Members',
+                  label: context.t('messages.eligibleMembers'),
                   value: '${recipients.length}',
                 ),
                 if (recipientGroup == 'selected') ...[
                   const SizedBox(height: 12),
                   AhadiSearchField(
                     controller: search,
-                    label: 'Search name or phone',
+                    label: context.t('contacts.searchHint'),
                     onChanged: _onSearch,
                   ),
                   const SizedBox(height: 8),
@@ -422,8 +427,8 @@ class _MessageComposerState extends State<MessageComposer> {
                                 future = Future.value(data);
                               });
                             },
-                      title: Text(_name(row)),
-                      subtitle: Text(_phone(row)),
+                      title: Text(_name(context, row)),
+                      subtitle: Text(_phone(context, row)),
                       controlAffinity: ListTileControlAffinity.leading,
                     );
                   }),
@@ -444,14 +449,14 @@ class _MessageComposerState extends State<MessageComposer> {
                   ? null
                   : () => _openPreview(data),
               icon: const Icon(Icons.visibility_outlined),
-              label: const Text('Preview Messages'),
+              label: Text(context.t('messages.previewMessages')),
             ),
             if (!canSend)
-              const Padding(
-                padding: EdgeInsets.only(top: 8),
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
                 child: Text(
-                  'Your role does not include permission to send messages.',
-                  style: TextStyle(color: AhadiColors.muted),
+                  context.t('messages.noSendPermission'),
+                  style: const TextStyle(color: AhadiColors.muted),
                 ),
               ),
           ],
@@ -541,7 +546,7 @@ class _MessagePreviewScreenState extends State<_MessagePreviewScreen> {
       setState(
         () => error = friendlyErrorText(
           err,
-          'Unable to send messages. Please try again.',
+          context.t('messages.sendError'),
         ),
       );
     } finally {
@@ -553,7 +558,7 @@ class _MessagePreviewScreenState extends State<_MessagePreviewScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AhadiColors.background,
-      appBar: AppBar(title: const Text('Preview Messages')),
+      appBar: AppBar(title: Text(context.t('messages.previewMessages'))),
       body: FutureBuilder<Map<String, dynamic>>(
         future: future,
         builder: (context, snapshot) {
@@ -563,7 +568,7 @@ class _MessagePreviewScreenState extends State<_MessagePreviewScreen> {
               child: ErrorPanel(
                 message: friendlyErrorText(
                   snapshot.error,
-                  'Unable to load message previews.',
+                  context.t('messages.loadPreviewsError'),
                 ),
                 onRetry: () => setState(() => future = _load()),
               ),
@@ -581,10 +586,10 @@ class _MessagePreviewScreenState extends State<_MessagePreviewScreen> {
               numberFrom(data['maxCharacters'])?.round() ?? 159;
           final skipped = <String>[
             for (final entry in {
-              'No phone': data['noPhone'],
-              'SMS disabled': data['smsDisabled'],
-              'Recently sent': data['recentlySent'],
-              'Already pledged': data['hasPledge'],
+              context.t('contacts.noPhone'): data['noPhone'],
+              context.t('messages.smsDisabled'): data['smsDisabled'],
+              context.t('messages.recentlySent'): data['recentlySent'],
+              context.t('messages.alreadyPledged'): data['hasPledge'],
             }.entries)
               if ((numberFrom(entry.value)?.round() ?? 0) > 0)
                 '${entry.key}: ${numberFrom(entry.value)!.round()}',
@@ -596,39 +601,39 @@ class _MessagePreviewScreenState extends State<_MessagePreviewScreen> {
                   padding: const EdgeInsets.all(16),
                   children: [
                     AhadiSectionCard(
-                      title: 'Ready to Send',
+                      title: context.t('messages.readyToSend'),
                       children: [
-                        AhadiInfoRow(label: 'Event', value: widget.event.name),
+                        AhadiInfoRow(label: context.t('activity.event'), value: widget.event.name),
                         AhadiInfoRow(
-                          label: 'Type',
+                          label: context.t('messages.type'),
                           value:
                               (widget.customTemplateName?.isNotEmpty ?? false)
                               ? widget.customTemplateName!
-                              : _messageTypeLabel(widget.messageType),
+                              : _messageTypeLabel(context, widget.messageType),
                         ),
                         if (widget.isCustom)
                           AhadiInfoRow(
-                            label: 'Sender ID',
+                            label: context.t('messages.senderId'),
                             value: widget.senderId ?? '-',
                           ),
                         AhadiInfoRow(
-                          label: 'Recipients',
+                          label: context.t('messages.recipients_label'),
                           value: '${previews.length}',
                         ),
                         if (skipped.isNotEmpty)
                           AhadiInfoRow(
-                            label: 'Skipped',
+                            label: context.t('messages.skipped'),
                             value: skipped.join(' • '),
                           ),
                       ],
                     ),
                     const SizedBox(height: 12),
                     if (previews.isEmpty)
-                      const Card(
+                      Card(
                         child: Padding(
-                          padding: EdgeInsets.all(16),
+                          padding: const EdgeInsets.all(16),
                           child: Text(
-                            'No eligible members to preview for this selection.',
+                            context.t('messages.noEligibleToPreview'),
                           ),
                         ),
                       )
@@ -651,7 +656,7 @@ class _MessagePreviewScreenState extends State<_MessagePreviewScreen> {
                                     Expanded(
                                       child: Text(
                                         titleCaseName(
-                                          _text(member, ['name'], 'Member'),
+                                          _text(member, ['name'], context.t('eventDetail.member')),
                                         ),
                                         style: const TextStyle(
                                           fontWeight: FontWeight.w800,
@@ -661,7 +666,7 @@ class _MessagePreviewScreenState extends State<_MessagePreviewScreen> {
                                     Text(
                                       _text(member, [
                                         'phoneMasked',
-                                      ], 'No phone'),
+                                      ], context.t('contacts.noPhone')),
                                       style: const TextStyle(
                                         color: AhadiColors.muted,
                                         fontSize: 12,
@@ -712,8 +717,10 @@ class _MessagePreviewScreenState extends State<_MessagePreviewScreen> {
                         icon: const Icon(Icons.send_outlined),
                         label: Text(
                           sending
-                              ? 'Sending...'
-                              : 'Send ${previews.length} Messages',
+                              ? context.t('messages.sending')
+                              : context
+                                    .t('messages.sendCount')
+                                    .replaceFirst('{count}', '${previews.length}'),
                         ),
                       ),
                     ],
@@ -783,7 +790,7 @@ class _MessageHistoryState extends State<MessageHistory> {
           return ErrorPanel(
             message: friendlyErrorText(
               snapshot.error,
-              'Unable to load message history.',
+              context.t('messages.loadHistoryError'),
             ),
             onRetry: () => setState(() => future = _load()),
           );
@@ -798,17 +805,17 @@ class _MessageHistoryState extends State<MessageHistory> {
             physics: const NeverScrollableScrollPhysics(),
             children: [
               if (rows.isEmpty)
-                const AhadiSectionCard(
-                  children: [Text('No messages found for this event.')],
+                AhadiSectionCard(
+                  children: [Text(context.t('messages.noMessagesForEvent'))],
                 )
               else ...[
                 ...visible.map(
                   (campaign) => AhadiListRow(
-                    title: campaign.displayLabel,
-                    subtitle: '${campaign.total} recipients',
+                    title: campaign.displayLabel(context),
+                    subtitle: '${campaign.total} ${context.t('messages.recipients')}',
                     status: campaign.primaryStatus,
                     meta:
-                        '${dateText(campaign.createdAt)} • ${campaign.summaryText}',
+                        '${dateText(campaign.createdAt)} • ${campaign.summaryText(context)}',
                     onTap: () => Navigator.of(context).push(
                       MaterialPageRoute(
                         builder: (_) => _MessageDetailScreen(
@@ -826,7 +833,7 @@ class _MessageHistoryState extends State<MessageHistory> {
                         onPressed: page == 0
                             ? null
                             : () => setState(() => page -= 1),
-                        child: const Text('Previous'),
+                        child: Text(context.t('messages.previous')),
                       ),
                     ),
                     const SizedBox(width: 8),
@@ -835,7 +842,7 @@ class _MessageHistoryState extends State<MessageHistory> {
                         onPressed: (page + 1) * _pageSize >= rows.length
                             ? null
                             : () => setState(() => page += 1),
-                        child: const Text('Next'),
+                        child: Text(context.t('messages.next')),
                       ),
                     ),
                   ],
@@ -870,16 +877,18 @@ class _MessageDetailScreenState extends State<_MessageDetailScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Retry Failed Message'),
-        content: Text('Retry message to ${recipient.name}?'),
+        title: Text(context.t('messages.retryFailedMessage')),
+        content: Text(
+          context.t('messages.retryMessageTo').replaceFirst('{name}', recipient.name),
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
+            child: Text(context.t('common.cancel')),
           ),
           FilledButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Retry'),
+            child: Text(context.t('messages.retry')),
           ),
         ],
       ),
@@ -891,10 +900,11 @@ class _MessageDetailScreenState extends State<_MessageDetailScreen> {
     });
     try {
       await widget.controller.retrySms(recipient.id);
-      setState(() => message = 'Message queued for retry.');
+      if (mounted) setState(() => message = context.t('messages.retryQueued'));
     } catch (err) {
+      if (!mounted) return;
       setState(
-        () => message = friendlyErrorText(err, 'Unable to retry message.'),
+        () => message = friendlyErrorText(err, context.t('messages.retryError')),
       );
     } finally {
       if (mounted) setState(() => retrying = false);
@@ -907,39 +917,39 @@ class _MessageDetailScreenState extends State<_MessageDetailScreen> {
     final canRetry = _can(widget.controller, 'messages.send');
     return Scaffold(
       backgroundColor: AhadiColors.background,
-      appBar: AppBar(title: const Text('Message Details')),
+      appBar: AppBar(title: Text(context.t('messages.messageDetails'))),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
           AhadiSectionCard(
-            title: 'Message',
+            title: context.t('messages.message'),
             children: [
-              AhadiInfoRow(label: 'Type', value: c.displayLabel),
-              AhadiInfoRow(label: 'Event', value: c.eventName),
-              AhadiInfoRow(label: 'Created', value: dateText(c.createdAt)),
-              AhadiInfoRow(label: 'Sender', value: c.senderId),
+              AhadiInfoRow(label: context.t('messages.type'), value: c.displayLabel(context)),
+              AhadiInfoRow(label: context.t('activity.event'), value: c.eventName),
+              AhadiInfoRow(label: context.t('pledges.created'), value: dateText(c.createdAt)),
+              AhadiInfoRow(label: context.t('messages.sender'), value: c.senderId),
             ],
           ),
           AhadiSectionCard(
-            title: 'Recipient Summary',
+            title: context.t('messages.recipientSummary'),
             children: [
-              AhadiInfoRow(label: 'Total', value: '${c.total}'),
+              AhadiInfoRow(label: context.t('financial.total'), value: '${c.total}'),
               ...c.statusCounts.entries.map(
                 (entry) => AhadiInfoRow(
-                  label: _statusLabel(entry.key),
+                  label: _statusLabel(context, entry.key),
                   value: '${entry.value}',
                 ),
               ),
             ],
           ),
-          AhadiSectionCard(title: 'Message Text', children: [Text(c.body)]),
+          AhadiSectionCard(title: context.t('messages.messageText'), children: [Text(c.body)]),
           if (message != null)
             Padding(
               padding: const EdgeInsets.only(bottom: 8),
               child: Text(message!),
             ),
           AhadiSectionCard(
-            title: 'Recipients',
+            title: context.t('messages.recipients_label'),
             children: c.recipients
                 .map(
                   (recipient) => ListTile(
@@ -956,9 +966,9 @@ class _MessageDetailScreenState extends State<_MessageDetailScreen> {
                             onPressed: retrying
                                 ? null
                                 : () => _retry(recipient),
-                            child: const Text('Retry'),
+                            child: Text(context.t('messages.retry')),
                           )
-                        : Text(_statusLabel(recipient.status)),
+                        : Text(_statusLabel(context, recipient.status)),
                   ),
                 )
                 .toList(),
@@ -1035,18 +1045,20 @@ class _MessagingSettingsScreenState extends State<MessagingSettingsScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Delete Template'),
+        title: Text(context.t('messages.deleteTemplate')),
         content: Text(
-          'Delete "${_text(template, ['name'], code)}"? This cannot be undone.',
+          context
+              .t('messages.deleteTemplateConfirm')
+              .replaceFirst('{name}', _text(template, ['name'], code)),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
+            child: Text(context.t('common.cancel')),
           ),
           FilledButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Delete'),
+            child: Text(context.t('messages.delete')),
           ),
         ],
       ),
@@ -1060,7 +1072,7 @@ class _MessagingSettingsScreenState extends State<MessagingSettingsScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            friendlyErrorText(err, 'Template could not be deleted.'),
+            friendlyErrorText(err, context.t('messages.templateDeleteError')),
           ),
         ),
       );
@@ -1088,15 +1100,17 @@ class _MessagingSettingsScreenState extends State<MessagingSettingsScreen> {
         'senderId': senderId,
         'defaultLanguage': language,
       });
+      if (!mounted) return;
       setState(() {
-        message = 'Messaging settings saved.';
+        message = context.t('messages.settingsSaved');
         future = _load();
       });
     } catch (err) {
+      if (!mounted) return;
       setState(
         () => message = friendlyErrorText(
           err,
-          'Messaging settings could not be saved.',
+          context.t('messages.settingsSaveError'),
         ),
       );
     } finally {
@@ -1113,7 +1127,7 @@ class _MessagingSettingsScreenState extends State<MessagingSettingsScreen> {
     );
     return Scaffold(
       backgroundColor: AhadiColors.background,
-      appBar: AppBar(title: const Text('Messaging')),
+      appBar: AppBar(title: Text(context.t('shell.more.messages'))),
       body: FutureBuilder<_SettingsData>(
         future: future,
         builder: (context, snapshot) {
@@ -1123,7 +1137,7 @@ class _MessagingSettingsScreenState extends State<MessagingSettingsScreen> {
               child: ErrorPanel(
                 message: friendlyErrorText(
                   snapshot.error,
-                  'Unable to load messaging settings.',
+                  context.t('messages.loadSettingsError'),
                 ),
                 onRetry: () => setState(() => future = _load()),
               ),
@@ -1144,7 +1158,7 @@ class _MessagingSettingsScreenState extends State<MessagingSettingsScreen> {
             padding: const EdgeInsets.all(16),
             children: [
               AhadiSectionCard(
-                title: 'SMS Settings',
+                title: context.t('messages.smsSettings'),
                 children: [
                   SwitchListTile(
                     contentPadding: EdgeInsets.zero,
@@ -1152,14 +1166,14 @@ class _MessagingSettingsScreenState extends State<MessagingSettingsScreen> {
                     onChanged: canManage && !saving
                         ? (value) => setState(() => smsEnabled = value)
                         : null,
-                    title: const Text('SMS enabled'),
+                    title: Text(context.t('messages.smsEnabled')),
                   ),
                   const SizedBox(height: 12),
                   DropdownButtonFormField<String>(
                     initialValue: senders.contains(senderId)
                         ? senderId
                         : senders.firstOrNull,
-                    decoration: const InputDecoration(labelText: 'Sender ID'),
+                    decoration: InputDecoration(labelText: context.t('messages.senderId')),
                     items: senders
                         .map(
                           (value) => DropdownMenuItem(
@@ -1175,7 +1189,7 @@ class _MessagingSettingsScreenState extends State<MessagingSettingsScreen> {
                   const SizedBox(height: 12),
                   FilledButton(
                     onPressed: canManage && !saving ? _save : null,
-                    child: Text(saving ? 'Saving...' : 'Save Settings'),
+                    child: Text(saving ? context.t('auth.saving') : context.t('financial.saveSettings')),
                   ),
                   if (message != null) ...[
                     const SizedBox(height: 8),
@@ -1184,7 +1198,7 @@ class _MessagingSettingsScreenState extends State<MessagingSettingsScreen> {
                 ],
               ),
               AhadiSectionCard(
-                title: 'Templates',
+                title: context.t('messages.templates'),
                 children: data.templates
                     .map(
                       (template) => Padding(
@@ -1199,6 +1213,7 @@ class _MessagingSettingsScreenState extends State<MessagingSettingsScreen> {
                           child: ListTile(
                             title: Text(
                               _messageTypeLabel(
+                                context,
                                 _text(template, ['code', 'templateCode']),
                               ),
                               style: const TextStyle(
@@ -1207,7 +1222,7 @@ class _MessagingSettingsScreenState extends State<MessagingSettingsScreen> {
                             ),
                             subtitle: Text(
                               _text(template, ['body']).isEmpty
-                                  ? 'Template managed by backend'
+                                  ? context.t('messages.templateManagedByBackend')
                                   : _text(template, ['body']),
                             ),
                             trailing: const Icon(Icons.chevron_right),
@@ -1226,14 +1241,14 @@ class _MessagingSettingsScreenState extends State<MessagingSettingsScreen> {
                     .toList(),
               ),
               AhadiSectionCard(
-                title: 'Custom Templates',
+                title: context.t('messages.customTemplates'),
                 children: [
                   if (data.customTemplates.isEmpty)
-                    const Padding(
-                      padding: EdgeInsets.only(bottom: 10),
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 10),
                       child: Text(
-                        'No custom templates yet.',
-                        style: TextStyle(color: AhadiColors.muted),
+                        context.t('messages.noCustomTemplatesYet'),
+                        style: const TextStyle(color: AhadiColors.muted),
                       ),
                     ),
                   ...data.customTemplates.map(
@@ -1248,7 +1263,7 @@ class _MessagingSettingsScreenState extends State<MessagingSettingsScreen> {
                         clipBehavior: Clip.antiAlias,
                         child: ListTile(
                           title: Text(
-                            _text(template, ['name'], 'Custom template'),
+                            _text(template, ['name'], context.t('messages.customTemplate')),
                             style: const TextStyle(fontWeight: FontWeight.w800),
                           ),
                           subtitle: Text(_text(template, ['body'])),
@@ -1268,7 +1283,7 @@ class _MessagingSettingsScreenState extends State<MessagingSettingsScreen> {
                     OutlinedButton.icon(
                       onPressed: () => _openCustomTemplateEditor(),
                       icon: const Icon(Icons.add),
-                      label: const Text('Add Template'),
+                      label: Text(context.t('messages.addTemplate')),
                     ),
                 ],
               ),
@@ -1322,10 +1337,12 @@ class _SmsTemplateScreenState extends State<SmsTemplateScreen> {
         'body': body.text,
         'language': _text(widget.template, ['language'], 'sw'),
       });
-      setState(() => message = 'Template saved.');
+      if (!mounted) return;
+      setState(() => message = context.t('messages.templateSaved'));
     } catch (err) {
+      if (!mounted) return;
       setState(
-        () => message = friendlyErrorText(err, 'Template could not be saved.'),
+        () => message = friendlyErrorText(err, context.t('messages.templateSaveError')),
       );
     } finally {
       if (mounted) setState(() => saving = false);
@@ -1341,10 +1358,12 @@ class _SmsTemplateScreenState extends State<SmsTemplateScreen> {
     try {
       final reset = await widget.controller.resetSmsTemplate(code);
       body.text = _text(reset, ['body', 'systemBody'], body.text);
-      setState(() => message = 'Template reset.');
+      if (!mounted) return;
+      setState(() => message = context.t('messages.templateReset'));
     } catch (err) {
+      if (!mounted) return;
       setState(
-        () => message = friendlyErrorText(err, 'Template could not be reset.'),
+        () => message = friendlyErrorText(err, context.t('messages.templateResetError')),
       );
     } finally {
       if (mounted) setState(() => saving = false);
@@ -1367,28 +1386,28 @@ class _SmsTemplateScreenState extends State<SmsTemplateScreen> {
     final max = numberFrom(widget.template['maxCharacters'])?.round() ?? 159;
     return Scaffold(
       backgroundColor: AhadiColors.background,
-      appBar: AppBar(title: const Text('Edit Template')),
+      appBar: AppBar(title: Text(context.t('messages.editTemplate'))),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
           AhadiSectionCard(
-            title: _messageTypeLabel(code),
+            title: _messageTypeLabel(context, code),
             children: [
               TextField(
                 controller: body,
                 minLines: 5,
                 maxLines: 8,
-                decoration: const InputDecoration(labelText: 'Message'),
+                decoration: InputDecoration(labelText: context.t('messages.message')),
                 onChanged: (_) => setState(() {}),
               ),
               const SizedBox(height: 8),
               Text(
-                '${body.text.length} / $max template characters',
+                '${body.text.length} / $max ${context.t('messages.templateCharacters')}',
                 style: const TextStyle(color: AhadiColors.muted),
               ),
               if (variables.isNotEmpty) ...[
                 const SizedBox(height: 12),
-                Text('Available Variables', style: AhadiTypography.label),
+                Text(context.t('messages.availableVariables'), style: AhadiTypography.label),
                 const SizedBox(height: 4),
                 Text(variables),
               ],
@@ -1396,7 +1415,7 @@ class _SmsTemplateScreenState extends State<SmsTemplateScreen> {
           ),
           if (sample.isNotEmpty)
             AhadiSectionCard(
-              title: 'Preview',
+              title: context.t('financial.preview'),
               children: [
                 Text(sample),
                 const SizedBox(height: 8),
@@ -1416,21 +1435,21 @@ class _SmsTemplateScreenState extends State<SmsTemplateScreen> {
               Expanded(
                 child: OutlinedButton(
                   onPressed: saving ? null : () => Navigator.of(context).pop(),
-                  child: const Text('Cancel'),
+                  child: Text(context.t('common.cancel')),
                 ),
               ),
               const SizedBox(width: 8),
               Expanded(
                 child: OutlinedButton(
                   onPressed: saving ? null : _reset,
-                  child: const Text('Reset'),
+                  child: Text(context.t('messages.reset')),
                 ),
               ),
               const SizedBox(width: 8),
               Expanded(
                 child: FilledButton(
                   onPressed: saving ? null : _save,
-                  child: Text(saving ? 'Saving...' : 'Save'),
+                  child: Text(saving ? context.t('auth.saving') : context.t('common.save')),
                 ),
               ),
             ],
@@ -1481,7 +1500,7 @@ class _CustomTemplateEditorScreenState
 
   Future<void> _save() async {
     if (name.text.trim().isEmpty || body.text.trim().isEmpty) {
-      setState(() => error = 'Title and message are required.');
+      setState(() => error = context.t('messages.titleAndMessageRequired'));
       return;
     }
     setState(() {
@@ -1498,8 +1517,9 @@ class _CustomTemplateEditorScreenState
       }
       if (mounted) Navigator.of(context).pop(true);
     } catch (err) {
+      if (!mounted) return;
       setState(
-        () => error = friendlyErrorText(err, 'Template could not be saved.'),
+        () => error = friendlyErrorText(err, context.t('messages.templateSaveError')),
       );
     } finally {
       if (mounted) setState(() => saving = false);
@@ -1511,17 +1531,17 @@ class _CustomTemplateEditorScreenState
     return Scaffold(
       backgroundColor: AhadiColors.background,
       appBar: AppBar(
-        title: Text(isEditing ? 'Edit Custom Template' : 'New Custom Template'),
+        title: Text(isEditing ? context.t('messages.editCustomTemplate') : context.t('messages.newCustomTemplate')),
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
           AhadiSectionCard(
-            title: 'Template',
+            title: context.t('messages.templateSingular'),
             children: [
               TextField(
                 controller: name,
-                decoration: const InputDecoration(labelText: 'Title'),
+                decoration: InputDecoration(labelText: context.t('messages.titleLabel')),
                 onChanged: (_) => setState(() {}),
               ),
               const SizedBox(height: 12),
@@ -1529,17 +1549,17 @@ class _CustomTemplateEditorScreenState
                 controller: body,
                 minLines: 5,
                 maxLines: 8,
-                decoration: const InputDecoration(labelText: 'Message'),
+                decoration: InputDecoration(labelText: context.t('messages.message')),
                 onChanged: (_) => setState(() {}),
               ),
               const SizedBox(height: 8),
               Text(
-                '${body.text.length} characters',
+                '${body.text.length} ${context.t('messages.characters')}',
                 style: const TextStyle(color: AhadiColors.muted),
               ),
               const SizedBox(height: 12),
               Text(
-                'Use {{member_name}} to insert the recipient\'s name.',
+                context.t('messages.memberNameHint'),
                 style: AhadiTypography.label,
               ),
             ],
@@ -1557,14 +1577,14 @@ class _CustomTemplateEditorScreenState
               Expanded(
                 child: OutlinedButton(
                   onPressed: saving ? null : () => Navigator.of(context).pop(),
-                  child: const Text('Cancel'),
+                  child: Text(context.t('common.cancel')),
                 ),
               ),
               const SizedBox(width: 8),
               Expanded(
                 child: FilledButton(
                   onPressed: saving ? null : _save,
-                  child: Text(saving ? 'Saving...' : 'Save'),
+                  child: Text(saving ? context.t('auth.saving') : context.t('common.save')),
                 ),
               ),
             ],
@@ -1586,13 +1606,13 @@ class _EventHeader extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Messages',
+          context.t('messages.title'),
           style: Theme.of(context).textTheme.headlineSmall
               ?.copyWith(fontWeight: FontWeight.w800),
         ),
         const SizedBox(height: 4),
         Text(
-          event?.name ?? 'No event selected',
+          event?.name ?? context.t('common.noEventSelected'),
           style: const TextStyle(color: AhadiColors.muted),
         ),
       ],
@@ -1647,8 +1667,8 @@ class _MessageCampaign {
 
   int get total => recipients.length;
 
-  String get displayLabel =>
-      templateName.isNotEmpty ? templateName : _messageTypeLabel(templateCode);
+  String displayLabel(BuildContext context) =>
+      templateName.isNotEmpty ? templateName : _messageTypeLabel(context, templateCode);
 
   String get primaryStatus {
     if (statusCounts.containsKey('FAILED')) return 'FAILED';
@@ -1659,8 +1679,8 @@ class _MessageCampaign {
     return statusCounts.keys.firstOrNull ?? 'UNKNOWN';
   }
 
-  String get summaryText => statusCounts.entries
-      .map((entry) => '${_statusLabel(entry.key)}: ${entry.value}')
+  String summaryText(BuildContext context) => statusCounts.entries
+      .map((entry) => '${_statusLabel(context, entry.key)}: ${entry.value}')
       .join(' • ');
 }
 
@@ -1782,31 +1802,45 @@ String _text(
 String _id(Map<String, dynamic> row) =>
     _text(row, ['eventMemberId', 'event_member_id']);
 
-String _name(Map<String, dynamic> row) => titleCaseName(
-  _text(row, ['fullName', 'full_name', 'member', 'member_name'], 'Member'),
+String _name(BuildContext context, Map<String, dynamic> row) => titleCaseName(
+  _text(row, ['fullName', 'full_name', 'member', 'member_name'], context.t('eventDetail.member')),
 );
 
-String _phone(Map<String, dynamic> row) =>
-    _text(row, ['maskedPhone', 'phone', 'phone_e164'], 'No phone');
+String _phone(BuildContext context, Map<String, dynamic> row) =>
+    _text(row, ['maskedPhone', 'phone', 'phone_e164'], context.t('contacts.noPhone'));
 
-String _messageTypeLabel(String value) {
+String _messageTypeLabel(BuildContext context, String value) {
   switch (value) {
     case 'PLEDGE_REQUEST':
-      return 'Pledge Request';
+      return context.t('messages.pledgeRequest');
     case 'PLEDGE_REGISTRATION':
-      return 'Pledge Registration';
+      return context.t('messages.pledgeRegistration');
     case 'PAYMENT_CONFIRMATION':
-      return 'Payment Confirmation';
+      return context.t('messages.paymentConfirmation');
     case 'BALANCE_REMINDER':
-      return 'Balance Reminder';
+      return context.t('messages.balanceReminder');
     case 'PLEDGE_COMPLETED':
-      return 'Pledge Completed';
+      return context.t('messages.pledgeCompleted');
     default:
       return titleCaseName(value.replaceAll('_', ' '));
   }
 }
 
-String _statusLabel(String value) => titleCaseName(value.replaceAll('_', ' '));
+const _statusKeys = <String, String>{
+  'QUEUED': 'messages.status.queued',
+  'PROCESSING': 'messages.status.processing',
+  'SENT': 'messages.status.sent',
+  'DELIVERED': 'messages.status.delivered',
+  'FAILED': 'messages.status.failed',
+  'CANCELLED': 'messages.status.cancelled',
+  'UNKNOWN': 'messages.status.unknown',
+};
+
+String _statusLabel(BuildContext context, String value) {
+  final key = _statusKeys[value.toUpperCase()];
+  if (key != null) return context.t(key);
+  return titleCaseName(value.replaceAll('_', ' '));
+}
 
 bool _can(SessionController controller, String permission) {
   final context = controller.selectedTenantContext;
