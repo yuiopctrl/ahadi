@@ -647,13 +647,39 @@ class SessionController extends ChangeNotifier {
     String code,
     List<String> eventMemberIds,
     String senderId,
-  ) {
-    return _api.sendCustomSmsBulk(_requireTenantId(), eventId, {
-      'code': code,
-      'eventMemberIds': eventMemberIds,
-      'senderId': senderId,
-      'idempotencyKey': _uuidV4(),
-    });
+  ) async {
+    const chunkSize = 100;
+    var requested = 0;
+    var queued = 0;
+    var noPhone = 0;
+    var smsDisabled = 0;
+    Object? lastBatchId;
+    for (var start = 0; start < eventMemberIds.length; start += chunkSize) {
+      final chunk = eventMemberIds.sublist(
+        start,
+        (start + chunkSize).clamp(0, eventMemberIds.length),
+      );
+      final response = await _api.sendCustomSmsBulk(_requireTenantId(), eventId, {
+        'code': code,
+        'eventMemberIds': chunk,
+        'senderId': senderId,
+        'idempotencyKey': _uuidV4(),
+      });
+      requested += _intFrom(response['requested']) ?? chunk.length;
+      queued += _intFrom(response['queued']) ?? 0;
+      final skipped = response['skipped'];
+      if (skipped is Map) {
+        noPhone += _intFrom(skipped['noPhone']) ?? 0;
+        smsDisabled += _intFrom(skipped['smsDisabled']) ?? 0;
+      }
+      lastBatchId = response['batchId'];
+    }
+    return {
+      'requested': requested,
+      'queued': queued,
+      'skipped': {'noPhone': noPhone, 'smsDisabled': smsDisabled},
+      'batchId': lastBatchId,
+    };
   }
 
   Future<Map<String, dynamic>> smsBulkPreview(
@@ -965,4 +991,11 @@ String _uuidV4() {
   String hex(int length) =>
       List.generate(length, (_) => random.nextInt(16).toRadixString(16)).join();
   return '${hex(8)}-${hex(4)}-4${hex(3)}-${(8 + random.nextInt(4)).toRadixString(16)}${hex(3)}-${hex(12)}';
+}
+
+int? _intFrom(Object? value) {
+  if (value is int) return value;
+  if (value is num) return value.round();
+  if (value is String) return int.tryParse(value);
+  return null;
 }
