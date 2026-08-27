@@ -13,6 +13,7 @@ const Map<String, Map<AppLanguage, String>> appTranslations = {
     AppLanguage.sw: 'Hakuna tukio lililochaguliwa',
     AppLanguage.en: 'No event selected',
   },
+  'common.pledged': {AppLanguage.sw: 'Ahadi', AppLanguage.en: 'Pledged'},
 
   // --- shell / navigation ---
   'shell.nav.home': {AppLanguage.sw: 'Nyumbani', AppLanguage.en: 'Home'},
@@ -183,4 +184,42 @@ const Map<String, Map<AppLanguage, String>> appTranslations = {
     AppLanguage.sw: 'Hakuna matukio yaliyoundwa bado.',
     AppLanguage.en: 'No events have been created yet.',
   },
+
+  // --- common (filters) ---
+  'common.all': {AppLanguage.sw: 'Yote', AppLanguage.en: 'All'},
+  'common.active': {AppLanguage.sw: 'Hai', AppLanguage.en: 'Active'},
+  'common.draft': {AppLanguage.sw: 'Rasimu', AppLanguage.en: 'Draft'},
+  'common.closed': {AppLanguage.sw: 'Imefungwa', AppLanguage.en: 'Closed'},
+
+  // --- events ---
+  'events.newEvent': {AppLanguage.sw: 'Tukio Jipya', AppLanguage.en: 'New Event'},
+  'events.noCreatePermission': {
+    AppLanguage.sw: 'Jukumu lako halina ruhusa ya kuunda matukio.',
+    AppLanguage.en: 'Your role does not include permission to create events.',
+  },
+  'events.noneMatchFilter': {
+    AppLanguage.sw: 'Hakuna matukio yanayolingana na kichujio hiki.',
+    AppLanguage.en: 'No events match this filter.',
+  },
+  'events.eventName': {AppLanguage.sw: 'Jina la Tukio', AppLanguage.en: 'Event Name'},
+  'events.eventType': {AppLanguage.sw: 'Aina ya Tukio', AppLanguage.en: 'Event Type'},
+  'events.customEventType': {AppLanguage.sw: 'Aina Nyingine ya Tukio', AppLanguage.en: 'Custom Event Type'},
+  'events.eventDate': {AppLanguage.sw: 'Tarehe ya Tukio MWAKA-MWEZI-SIKU', AppLanguage.en: 'Event Date YYYY-MM-DD'},
+  'events.venue': {AppLanguage.sw: 'Mahali', AppLanguage.en: 'Venue'},
+  'events.targetAmount': {AppLanguage.sw: 'Kiasi Kinacholengwa', AppLanguage.en: 'Target Amount'},
+  'events.pledgeDeadline': {
+    AppLanguage.sw: 'Mwisho wa Ahadi MWAKA-MWEZI-SIKU',
+    AppLanguage.en: 'Pledge Deadline YYYY-MM-DD',
+  },
+  'events.creating': {AppLanguage.sw: 'Inaunda...', AppLanguage.en: 'Creating...'},
+  'events.type.WEDDING': {AppLanguage.sw: 'Harusi', AppLanguage.en: 'Wedding'},
+  'events.type.SENDOFF': {AppLanguage.sw: 'Send Off', AppLanguage.en: 'Send Off'},
+  'events.type.FUNERAL': {AppLanguage.sw: 'Msiba', AppLanguage.en: 'Funeral'},
+  'events.type.FUNDRAISER': {AppLanguage.sw: 'Uchangishaji', AppLanguage.en: 'Fundraiser'},
+  'events.type.BIRTHDAY': {AppLanguage.sw: 'Siku ya Kuzaliwa', AppLanguage.en: 'Birthday'},
+  'events.type.GRADUATION': {AppLanguage.sw: 'Mahafali', AppLanguage.en: 'Graduation'},
+  'events.type.RELIGIOUS': {AppLanguage.sw: 'Kidini', AppLanguage.en: 'Religious'},
+  'events.type.OTHER': {AppLanguage.sw: 'Nyingine', AppLanguage.en: 'Other'},
+  'events.currentEvent': {AppLanguage.sw: 'Tukio la Sasa', AppLanguage.en: 'Current event'},
+  'events.setCurrent': {AppLanguage.sw: 'Weka kama la sasa', AppLanguage.en: 'Set current'},
 };

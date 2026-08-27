@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/localization/app_locale.dart';
 import '../../../core/theme/ahadi_theme.dart';
 import '../../../core/widgets/formatters.dart';
 import '../../auth/domain/auth_models.dart';
@@ -43,7 +44,7 @@ class EventSummaryCard extends StatelessWidget {
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          '${event.eventType} · ${dateText(event.eventDate)}',
+                          '${context.t('events.type.${event.eventType}')} · ${dateText(event.eventDate)}',
                           style: const TextStyle(color: AhadiColors.muted),
                         ),
                       ],
@@ -62,9 +63,9 @@ class EventSummaryCard extends StatelessWidget {
               Row(
                 children: [
                   if (selected)
-                    const Text(
-                      'Current event',
-                      style: TextStyle(
+                    Text(
+                      context.t('events.currentEvent'),
+                      style: const TextStyle(
                         color: AhadiColors.success,
                         fontWeight: FontWeight.w800,
                       ),
@@ -72,7 +73,7 @@ class EventSummaryCard extends StatelessWidget {
                   else
                     TextButton(
                       onPressed: onSelect,
-                      child: const Text('Set current'),
+                      child: Text(context.t('events.setCurrent')),
                     ),
                   const Spacer(),
                   if (onTap != null)
