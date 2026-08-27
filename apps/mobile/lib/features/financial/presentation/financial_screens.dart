@@ -24,7 +24,7 @@ Future<Map<String, Object?>> receiptImageSharePayload(
     '${(directory ?? Directory.systemTemp).path}/ahadi-receipt-${(now ?? DateTime.now()).microsecondsSinceEpoch}.png',
   );
   await file.writeAsBytes(bytes);
-  return {'path': file.path, 'mimeType': 'image/png', 'title': 'Ahadi Receipt'};
+  return {'path': file.path, 'mimeType': 'image/png', 'title': 'Changisha Receipt'};
 }
 
 class PaymentsScreen extends StatefulWidget {
@@ -961,10 +961,10 @@ class _ReceiptDetailScreenState extends State<ReceiptDetailScreen> {
             children: [
               AhadiSectionCard(
                 children: [
-                  const Center(
+                  Center(
                     child: Text(
-                      'AHADI',
-                      style: TextStyle(
+                      'CHANGISHA',
+                      style: const TextStyle(
                         fontWeight: FontWeight.w900,
                         fontSize: 22,
                       ),
@@ -1779,7 +1779,7 @@ Future<List<int>> _receiptImageBytes(
   }
 
   text(
-    'AHADI',
+    'CHANGISHA',
     size: 46,
     weight: FontWeight.w900,
     align: TextAlign.center,

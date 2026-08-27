@@ -38,7 +38,7 @@ const Map<String, Map<AppLanguage, String>> appTranslations = {
     AppLanguage.en: 'Create an event to begin operations.',
   },
   'shell.changePin': {AppLanguage.sw: 'Badilisha PIN', AppLanguage.en: 'Change PIN'},
-  'shell.ahadiUser': {AppLanguage.sw: 'Mtumiaji wa Ahadi', AppLanguage.en: 'Ahadi user'},
+  'shell.ahadiUser': {AppLanguage.sw: 'Mtumiaji wa Changisha', AppLanguage.en: 'Changisha user'},
   'shell.invitationSingular': {
     AppLanguage.sw: 'Kuna mwaliko wa shirika',
     AppLanguage.en: 'Organization invitation available',
@@ -80,14 +80,14 @@ const Map<String, Map<AppLanguage, String>> appTranslations = {
   'auth.phoneNumber': {AppLanguage.sw: 'Namba ya simu', AppLanguage.en: 'Phone number'},
   'auth.login': {AppLanguage.sw: 'Ingia', AppLanguage.en: 'Login'},
   'auth.forgotPin': {AppLanguage.sw: 'Umesahau PIN?', AppLanguage.en: 'Forgot PIN?'},
-  'auth.newToAhadi': {AppLanguage.sw: 'Mgeni kwa Ahadi?', AppLanguage.en: 'New to Ahadi?'},
+  'auth.newToAhadi': {AppLanguage.sw: 'Mgeni kwa Changisha?', AppLanguage.en: 'New to Changisha?'},
   'auth.createAccount': {AppLanguage.sw: 'Fungua Akaunti', AppLanguage.en: 'Create Account'},
   'auth.checking': {AppLanguage.sw: 'Inaangalia...', AppLanguage.en: 'Checking...'},
   'auth.continue': {AppLanguage.sw: 'Endelea', AppLanguage.en: 'Continue'},
   'auth.backToLogin': {AppLanguage.sw: 'Rudi Kuingia', AppLanguage.en: 'Back to Login'},
   'auth.existingAccountMessage': {
-    AppLanguage.sw: 'Namba hii ya simu tayari ina akaunti ya Ahadi.\nIngia kwa kutumia PIN yako.',
-    AppLanguage.en: 'This phone number already has an Ahadi account.\nLog in using your PIN.',
+    AppLanguage.sw: 'Namba hii ya simu tayari ina akaunti ya Changisha.\nIngia kwa kutumia PIN yako.',
+    AppLanguage.en: 'This phone number already has a Changisha account.\nLog in using your PIN.',
   },
   'auth.codeSentTo': {AppLanguage.sw: 'Msimbo umetumwa kwa', AppLanguage.en: 'Code sent to'},
   'auth.sixDigitCode': {AppLanguage.sw: 'Msimbo wa tarakimu sita', AppLanguage.en: 'Six-digit code'},
@@ -107,14 +107,14 @@ const Map<String, Map<AppLanguage, String>> appTranslations = {
   'auth.setPin': {AppLanguage.sw: 'Weka PIN', AppLanguage.en: 'Set PIN'},
   'auth.completeProfile': {AppLanguage.sw: 'Kamilisha Wasifu', AppLanguage.en: 'Complete Profile'},
   'auth.youreInvited': {AppLanguage.sw: 'Umealikwa', AppLanguage.en: "You're Invited"},
-  'auth.welcomeToAhadi': {AppLanguage.sw: 'Karibu Ahadi', AppLanguage.en: 'Welcome to Ahadi'},
+  'auth.welcomeToAhadi': {AppLanguage.sw: 'Karibu Changisha', AppLanguage.en: 'Welcome to Changisha'},
   'auth.phoneStepHint': {
     AppLanguage.sw: 'Weka namba yako ya simu kuanza uthibitishaji wa akaunti.',
     AppLanguage.en: 'Enter your phone number to start account verification.',
   },
   'auth.existingStepHint': {
-    AppLanguage.sw: 'Tumia kuingia kwa kawaida kwa akaunti za Ahadi zilizopo.',
-    AppLanguage.en: 'Use normal login for returning Ahadi accounts.',
+    AppLanguage.sw: 'Tumia kuingia kwa kawaida kwa akaunti za Changisha zilizopo.',
+    AppLanguage.en: 'Use normal login for returning Changisha accounts.',
   },
   'auth.otpStepHint': {
     AppLanguage.sw: 'Weka msimbo uliotumwa kwa SMS.',
@@ -125,8 +125,8 @@ const Map<String, Map<AppLanguage, String>> appTranslations = {
     AppLanguage.en: 'Create a secure 4-digit PIN.',
   },
   'auth.profileStepHint': {
-    AppLanguage.sw: 'Jina hili linatumika katika akaunti yako yote ya Ahadi.',
-    AppLanguage.en: 'This name is used across your Ahadi account.',
+    AppLanguage.sw: 'Jina hili linatumika katika akaunti yako yote ya Changisha.',
+    AppLanguage.en: 'This name is used across your Changisha account.',
   },
   'auth.invitationsStepHint': {
     AppLanguage.sw: 'Angalia mialiko ya mashirika kwa namba yako ya simu iliyothibitishwa.',
@@ -149,8 +149,8 @@ const Map<String, Map<AppLanguage, String>> appTranslations = {
     AppLanguage.en: 'We will verify your phone before allowing a PIN reset.',
   },
   'auth.enterCodeHint': {
-    AppLanguage.sw: 'Tumia msimbo wa SMS uliotumwa na Ahadi.',
-    AppLanguage.en: 'Use the SMS code sent by Ahadi.',
+    AppLanguage.sw: 'Tumia msimbo wa SMS uliotumwa na Changisha.',
+    AppLanguage.en: 'Use the SMS code sent by Changisha.',
   },
   'auth.setNewPinHint': {
     AppLanguage.sw: 'Chagua PIN ya tarakimu 4 usiyoitumia mahali pengine.',
@@ -310,17 +310,17 @@ const Map<String, Map<AppLanguage, String>> appTranslations = {
 
   // --- organizations ---
   'organizations.chooseOrganization': {AppLanguage.sw: 'Chagua Shirika', AppLanguage.en: 'Choose Organization'},
-  'organizations.ahadiWorkspace': {AppLanguage.sw: 'Nafasi ya kazi ya Ahadi', AppLanguage.en: 'Ahadi workspace'},
+  'organizations.ahadiWorkspace': {AppLanguage.sw: 'Nafasi ya kazi ya Changisha', AppLanguage.en: 'Changisha workspace'},
   'organizations.createOrJoin': {AppLanguage.sw: 'Unda au jiunge na shirika', AppLanguage.en: 'Create or join an organization'},
   'organizations.noActiveOrgHint': {
-    AppLanguage.sw: 'Akaunti hii bado haijaunganishwa na shirika hai la Ahadi.',
-    AppLanguage.en: 'This account does not belong to an active Ahadi organization yet.',
+    AppLanguage.sw: 'Akaunti hii bado haijaunganishwa na shirika hai la Changisha.',
+    AppLanguage.en: 'This account does not belong to an active Changisha organization yet.',
   },
   'organizations.createOrganization': {AppLanguage.sw: 'Unda Shirika', AppLanguage.en: 'Create organization'},
   'organizations.invitations': {AppLanguage.sw: 'Mialiko', AppLanguage.en: 'Invitations'},
   'organizations.acceptInvitationHint': {
-    AppLanguage.sw: 'Kubali mwaliko kujiunga na shirika la Ahadi lililopo.',
-    AppLanguage.en: 'Accept an invitation to join an existing Ahadi organization.',
+    AppLanguage.sw: 'Kubali mwaliko kujiunga na shirika la Changisha lililopo.',
+    AppLanguage.en: 'Accept an invitation to join an existing Changisha organization.',
   },
   'organizations.createOrganizationTitle': {AppLanguage.sw: 'Unda Shirika', AppLanguage.en: 'Create Organization'},
   'organizations.package': {AppLanguage.sw: 'Kifurushi', AppLanguage.en: 'Package'},
@@ -331,8 +331,8 @@ const Map<String, Map<AppLanguage, String>> appTranslations = {
   'organizations.firstEvent': {AppLanguage.sw: 'Tukio la Kwanza', AppLanguage.en: 'First event'},
   'organizations.accountOwner': {AppLanguage.sw: 'Mmiliki wa Akaunti', AppLanguage.en: 'Account owner'},
   'organizations.noPlansAvailable': {
-    AppLanguage.sw: 'Hakuna vifurushi vya umma vinavyopatikana. Wasiliana na msaada wa Ahadi kabla ya kuunda shirika.',
-    AppLanguage.en: 'No public packages are available. Contact Ahadi support before creating an organization.',
+    AppLanguage.sw: 'Hakuna vifurushi vya umma vinavyopatikana. Wasiliana na msaada wa Changisha kabla ya kuunda shirika.',
+    AppLanguage.en: 'No public packages are available. Contact Changisha support before creating an organization.',
   },
 
   // --- pledges ---
@@ -420,8 +420,8 @@ const Map<String, Map<AppLanguage, String>> appTranslations = {
   'billing.unableToLoadPackages': {AppLanguage.sw: 'Imeshindwa kupakia vifurushi', AppLanguage.en: 'Unable to load packages'},
   'billing.packageChanges': {AppLanguage.sw: 'Mabadiliko ya Kifurushi', AppLanguage.en: 'Package changes'},
   'billing.packageChangesHint': {
-    AppLanguage.sw: 'Ubadilishaji wa kifurushi unashughulikiwa kupitia malipo ya Ahadi hadi mfumo wa moja kwa moja wa kupandisha na kushusha malipo utakapowashwa.',
-    AppLanguage.en: 'Plan switching is handled through Ahadi billing until automated upgrade and downgrade payment flows are enabled.',
+    AppLanguage.sw: 'Ubadilishaji wa kifurushi unashughulikiwa kupitia malipo ya Changisha hadi mfumo wa moja kwa moja wa kupandisha na kushusha malipo utakapowashwa.',
+    AppLanguage.en: 'Plan switching is handled through Changisha billing until automated upgrade and downgrade payment flows are enabled.',
   },
   'billing.noPackagesAvailable': {AppLanguage.sw: 'Hakuna vifurushi vinavyopatikana', AppLanguage.en: 'No packages available'},
   'billing.noPackagesHint': {
@@ -469,8 +469,8 @@ const Map<String, Map<AppLanguage, String>> appTranslations = {
   'users.sendInvitation': {AppLanguage.sw: 'Tuma Mwaliko', AppLanguage.en: 'Send Invitation'},
   'users.changeRole': {AppLanguage.sw: 'Badilisha Jukumu', AppLanguage.en: 'Change Role'},
   'users.removeConfirmBody': {
-    AppLanguage.sw: 'Ondoa {name} kutoka {organization}?\n\nAkaunti yao ya Ahadi na ufikiaji wa mashirika mengine hautaathiriwa.',
-    AppLanguage.en: 'Remove {name} from {organization}?\n\nTheir Ahadi account and access to other organizations will not be affected.',
+    AppLanguage.sw: 'Ondoa {name} kutoka {organization}?\n\nAkaunti yao ya Changisha na ufikiaji wa mashirika mengine hautaathiriwa.',
+    AppLanguage.en: 'Remove {name} from {organization}?\n\nTheir Changisha account and access to other organizations will not be affected.',
   },
   'users.thisOrganization': {AppLanguage.sw: 'shirika hili', AppLanguage.en: 'this organization'},
   'users.forSomeone': {AppLanguage.sw: 'kwa', AppLanguage.en: 'for'},
@@ -602,8 +602,8 @@ const Map<String, Map<AppLanguage, String>> appTranslations = {
   'financial.currentOutstanding': {AppLanguage.sw: 'Deni la Sasa', AppLanguage.en: 'Current Outstanding'},
   'financial.expectedRemaining': {AppLanguage.sw: 'Kilichobaki Kinachotarajiwa', AppLanguage.en: 'Expected Remaining'},
   'financial.overpayHint': {
-    AppLanguage.sw: 'Malipo haya yanazidi kiasi cha deni la sasa. Seva itagawa kiasi kulingana na kanuni za malipo za Ahadi.',
-    AppLanguage.en: 'This payment exceeds the current outstanding amount. The server will allocate the amount according to Ahadi payment rules.',
+    AppLanguage.sw: 'Malipo haya yanazidi kiasi cha deni la sasa. Seva itagawa kiasi kulingana na kanuni za malipo za Changisha.',
+    AppLanguage.en: 'This payment exceeds the current outstanding amount. The server will allocate the amount according to Changisha payment rules.',
   },
   'financial.paymentReceipt': {AppLanguage.sw: 'RISITI YA MALIPO', AppLanguage.en: 'PAYMENT RECEIPT'},
   'financial.thankYou': {AppLanguage.sw: 'Asante', AppLanguage.en: 'Thank you'},

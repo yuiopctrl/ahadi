@@ -68,6 +68,32 @@ class _LoginScreenState extends State<LoginScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: SegmentedButton<AppLanguage>(
+                              key: const Key('login-language-switcher'),
+                              style: const ButtonStyle(
+                                visualDensity: VisualDensity.compact,
+                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              ),
+                              segments: const [
+                                ButtonSegment(
+                                  value: AppLanguage.sw,
+                                  label: Text('SW'),
+                                ),
+                                ButtonSegment(
+                                  value: AppLanguage.en,
+                                  label: Text('EN'),
+                                ),
+                              ],
+                              selected: {context.appLanguage},
+                              onSelectionChanged: (selection) =>
+                                  AppLocaleScope.of(
+                                    context,
+                                  ).setLanguage(selection.first),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
                           const BrandHeader(),
                           const SizedBox(height: 32),
                           Text(
