@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/localization/app_locale.dart';
 import '../../../core/theme/ahadi_theme.dart';
 import '../domain/auth_models.dart';
 
@@ -56,8 +57,8 @@ class InvitationReviewCard extends StatelessWidget {
                       style: Theme.of(context).textTheme.titleMedium,
                     ),
                     const SizedBox(height: 4),
-                    const Text(
-                      'You have been invited to join this organization.',
+                    Text(
+                      context.t('auth.invitedToJoin'),
                       style: AhadiTypography.secondary,
                     ),
                   ],
@@ -66,10 +67,10 @@ class InvitationReviewCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 16),
-          _InfoRow(label: 'Role', value: role),
+          _InfoRow(label: context.t('auth.role'), value: role),
           if (invitation.fullName.trim().isNotEmpty) ...[
             const SizedBox(height: 10),
-            _InfoRow(label: 'Name', value: invitation.fullName.trim()),
+            _InfoRow(label: context.t('auth.name'), value: invitation.fullName.trim()),
           ],
           const SizedBox(height: 16),
           Row(
@@ -77,14 +78,14 @@ class InvitationReviewCard extends StatelessWidget {
               Expanded(
                 child: OutlinedButton(
                   onPressed: busy ? null : onDecline,
-                  child: const Text('Decline'),
+                  child: Text(context.t('auth.decline')),
                 ),
               ),
               const SizedBox(width: 10),
               Expanded(
                 child: FilledButton(
                   onPressed: busy ? null : onJoin,
-                  child: Text(busy ? 'Joining...' : 'Join Organization'),
+                  child: Text(busy ? context.t('auth.joining') : context.t('auth.joinOrganization')),
                 ),
               ),
             ],

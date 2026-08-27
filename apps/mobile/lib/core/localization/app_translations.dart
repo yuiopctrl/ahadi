@@ -135,4 +135,52 @@ const Map<String, Map<AppLanguage, String>> appTranslations = {
     AppLanguage.sw: 'Unda shirika baada tu ya akaunti yako kuwa tayari.',
     AppLanguage.en: 'Create an organization only after your account is ready.',
   },
+  'auth.forgotPinTitle': {AppLanguage.sw: 'Umesahau PIN', AppLanguage.en: 'Forgot PIN'},
+  'auth.sendCode': {AppLanguage.sw: 'Tuma Msimbo', AppLanguage.en: 'Send code'},
+  'auth.verificationCode': {AppLanguage.sw: 'Msimbo wa Uthibitisho', AppLanguage.en: 'Verification code'},
+  'auth.newPin': {AppLanguage.sw: 'PIN Mpya', AppLanguage.en: 'New PIN'},
+  'auth.confirmNewPin': {AppLanguage.sw: 'Thibitisha PIN Mpya', AppLanguage.en: 'Confirm new PIN'},
+  'auth.recoverPin': {AppLanguage.sw: 'Rejesha PIN yako', AppLanguage.en: 'Recover your PIN'},
+  'auth.enterTheCode': {AppLanguage.sw: 'Weka msimbo', AppLanguage.en: 'Enter the code'},
+  'auth.setNewPin': {AppLanguage.sw: 'Weka PIN mpya', AppLanguage.en: 'Set a new PIN'},
+  'auth.recoverPinHint': {
+    AppLanguage.sw: 'Tutathibitisha simu yako kabla ya kuruhusu kubadilisha PIN.',
+    AppLanguage.en: 'We will verify your phone before allowing a PIN reset.',
+  },
+  'auth.enterCodeHint': {
+    AppLanguage.sw: 'Tumia msimbo wa SMS uliotumwa na Ahadi.',
+    AppLanguage.en: 'Use the SMS code sent by Ahadi.',
+  },
+  'auth.setNewPinHint': {
+    AppLanguage.sw: 'Chagua PIN ya tarakimu 4 usiyoitumia mahali pengine.',
+    AppLanguage.en: 'Choose a 4 digit PIN you have not used elsewhere.',
+  },
+  'auth.invitedToJoin': {
+    AppLanguage.sw: 'Umealikwa kujiunga na shirika hili.',
+    AppLanguage.en: 'You have been invited to join this organization.',
+  },
+  'auth.role': {AppLanguage.sw: 'Jukumu', AppLanguage.en: 'Role'},
+  'auth.name': {AppLanguage.sw: 'Jina', AppLanguage.en: 'Name'},
+  'auth.decline': {AppLanguage.sw: 'Kataa', AppLanguage.en: 'Decline'},
+  'auth.joining': {AppLanguage.sw: 'Inajiunga...', AppLanguage.en: 'Joining...'},
+  'auth.joinOrganization': {AppLanguage.sw: 'Jiunge na Shirika', AppLanguage.en: 'Join Organization'},
+
+  // --- dashboard ---
+  'dashboard.title': {AppLanguage.sw: 'Dashibodi', AppLanguage.en: 'Dashboard'},
+  'dashboard.loadError': {
+    AppLanguage.sw: 'Imeshindwa kupakia dashibodi. Tafadhali jaribu tena.',
+    AppLanguage.en: 'Unable to load dashboard. Please try again.',
+  },
+  'dashboard.chooseEventHint': {
+    AppLanguage.sw: 'Chagua tukio kuona takwimu za dashibodi.',
+    AppLanguage.en: 'Choose an event to view operational dashboard figures.',
+  },
+  'dashboard.totalPledged': {AppLanguage.sw: 'Jumla ya Ahadi', AppLanguage.en: 'Total Pledged'},
+  'dashboard.received': {AppLanguage.sw: 'Zilizopokelewa', AppLanguage.en: 'Received'},
+  'dashboard.outstanding': {AppLanguage.sw: 'Deni Lililobaki', AppLanguage.en: 'Outstanding'},
+  'dashboard.members': {AppLanguage.sw: 'Wanachama', AppLanguage.en: 'Members'},
+  'dashboard.noEventsYet': {
+    AppLanguage.sw: 'Hakuna matukio yaliyoundwa bado.',
+    AppLanguage.en: 'No events have been created yet.',
+  },
 };
