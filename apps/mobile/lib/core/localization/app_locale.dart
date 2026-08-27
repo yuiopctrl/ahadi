@@ -6,13 +6,16 @@ import 'app_translations.dart';
 enum AppLanguage { sw, en }
 
 class AppLocaleController extends ChangeNotifier {
-  AppLocaleController({FlutterSecureStorage? storage})
-    : _storage = storage ?? const FlutterSecureStorage();
+  AppLocaleController({
+    FlutterSecureStorage? storage,
+    AppLanguage initialLanguage = AppLanguage.sw,
+  }) : _storage = storage ?? const FlutterSecureStorage(),
+       _language = initialLanguage;
 
   static const _storageKey = 'ahadi.uiLanguage';
 
   final FlutterSecureStorage _storage;
-  AppLanguage _language = AppLanguage.en;
+  AppLanguage _language;
 
   AppLanguage get language => _language;
 
@@ -46,7 +49,9 @@ class AppLocaleScope extends InheritedNotifier<AppLocaleController> {
     required super.child,
   }) : super(notifier: controller);
 
-  static final AppLocaleController _fallback = AppLocaleController();
+  static final AppLocaleController _fallback = AppLocaleController(
+    initialLanguage: AppLanguage.en,
+  );
 
   /// Falls back to a standalone (unpersisted) controller when no scope is
   /// present in the tree, so widgets/screens can still be tested in
