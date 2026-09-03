@@ -4009,11 +4009,10 @@ app.post('/api/v1/events/:eventId/payments', requireAuth, loadUserContext, requi
     if (typeof payment['payment_id'] === 'string') {
       const enqueue = await client.rpc('rpc_enqueue_payment_confirmation_sms', { p_tenant_id: tenantId, p_payment_id: payment['payment_id'] })
       if (enqueue.error) {
-        console.error('Payment confirmation SMS enqueue failed', {
-          requestId: request.requestId,
+        logDatabaseError(request.requestId, 'payment-confirmation-sms', enqueue.error, {
           tenantId,
+          eventId,
           paymentId: payment['payment_id'],
-          safeMessage: databaseMessage(enqueue.error).slice(0, 160),
         })
         notification = { smsQueued: false, reason: smsEnqueueFailureReason(enqueue.error) }
       } else {
@@ -4032,11 +4031,12 @@ app.get('/api/v1/events/:eventId/payments/:paymentId', requireAuth, loadUserCont
     const eventId = uuidParamSchema.parse(request.params['eventId'])
     const paymentId = uuidParamSchema.parse(request.params['paymentId'])
     const client = createUserSupabase(request.auth?.accessToken ?? '')
-    const { data, error } = await client.from('v_event_payments_list').select('*').eq('tenant_id', tenantId).eq('event_id', eventId).eq('payment_id', paymentId).single()
+    const { data, error } = await client.rpc('rpc_get_payment_detail', { p_tenant_id: tenantId, p_event_id: eventId, p_payment_id: paymentId })
     if (error) {
+      logDatabaseError(request.requestId, 'payment-detail', error, { tenantId, eventId, paymentId })
       throwFinancialDatabaseError(error, 'PAYMENT_DETAIL_FAILED')
     }
-    response.json({ data })
+    response.json({ data: jsonRecord(data) })
   } catch (error) {
     next(error)
   }
