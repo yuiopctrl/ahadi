@@ -25,6 +25,9 @@ const platformRolePermissions: Record<string, string[]> = {
     'platform.features.view',
     'platform.features.manage',
     'platform.system_errors.view',
+    'platform.support_session.start',
+    'platform.users.view',
+    'platform.audit.view',
   ],
   PLATFORM_SUPPORT: [
     'platform.dashboard.view',
@@ -34,8 +37,16 @@ const platformRolePermissions: Record<string, string[]> = {
     'platform.support.manage',
     'platform.feedback.view',
     'platform.system_errors.view',
+    'platform.support_session.start',
   ],
-  PLATFORM_AUDITOR: ['platform.dashboard.view', 'platform.audit.view', 'platform.system_errors.view'],
+  PLATFORM_AUDITOR: [
+    'platform.dashboard.view',
+    'platform.audit.view',
+    'platform.system_errors.view',
+    'platform.users.view',
+    'platform.tenants.view',
+    'platform.plans.view',
+  ],
 }
 
 function hasPlatformPermission(context: UserContext, permission: string) {

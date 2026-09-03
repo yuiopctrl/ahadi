@@ -543,6 +543,69 @@ const tenantFeatureOverrideSchema = z.object({
   override: z.enum(['INHERIT', 'ENABLED', 'DISABLED']),
 })
 
+const platformRoleSchema = z.enum(['PLATFORM_OWNER', 'PLATFORM_ADMIN', 'PLATFORM_SUPPORT', 'PLATFORM_AUDITOR'])
+
+const platformUserAddSchema = z.object({
+  phoneE164: z.string().trim().regex(/^\+255[67][0-9]{8}$/),
+  role: platformRoleSchema,
+})
+
+const platformUserRoleUpdateSchema = z.object({
+  role: platformRoleSchema,
+})
+
+const platformUserStatusUpdateSchema = z.object({
+  status: z.enum(['ACTIVE', 'SUSPENDED', 'DISABLED']),
+  reason: optionalTextSchema,
+})
+
+const platformPlanWriteSchema = z.object({
+  name: z.string().trim().min(2).max(120),
+  description: z.string().trim().min(1).max(1000),
+  currency: z.string().trim().length(3),
+  priceAmount: z.coerce.number().nonnegative(),
+  billingInterval: z.enum(['MONTHLY', 'QUARTERLY', 'YEARLY', 'CUSTOM']),
+  trialDays: z.coerce.number().int().nonnegative(),
+  maxActiveEvents: z.coerce.number().int().nonnegative(),
+  maxMembers: z.coerce.number().int().nonnegative(),
+  maxUsers: z.coerce.number().int().nonnegative(),
+  includedSms: z.coerce.number().int().nonnegative(),
+  features: z.record(z.string(), z.unknown()).optional(),
+  isPublic: z.boolean(),
+  isActive: z.boolean(),
+  displayOrder: z.coerce.number().int().nonnegative().default(0),
+})
+
+const platformPlanCreateSchema = platformPlanWriteSchema.extend({
+  code: z.string().trim().regex(/^[A-Za-z0-9_]+$/).max(40),
+})
+
+const tenantStatusUpdateSchema = z.object({
+  status: z.enum(['ACTIVE', 'SUSPENDED']),
+  reason: optionalTextSchema,
+})
+
+const tenantSubscriptionPlanChangeSchema = z.object({
+  planId: z.string().uuid(),
+  reason: z.string().trim().min(3).max(500),
+})
+
+const tenantSubscriptionStatusUpdateSchema = z.object({
+  status: z.enum(['ACTIVE', 'SUSPENDED', 'CANCELLED', 'TRIAL']),
+  reason: z.string().trim().min(3).max(500),
+})
+
+const platformAuditLogQuerySchema = z.object({
+  action: optionalShortTextSchema,
+  tenantId: z.string().uuid().optional(),
+  entityType: optionalShortTextSchema,
+  actorUserId: z.string().uuid().optional(),
+  dateFrom: z.string().datetime({ offset: true }).optional(),
+  dateTo: z.string().datetime({ offset: true }).optional(),
+  beforeId: z.coerce.number().int().positive().optional(),
+  limit: z.coerce.number().int().positive().max(200).optional(),
+})
+
 const whatsappShareFormatSchema = z.enum(['DETAILED', 'PRIVACY', 'PAYMENT_PROGRESS', 'OUTSTANDING_FOLLOW_UP'])
 const whatsappShareSortSchema = z.enum(['ORIGINAL', 'NAME_ASC', 'PLEDGED_DESC', 'PAID_FIRST', 'OUTSTANDING_FIRST'])
 const whatsappShareStatusSchema = z.enum(['ALL', 'PAID', 'PARTIAL', 'UNPAID', 'OVERDUE'])
@@ -778,6 +841,18 @@ const knownDatabaseCodes: ApiErrorCode[] = [
   'PAYMENT_ALREADY_PROCESSED',
   'PAYMENT_REVERSAL_ALREADY_PROCESSED',
   'PAYMENT_RECONCILIATION_REQUIRED',
+  'PROFILE_NOT_FOUND',
+  'INVALID_PLATFORM_ROLE',
+  'PLATFORM_USER_NOT_FOUND',
+  'CANNOT_REMOVE_LAST_PLATFORM_OWNER',
+  'INVALID_PLATFORM_USER_STATUS',
+  'PLAN_CODE_ALREADY_EXISTS',
+  'PLAN_NOT_FOUND',
+  'INVALID_TENANT_STATUS',
+  'TENANT_NOT_FOUND',
+  'SUBSCRIPTION_NOT_FOUND',
+  'INVALID_SUBSCRIPTION_STATUS',
+  'REASON_REQUIRED',
 ]
 
 const developmentWebOrigins = new Set([
@@ -3042,6 +3117,205 @@ app.get('/api/v1/platform/system/errors', requireAuth, loadUserContext, requireP
       throwFinancialDatabaseError(error, 'PLATFORM_ACCESS_DENIED')
     }
     response.json({ data: jsonArray(data) })
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.get('/api/v1/platform/system/health', requireAuth, loadUserContext, requirePlatformPermission('platform.system_errors.view'), async (request, response, next) => {
+  try {
+    const client = createUserSupabase(request.auth?.accessToken ?? '')
+    const { data, error } = await client.rpc('rpc_get_platform_system_health')
+    if (error) {
+      throwFinancialDatabaseError(error, 'PLATFORM_ACCESS_DENIED')
+    }
+    response.json({ data: jsonRecord(data) })
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.get('/api/v1/platform/audit', requireAuth, loadUserContext, requirePlatformPermission('platform.audit.view'), async (request, response, next) => {
+  try {
+    const input = platformAuditLogQuerySchema.parse(request.query)
+    const client = createUserSupabase(request.auth?.accessToken ?? '')
+    const { data, error } = await client.rpc('rpc_list_platform_audit_log', {
+      p_action: input.action ?? null,
+      p_tenant_id: input.tenantId ?? null,
+      p_entity_type: input.entityType ?? null,
+      p_actor_user_id: input.actorUserId ?? null,
+      p_date_from: input.dateFrom ?? null,
+      p_date_to: input.dateTo ?? null,
+      p_before_id: input.beforeId ?? null,
+      p_limit: input.limit ?? 50,
+    })
+    if (error) {
+      throwFinancialDatabaseError(error, 'PLATFORM_ACCESS_DENIED')
+    }
+    response.json({ data: jsonRecord(data) })
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.get('/api/v1/platform/users', requireAuth, loadUserContext, requirePlatformPermission('platform.users.view'), async (request, response, next) => {
+  try {
+    const client = createUserSupabase(request.auth?.accessToken ?? '')
+    const { data, error } = await client.rpc('rpc_list_platform_users')
+    if (error) {
+      throwFinancialDatabaseError(error, 'PLATFORM_ACCESS_DENIED')
+    }
+    response.json({ data: jsonArray(data) })
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.post('/api/v1/platform/users', requireAuth, loadUserContext, requirePlatformPermission('platform.users.manage'), async (request, response, next) => {
+  try {
+    const input = platformUserAddSchema.parse(request.body)
+    const client = createUserSupabase(request.auth?.accessToken ?? '')
+    const { data, error } = await client.rpc('rpc_add_platform_user', { p_phone_e164: input.phoneE164, p_role: input.role })
+    if (error) {
+      throwFinancialDatabaseError(error, 'PLATFORM_ACCESS_DENIED')
+    }
+    response.status(201).json({ data: jsonRecord(data) })
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.patch('/api/v1/platform/users/:platformUserId/role', requireAuth, loadUserContext, requirePlatformPermission('platform.users.manage'), async (request, response, next) => {
+  try {
+    const platformUserId = uuidParamSchema.parse(request.params['platformUserId'])
+    const input = platformUserRoleUpdateSchema.parse(request.body)
+    const client = createUserSupabase(request.auth?.accessToken ?? '')
+    const { data, error } = await client.rpc('rpc_set_platform_user_role', { p_platform_user_id: platformUserId, p_role: input.role })
+    if (error) {
+      throwFinancialDatabaseError(error, 'PLATFORM_ACCESS_DENIED')
+    }
+    response.json({ data: jsonRecord(data) })
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.patch('/api/v1/platform/users/:platformUserId/status', requireAuth, loadUserContext, requirePlatformPermission('platform.users.manage'), async (request, response, next) => {
+  try {
+    const platformUserId = uuidParamSchema.parse(request.params['platformUserId'])
+    const input = platformUserStatusUpdateSchema.parse(request.body)
+    const client = createUserSupabase(request.auth?.accessToken ?? '')
+    const { data, error } = await client.rpc('rpc_set_platform_user_status', { p_platform_user_id: platformUserId, p_status: input.status, p_reason: input.reason ?? null })
+    if (error) {
+      throwFinancialDatabaseError(error, 'PLATFORM_ACCESS_DENIED')
+    }
+    response.json({ data: jsonRecord(data) })
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.post('/api/v1/platform/plans', requireAuth, loadUserContext, requirePlatformPermission('platform.plans.manage'), async (request, response, next) => {
+  try {
+    const input = platformPlanCreateSchema.parse(request.body)
+    const client = createUserSupabase(request.auth?.accessToken ?? '')
+    const { data, error } = await client.rpc('rpc_create_platform_plan', {
+      p_code: input.code,
+      p_name: input.name,
+      p_description: input.description,
+      p_currency: input.currency,
+      p_price_amount: input.priceAmount,
+      p_billing_interval: input.billingInterval,
+      p_trial_days: input.trialDays,
+      p_max_active_events: input.maxActiveEvents,
+      p_max_members: input.maxMembers,
+      p_max_users: input.maxUsers,
+      p_included_sms: input.includedSms,
+      p_features: input.features ?? {},
+      p_is_public: input.isPublic,
+      p_is_active: input.isActive,
+      p_display_order: input.displayOrder,
+    })
+    if (error) {
+      throwFinancialDatabaseError(error, 'PLATFORM_ACCESS_DENIED')
+    }
+    response.status(201).json({ data: jsonRecord(data) })
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.put('/api/v1/platform/plans/:planId', requireAuth, loadUserContext, requirePlatformPermission('platform.plans.manage'), async (request, response, next) => {
+  try {
+    const planId = uuidParamSchema.parse(request.params['planId'])
+    const input = platformPlanWriteSchema.parse(request.body)
+    const client = createUserSupabase(request.auth?.accessToken ?? '')
+    const { data, error } = await client.rpc('rpc_update_platform_plan', {
+      p_plan_id: planId,
+      p_name: input.name,
+      p_description: input.description,
+      p_currency: input.currency,
+      p_price_amount: input.priceAmount,
+      p_billing_interval: input.billingInterval,
+      p_trial_days: input.trialDays,
+      p_max_active_events: input.maxActiveEvents,
+      p_max_members: input.maxMembers,
+      p_max_users: input.maxUsers,
+      p_included_sms: input.includedSms,
+      p_features: input.features ?? {},
+      p_is_public: input.isPublic,
+      p_is_active: input.isActive,
+      p_display_order: input.displayOrder,
+    })
+    if (error) {
+      throwFinancialDatabaseError(error, 'PLATFORM_ACCESS_DENIED')
+    }
+    response.json({ data: jsonRecord(data) })
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.post('/api/v1/platform/tenants/:tenantId/status', requireAuth, loadUserContext, requirePlatformPermission('platform.tenants.manage'), async (request, response, next) => {
+  try {
+    const tenantId = tenantContextHeaderSchema.shape.tenantId.parse(request.params['tenantId'])
+    const input = tenantStatusUpdateSchema.parse(request.body)
+    const client = createUserSupabase(request.auth?.accessToken ?? '')
+    const { data, error } = await client.rpc('rpc_set_tenant_status', { p_tenant_id: tenantId, p_status: input.status, p_reason: input.reason ?? null })
+    if (error) {
+      throwFinancialDatabaseError(error, 'PLATFORM_ACCESS_DENIED')
+    }
+    response.json({ data: jsonRecord(data) })
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.post('/api/v1/platform/tenants/:tenantId/subscription/plan', requireAuth, loadUserContext, requirePlatformPermission('platform.subscriptions.manage'), async (request, response, next) => {
+  try {
+    const tenantId = tenantContextHeaderSchema.shape.tenantId.parse(request.params['tenantId'])
+    const input = tenantSubscriptionPlanChangeSchema.parse(request.body)
+    const client = createUserSupabase(request.auth?.accessToken ?? '')
+    const { data, error } = await client.rpc('rpc_change_tenant_subscription_plan', { p_tenant_id: tenantId, p_plan_id: input.planId, p_reason: input.reason })
+    if (error) {
+      throwFinancialDatabaseError(error, 'PLATFORM_ACCESS_DENIED')
+    }
+    response.json({ data: jsonRecord(data) })
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.post('/api/v1/platform/tenants/:tenantId/subscription/status', requireAuth, loadUserContext, requirePlatformPermission('platform.subscriptions.manage'), async (request, response, next) => {
+  try {
+    const tenantId = tenantContextHeaderSchema.shape.tenantId.parse(request.params['tenantId'])
+    const input = tenantSubscriptionStatusUpdateSchema.parse(request.body)
+    const client = createUserSupabase(request.auth?.accessToken ?? '')
+    const { data, error } = await client.rpc('rpc_set_tenant_subscription_status', { p_tenant_id: tenantId, p_status: input.status, p_reason: input.reason })
+    if (error) {
+      throwFinancialDatabaseError(error, 'PLATFORM_ACCESS_DENIED')
+    }
+    response.json({ data: jsonRecord(data) })
   } catch (error) {
     next(error)
   }
