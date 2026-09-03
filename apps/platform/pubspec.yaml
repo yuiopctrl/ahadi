@@ -1,0 +1,36 @@
+name: changisha_platform
+description: "Changisha Platform Console for internal SaaS platform staff."
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.13.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  cupertino_icons: ^1.0.8
+  flutter_secure_storage: ^9.2.4
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/brand/
+  fonts:
+    - family: Ubuntu Sans
+      fonts:
+        - asset: assets/fonts/UbuntuSans.ttf
+    - family: Ubuntu Condensed
+      fonts:
+        - asset: assets/fonts/UbuntuCondensed.ttf
+    - family: Ubuntu Mono
+      fonts:
+        - asset: assets/fonts/UbuntuMono.ttf

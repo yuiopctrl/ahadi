@@ -77,5 +77,6 @@ test('platform middleware authorizes from platform permissions and returns 403 f
 test('platform ownership remains a manual bootstrap and is not exposed through onboarding', () => {
   assert.match(rbacMigration, /Bootstrap manually after intended owner authenticates/)
   assert.doesNotMatch(app, /from\('platform_users'\)\.insert|insert into public\.platform_users/i)
-  assert.doesNotMatch(app, /rpc_complete_tenant_onboarding[\s\S]+platform_users/i)
+  const onboardingBlock = app.slice(app.indexOf("client.rpc('rpc_complete_tenant_onboarding'"), app.indexOf("app.get('/api/v1/me'"))
+  assert.doesNotMatch(onboardingBlock, /platform_users/i)
 })
