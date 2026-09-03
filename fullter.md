@@ -13,8 +13,8 @@ flutter run \
 flutter run --release \
   --dart-define=API_BASE_URL=https://api.yuiop.work/api/v1
 
-# APK
-flutter build apk \
+# APK (produces changisha-release.apk instead of app-release.apk)
+scripts/build_apk.sh \
   --release \
   --dart-define=API_BASE_URL=https://api.yuiop.work/api/v1
 # Physical devide

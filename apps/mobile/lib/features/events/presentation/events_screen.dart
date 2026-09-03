@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/localization/app_locale.dart';
 import '../../../core/theme/ahadi_theme.dart';
 import '../../../core/widgets/formatters.dart';
 import '../../auth/data/session_controller.dart';
@@ -44,7 +45,7 @@ class _EventsScreenState extends State<EventsScreen> {
           children: [
             Expanded(
               child: Text(
-                'Events',
+                context.t('shell.nav.events'),
                 style: Theme.of(context).textTheme.headlineSmall
                     ?.copyWith(fontWeight: FontWeight.w800),
               ),
@@ -52,32 +53,32 @@ class _EventsScreenState extends State<EventsScreen> {
             IconButton.filled(
               onPressed: canCreate ? _openCreateEvent : null,
               icon: const Icon(Icons.add),
-              tooltip: 'New Event',
+              tooltip: context.t('events.newEvent'),
             ),
           ],
         ),
         if (!canCreate)
-          const Text(
-            'Your role does not include permission to create events.',
-            style: TextStyle(color: AhadiColors.muted),
+          Text(
+            context.t('events.noCreatePermission'),
+            style: const TextStyle(color: AhadiColors.muted),
           ),
         const SizedBox(height: 12),
         FilterTabs<String>(
-          items: const [
-            FilterTabItem(value: 'ALL', label: 'All'),
-            FilterTabItem(value: 'ACTIVE', label: 'Active'),
-            FilterTabItem(value: 'DRAFT', label: 'Draft'),
-            FilterTabItem(value: 'CLOSED', label: 'Closed'),
+          items: [
+            FilterTabItem(value: 'ALL', label: context.t('common.all')),
+            FilterTabItem(value: 'ACTIVE', label: context.t('common.active')),
+            FilterTabItem(value: 'DRAFT', label: context.t('common.draft')),
+            FilterTabItem(value: 'CLOSED', label: context.t('common.closed')),
           ],
           selected: filter,
           onChanged: (value) => setState(() => filter = value),
         ),
         const SizedBox(height: 12),
         if (events.isEmpty)
-          const Card(
+          Card(
             child: Padding(
-              padding: EdgeInsets.all(16),
-              child: Text('No events match this filter.'),
+              padding: const EdgeInsets.all(16),
+              child: Text(context.t('events.noneMatchFilter')),
             ),
           )
         else
@@ -120,7 +121,7 @@ class CreateEventScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AhadiColors.background,
-      appBar: AppBar(title: const Text('Create Event')),
+      appBar: AppBar(title: Text(context.t('shell.createEvent'))),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
@@ -175,14 +176,14 @@ class _CreateEventFormState extends State<_CreateEventForm> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text(
-              'New Event',
+              context.t('events.newEvent'),
               style: Theme.of(context).textTheme.titleMedium
                   ?.copyWith(fontWeight: FontWeight.w800),
             ),
             const SizedBox(height: 12),
             TextField(
               controller: name,
-              decoration: const InputDecoration(labelText: 'Event Name'),
+              decoration: InputDecoration(labelText: context.t('events.eventName')),
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
@@ -201,50 +202,50 @@ class _CreateEventFormState extends State<_CreateEventForm> {
                       .map(
                         (type) => DropdownMenuItem(
                           value: type,
-                          child: Text(type.replaceAll('_', ' ')),
+                          child: Text(context.t('events.type.$type')),
                         ),
                       )
                       .toList(),
               onChanged: (value) =>
                   setState(() => eventType = value ?? 'WEDDING'),
-              decoration: const InputDecoration(labelText: 'Event Type'),
+              decoration: InputDecoration(labelText: context.t('events.eventType')),
             ),
             if (eventType == 'OTHER') ...[
               const SizedBox(height: 12),
               TextField(
                 controller: customType,
-                decoration: const InputDecoration(
-                  labelText: 'Custom Event Type',
+                decoration: InputDecoration(
+                  labelText: context.t('events.customEventType'),
                 ),
               ),
             ],
             const SizedBox(height: 12),
             TextField(
               controller: eventDate,
-              decoration: const InputDecoration(
-                labelText: 'Event Date YYYY-MM-DD',
+              decoration: InputDecoration(
+                labelText: context.t('events.eventDate'),
               ),
             ),
             const SizedBox(height: 12),
             TextField(
               controller: venue,
-              decoration: const InputDecoration(labelText: 'Venue'),
+              decoration: InputDecoration(labelText: context.t('events.venue')),
             ),
             const SizedBox(height: 12),
             TextField(
               controller: targetAmount,
               keyboardType: TextInputType.number,
               inputFormatters: const [MoneyInputFormatter()],
-              decoration: const InputDecoration(
-                labelText: 'Target Amount',
+              decoration: InputDecoration(
+                labelText: context.t('events.targetAmount'),
                 prefixText: 'TZS ',
               ),
             ),
             const SizedBox(height: 12),
             TextField(
               controller: pledgeDeadline,
-              decoration: const InputDecoration(
-                labelText: 'Pledge Deadline YYYY-MM-DD',
+              decoration: InputDecoration(
+                labelText: context.t('events.pledgeDeadline'),
               ),
             ),
             if (error != null) ...[
@@ -254,7 +255,7 @@ class _CreateEventFormState extends State<_CreateEventForm> {
             const SizedBox(height: 12),
             FilledButton(
               onPressed: saving ? null : _submit,
-              child: Text(saving ? 'Creating...' : 'Create Event'),
+              child: Text(saving ? context.t('events.creating') : context.t('shell.createEvent')),
             ),
           ],
         ),

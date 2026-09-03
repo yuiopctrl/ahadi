@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/localization/app_locale.dart';
 import '../../../core/theme/ahadi_theme.dart';
 import '../../../core/widgets/formatters.dart';
 import '../../auth/data/session_controller.dart';
@@ -63,7 +64,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ErrorPanel(
                   message: friendlyErrorText(
                     snapshot.error,
-                    'Unable to load dashboard. Please try again.',
+                    context.t('dashboard.loadError'),
                   ),
                   onRetry: () => setState(() => future = _load()),
                 ),
@@ -81,23 +82,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
             padding: const EdgeInsets.all(16),
             children: [
               Text(
-                'Dashboard',
+                context.t('dashboard.title'),
                 style: Theme.of(context).textTheme.headlineSmall
                     ?.copyWith(fontWeight: FontWeight.w800),
               ),
               const SizedBox(height: 6),
               Text(
-                event?.name ?? 'No event selected',
+                event?.name ?? context.t('common.noEventSelected'),
                 style: const TextStyle(color: AhadiColors.muted),
               ),
               if (event == null) ...[
                 const SizedBox(height: 16),
-                const Card(
+                Card(
                   child: Padding(
-                    padding: EdgeInsets.all(16),
-                    child: Text(
-                      'Choose an event to view operational dashboard figures.',
-                    ),
+                    padding: const EdgeInsets.all(16),
+                    child: Text(context.t('dashboard.chooseEventHint')),
                   ),
                 ),
               ] else ...[
@@ -107,14 +106,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   runSpacing: 12,
                   children: [
                     _StatTile(
-                      label: 'Total Pledged',
+                      label: context.t('dashboard.totalPledged'),
                       value: moneyText(
                         summary['totalPledged'] ?? event.totalPledged,
                       ),
                       icon: Icons.volunteer_activism_outlined,
                     ),
                     _StatTile(
-                      label: 'Received',
+                      label: context.t('dashboard.received'),
                       value: moneyText(
                         summary['totalAllocated'] ??
                             summary['totalAllocatedToPledges'] ??
@@ -123,14 +122,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       icon: Icons.payments_outlined,
                     ),
                     _StatTile(
-                      label: 'Outstanding',
+                      label: context.t('dashboard.outstanding'),
                       value: moneyText(
                         summary['totalOutstanding'] ?? event.totalOutstanding,
                       ),
                       icon: Icons.pending_actions_outlined,
                     ),
                     _StatTile(
-                      label: 'Members',
+                      label: context.t('dashboard.members'),
                       value:
                           '${numberFrom(summary['memberCount'] ?? event.memberCount)?.round() ?? '-'}',
                       icon: Icons.groups_outlined,
@@ -140,16 +139,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ],
               const SizedBox(height: 24),
               Text(
-                'Events',
+                context.t('shell.nav.events'),
                 style: Theme.of(context).textTheme.titleMedium
                     ?.copyWith(fontWeight: FontWeight.w800),
               ),
               const SizedBox(height: 8),
               if (events.isEmpty)
-                const Card(
+                Card(
                   child: Padding(
-                    padding: EdgeInsets.all(16),
-                    child: Text('No events have been created yet.'),
+                    padding: const EdgeInsets.all(16),
+                    child: Text(context.t('dashboard.noEventsYet')),
                   ),
                 )
               else

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/localization/app_locale.dart';
 import '../../../core/theme/ahadi_theme.dart';
 import '../data/session_controller.dart';
 import 'pin_input.dart';
@@ -34,19 +35,19 @@ class _ForgotPinScreenState extends State<ForgotPinScreen> {
       animation: widget.controller,
       builder: (context, _) {
         return Scaffold(
-          appBar: AppBar(title: const Text('Forgot PIN')),
+          appBar: AppBar(title: Text(context.t('auth.forgotPinTitle'))),
           body: SafeArea(
             child: ListView(
               padding: const EdgeInsets.all(20),
               children: [
                 Text(
-                  _title,
+                  _title(context),
                   style: Theme.of(context).textTheme.headlineSmall
                       ?.copyWith(fontWeight: FontWeight.w800),
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  _subtitle,
+                  _subtitle(context),
                   style: Theme.of(context).textTheme.bodyMedium
                       ?.copyWith(color: AhadiColors.muted),
                 ),
@@ -56,8 +57,8 @@ class _ForgotPinScreenState extends State<ForgotPinScreen> {
                     key: const Key('forgot-phone-input'),
                     controller: phoneController,
                     keyboardType: TextInputType.phone,
-                    decoration: const InputDecoration(
-                      labelText: 'Phone number',
+                    decoration: InputDecoration(
+                      labelText: context.t('auth.phoneNumber'),
                     ),
                   ),
                   const SizedBox(height: 16),
@@ -73,7 +74,7 @@ class _ForgotPinScreenState extends State<ForgotPinScreen> {
                               setState(() => step = ForgotPinStep.otp);
                             }
                           },
-                    child: const Text('Send code'),
+                    child: Text(context.t('auth.sendCode')),
                   ),
                 ],
                 if (step == ForgotPinStep.otp) ...[
@@ -82,8 +83,8 @@ class _ForgotPinScreenState extends State<ForgotPinScreen> {
                     controller: otpController,
                     maxLength: 6,
                     keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(
-                      labelText: 'Verification code',
+                    decoration: InputDecoration(
+                      labelText: context.t('auth.verificationCode'),
                       counterText: '',
                     ),
                   ),
@@ -101,13 +102,13 @@ class _ForgotPinScreenState extends State<ForgotPinScreen> {
                               setState(() => step = ForgotPinStep.newPin);
                             }
                           },
-                    child: const Text('Verify code'),
+                    child: Text(context.t('auth.verifyCode')),
                   ),
                 ],
                 if (step == ForgotPinStep.newPin) ...[
                   PinInput(
                     key: const Key('new-pin-input'),
-                    label: 'New PIN',
+                    label: context.t('auth.newPin'),
                     onCompleted: (pin) => pendingPin = pin,
                     enabled: !widget.controller.isSubmitting,
                   ),
@@ -118,8 +119,8 @@ class _ForgotPinScreenState extends State<ForgotPinScreen> {
                     maxLength: 4,
                     obscureText: true,
                     keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(
-                      labelText: 'Confirm new PIN',
+                    decoration: InputDecoration(
+                      labelText: context.t('auth.confirmNewPin'),
                       counterText: '',
                     ),
                   ),
@@ -138,7 +139,7 @@ class _ForgotPinScreenState extends State<ForgotPinScreen> {
                             }
                             Navigator.of(context).pop();
                           },
-                    child: const Text('Set PIN'),
+                    child: Text(context.t('auth.setPin')),
                   ),
                 ],
                 if (widget.controller.errorMessage != null) ...[
@@ -156,21 +157,19 @@ class _ForgotPinScreenState extends State<ForgotPinScreen> {
     );
   }
 
-  String get _title {
+  String _title(BuildContext context) {
     return switch (step) {
-      ForgotPinStep.phone => 'Recover your PIN',
-      ForgotPinStep.otp => 'Enter the code',
-      ForgotPinStep.newPin => 'Set a new PIN',
+      ForgotPinStep.phone => context.t('auth.recoverPin'),
+      ForgotPinStep.otp => context.t('auth.enterTheCode'),
+      ForgotPinStep.newPin => context.t('auth.setNewPin'),
     };
   }
 
-  String get _subtitle {
+  String _subtitle(BuildContext context) {
     return switch (step) {
-      ForgotPinStep.phone =>
-        'We will verify your phone before allowing a PIN reset.',
-      ForgotPinStep.otp => 'Use the SMS code sent by Ahadi.',
-      ForgotPinStep.newPin =>
-        'Choose a 4 digit PIN you have not used elsewhere.',
+      ForgotPinStep.phone => context.t('auth.recoverPinHint'),
+      ForgotPinStep.otp => context.t('auth.enterCodeHint'),
+      ForgotPinStep.newPin => context.t('auth.setNewPinHint'),
     };
   }
 }

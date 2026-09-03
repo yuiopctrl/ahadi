@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/localization/app_locale.dart';
 import '../../../core/theme/ahadi_theme.dart';
 import '../../auth/data/session_controller.dart';
 import '../../auth/presentation/pin_input.dart';
@@ -30,13 +31,13 @@ class _ChangePinScreenState extends State<ChangePinScreen> {
       animation: widget.controller,
       builder: (context, _) {
         return Scaffold(
-          appBar: AppBar(title: const Text('Change PIN')),
+          appBar: AppBar(title: Text(context.t('shell.changePin'))),
           body: ListView(
             padding: const EdgeInsets.all(20),
             children: [
-              const Text(
-                'Current PIN',
-                style: TextStyle(fontWeight: FontWeight.w700),
+              Text(
+                context.t('profile.currentPin'),
+                style: const TextStyle(fontWeight: FontWeight.w700),
               ),
               const SizedBox(height: 8),
               PinInput(
@@ -44,9 +45,9 @@ class _ChangePinScreenState extends State<ChangePinScreen> {
                 enabled: !widget.controller.isSubmitting,
               ),
               const SizedBox(height: 16),
-              const Text(
-                'New PIN',
-                style: TextStyle(fontWeight: FontWeight.w700),
+              Text(
+                context.t('auth.newPin'),
+                style: const TextStyle(fontWeight: FontWeight.w700),
               ),
               const SizedBox(height: 8),
               PinInput(
@@ -59,8 +60,8 @@ class _ChangePinScreenState extends State<ChangePinScreen> {
                 maxLength: 4,
                 obscureText: true,
                 keyboardType: TextInputType.number,
-                decoration: const InputDecoration(
-                  labelText: 'Confirm new PIN',
+                decoration: InputDecoration(
+                  labelText: context.t('auth.confirmNewPin'),
                   counterText: '',
                 ),
               ),
@@ -83,7 +84,7 @@ class _ChangePinScreenState extends State<ChangePinScreen> {
                         );
                         if (context.mounted) Navigator.of(context).pop();
                       },
-                child: const Text('Save PIN'),
+                child: Text(context.t('profile.savePin')),
               ),
             ],
           ),

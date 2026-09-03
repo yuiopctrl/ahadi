@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../errors/api_failure.dart';
+import '../localization/app_locale.dart';
 import '../theme/ahadi_theme.dart';
 
 String moneyText(Object? value) {
@@ -331,15 +332,15 @@ class FinancialSummary extends StatelessWidget {
     return Row(
       children: [
         Expanded(
-          child: _FinancialValue(label: 'Pledged', value: pledged),
+          child: _FinancialValue(label: context.t('common.pledged'), value: pledged),
         ),
         const SizedBox(width: 10),
         Expanded(
-          child: _FinancialValue(label: 'Received', value: received),
+          child: _FinancialValue(label: context.t('dashboard.received'), value: received),
         ),
         const SizedBox(width: 10),
         Expanded(
-          child: _FinancialValue(label: 'Outstanding', value: outstanding),
+          child: _FinancialValue(label: context.t('dashboard.outstanding'), value: outstanding),
         ),
       ],
     );
@@ -587,7 +588,7 @@ class ErrorPanel extends StatelessWidget {
             Text(message, textAlign: TextAlign.center),
             if (onRetry != null) ...[
               const SizedBox(height: 12),
-              OutlinedButton(onPressed: onRetry, child: const Text('Retry')),
+              OutlinedButton(onPressed: onRetry, child: Text(context.t('common.retry'))),
             ],
           ],
         ),

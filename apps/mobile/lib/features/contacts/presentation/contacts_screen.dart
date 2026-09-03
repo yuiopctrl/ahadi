@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../../core/localization/app_locale.dart';
 import '../../../core/theme/ahadi_theme.dart';
 import '../../../core/widgets/formatters.dart';
 import '../../auth/data/phone_normalization.dart';
@@ -96,13 +97,13 @@ class _ContactsScreenState extends State<ContactsScreen> {
     return Scaffold(
       backgroundColor: AhadiColors.background,
       appBar: AppBar(
-        title: const Text('Contacts'),
+        title: Text(context.t('shell.more.contacts')),
         actions: [
           IconButton.filled(
             onPressed: canCreate ? _openAddContact : null,
             style: IconButton.styleFrom(foregroundColor: Colors.white),
             icon: const Icon(Icons.add),
-            tooltip: 'Add Contact',
+            tooltip: context.t('contacts.addContact'),
           ),
           const SizedBox(width: 8),
         ],
@@ -121,36 +122,36 @@ class _ContactsScreenState extends State<ContactsScreen> {
                 TextField(
                   controller: search,
                   onChanged: _onSearch,
-                  decoration: const InputDecoration(
-                    labelText: 'Search name or phone',
-                    prefixIcon: Icon(Icons.search),
+                  decoration: InputDecoration(
+                    labelText: context.t('contacts.searchHint'),
+                    prefixIcon: const Icon(Icons.search),
                   ),
                 ),
                 if (!canCreate)
-                  const Padding(
-                    padding: EdgeInsets.only(top: 8),
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
                     child: Text(
-                      'Your role does not include permission to add contacts.',
-                      style: TextStyle(color: AhadiColors.muted),
+                      context.t('contacts.noCreatePermission'),
+                      style: const TextStyle(color: AhadiColors.muted),
                     ),
                   ),
                 const SizedBox(height: 12),
                 if (!snapshot.hasData)
                   const LoadingCards(count: 4)
                 else if (visible.isEmpty)
-                  const Card(
+                  Card(
                     child: Padding(
-                      padding: EdgeInsets.all(16),
-                      child: Text('No contacts found.'),
+                      padding: const EdgeInsets.all(16),
+                      child: Text(context.t('contacts.noContactsFound')),
                     ),
                   )
                 else ...[
                   ...visible.map(
                     (contact) => AhadiListRow(
                       title: titleCaseName(contact['full_name']),
-                      subtitle: stringFrom(contact, 'phone_e164', 'No phone'),
+                      subtitle: stringFrom(contact, 'phone_e164', context.t('contacts.noPhone')),
                       meta:
-                          '${numberFrom(contact['event_count'])?.round() ?? 0} events',
+                          '${numberFrom(contact['event_count'])?.round() ?? 0} ${context.t('shell.nav.events').toLowerCase()}',
                       onTap: () => _openContact(contact),
                     ),
                   ),
@@ -228,36 +229,36 @@ class _ContactFormScreenState extends State<ContactFormScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AhadiColors.background,
-      appBar: AppBar(title: Text(editing ? 'Edit Contact' : 'Add Contact')),
+      appBar: AppBar(title: Text(editing ? context.t('contacts.editContact') : context.t('contacts.addContact'))),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
           TextField(
             controller: fullName,
-            decoration: const InputDecoration(labelText: 'Full Name'),
+            decoration: InputDecoration(labelText: context.t('auth.fullName')),
           ),
           const SizedBox(height: 12),
           TextField(
             controller: phone,
             keyboardType: TextInputType.phone,
-            decoration: const InputDecoration(labelText: 'Phone Number'),
+            decoration: InputDecoration(labelText: context.t('auth.phoneNumber')),
           ),
           const SizedBox(height: 12),
           TextField(
             controller: alternativePhone,
             keyboardType: TextInputType.phone,
-            decoration: const InputDecoration(labelText: 'Alternative Phone'),
+            decoration: InputDecoration(labelText: context.t('contacts.alternativePhone')),
           ),
           const SizedBox(height: 12),
           TextField(
             controller: email,
             keyboardType: TextInputType.emailAddress,
-            decoration: const InputDecoration(labelText: 'Email'),
+            decoration: InputDecoration(labelText: context.t('auth.email')),
           ),
           const SizedBox(height: 12),
           TextField(
             controller: location,
-            decoration: const InputDecoration(labelText: 'Location'),
+            decoration: InputDecoration(labelText: context.t('contacts.location')),
           ),
           if (error != null) ...[
             const SizedBox(height: 8),
@@ -266,7 +267,7 @@ class _ContactFormScreenState extends State<ContactFormScreen> {
           const SizedBox(height: 16),
           FilledButton(
             onPressed: saving ? null : _submit,
-            child: Text(saving ? 'Saving...' : 'Save Contact'),
+            child: Text(saving ? context.t('auth.saving') : context.t('contacts.saveContact')),
           ),
         ],
       ),
@@ -318,14 +319,16 @@ class _ContactFormScreenState extends State<ContactFormScreen> {
       }
       if (mounted) Navigator.of(context).pop(true);
     } on FormatException {
+      if (!mounted) return;
       setState(
-        () => error = 'Enter a valid Tanzanian phone number, e.g. 0712345678.',
+        () => error = context.t('contacts.invalidPhone'),
       );
     } catch (err) {
+      if (!mounted) return;
       setState(
         () => error = friendlyErrorText(
           err,
-          'Unable to save contact. Please try again.',
+          context.t('contacts.saveContactError'),
         ),
       );
     } finally {
@@ -421,24 +424,24 @@ class _ContactDetailScreenState extends State<ContactDetailScreen> {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  stringFrom(contact, 'phone_e164', 'No phone'),
+                  stringFrom(contact, 'phone_e164', context.t('contacts.noPhone')),
                   style: const TextStyle(color: AhadiColors.muted),
                 ),
                 const SizedBox(height: 16),
                 AhadiSectionCard(
-                  title: 'Contact Information',
+                  title: context.t('contacts.contactInformation'),
                   children: [
                     AhadiInfoRow(
-                      label: 'Phone',
-                      value: stringFrom(contact, 'phone_e164', 'No phone'),
+                      label: context.t('contacts.phone'),
+                      value: stringFrom(contact, 'phone_e164', context.t('contacts.noPhone')),
                     ),
                     AhadiInfoRow(
-                      label: 'Email',
-                      value: stringFrom(contact, 'email', 'Not set'),
+                      label: context.t('auth.email'),
+                      value: stringFrom(contact, 'email', context.t('contacts.notSet')),
                     ),
                     AhadiInfoRow(
-                      label: 'Location',
-                      value: stringFrom(contact, 'location', 'Not set'),
+                      label: context.t('contacts.location'),
+                      value: stringFrom(contact, 'location', context.t('contacts.notSet')),
                     ),
                   ],
                 ),
@@ -446,23 +449,21 @@ class _ContactDetailScreenState extends State<ContactDetailScreen> {
                   OutlinedButton.icon(
                     onPressed: () => _edit(contact),
                     icon: const Icon(Icons.edit_outlined),
-                    label: const Text('Edit Contact'),
+                    label: Text(context.t('contacts.editContact')),
                   ),
                 ],
                 const SizedBox(height: 16),
                 Text(
-                  'Events',
+                  context.t('shell.nav.events'),
                   style: Theme.of(context).textTheme.titleMedium
                       ?.copyWith(fontWeight: FontWeight.w800),
                 ),
                 const SizedBox(height: 8),
                 if (events.isEmpty)
-                  const Card(
+                  Card(
                     child: Padding(
-                      padding: EdgeInsets.all(16),
-                      child: Text(
-                        'This contact is not attached to any event yet.',
-                      ),
+                      padding: const EdgeInsets.all(16),
+                      child: Text(context.t('contacts.notAttachedToEvent')),
                     ),
                   )
                 else
@@ -515,11 +516,11 @@ class _PaginationControls extends StatelessWidget {
             key: const Key('contacts-previous-page'),
             onPressed: onPrevious,
             icon: const Icon(Icons.chevron_left),
-            tooltip: 'Previous page',
+            tooltip: context.t('common.previousPage'),
           ),
           Expanded(
             child: Text(
-              'Page ${page + 1}',
+              '${context.t('common.page')} ${page + 1}',
               textAlign: TextAlign.center,
               style: const TextStyle(color: AhadiColors.muted),
             ),
@@ -528,7 +529,7 @@ class _PaginationControls extends StatelessWidget {
             key: const Key('contacts-next-page'),
             onPressed: onNext,
             icon: const Icon(Icons.chevron_right),
-            tooltip: 'Next page',
+            tooltip: context.t('common.nextPage'),
           ),
         ],
       ),

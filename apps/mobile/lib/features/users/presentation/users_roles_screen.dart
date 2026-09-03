@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../../core/localization/app_locale.dart';
 import '../../../core/theme/ahadi_theme.dart';
 import '../../../core/widgets/formatters.dart';
 import '../../auth/data/session_controller.dart';
@@ -89,7 +90,7 @@ class _UsersRolesScreenState extends State<UsersRolesScreen> {
     final canInvite = _can(widget.controller, 'users.invite');
     return Scaffold(
       backgroundColor: AhadiColors.background,
-      appBar: AppBar(title: const Text('Users & Roles')),
+      appBar: AppBar(title: Text(context.t('shell.more.usersRoles'))),
       body: FutureBuilder<List<Map<String, dynamic>>>(
         future: future,
         builder: (context, snapshot) {
@@ -102,7 +103,7 @@ class _UsersRolesScreenState extends State<UsersRolesScreen> {
               padding: const EdgeInsets.all(16),
               children: [
                 Text(
-                  tenant?.tenantName ?? 'Organization',
+                  tenant?.tenantName ?? context.t('billing.organization'),
                   style: const TextStyle(color: AhadiColors.muted),
                 ),
                 const SizedBox(height: 12),
@@ -110,15 +111,15 @@ class _UsersRolesScreenState extends State<UsersRolesScreen> {
                   FilledButton.icon(
                     onPressed: _openInvite,
                     icon: const Icon(Icons.add),
-                    label: const Text('Invite User'),
+                    label: Text(context.t('users.inviteUser')),
                   ),
                 const SizedBox(height: 12),
                 TextField(
                   controller: search,
                   onChanged: _onSearch,
-                  decoration: const InputDecoration(
-                    labelText: 'Search name or phone',
-                    prefixIcon: Icon(Icons.search),
+                  decoration: InputDecoration(
+                    labelText: context.t('contacts.searchHint'),
+                    prefixIcon: const Icon(Icons.search),
                   ),
                 ),
                 const SizedBox(height: 12),
@@ -126,28 +127,28 @@ class _UsersRolesScreenState extends State<UsersRolesScreen> {
                   ErrorPanel(
                     message: friendlyErrorText(
                       snapshot.error,
-                      'Unable to load users.',
+                      context.t('users.loadError'),
                     ),
                     onRetry: _refresh,
                   )
                 else if (!snapshot.hasData)
                   const LoadingCards(count: 4)
                 else if (visible.isEmpty)
-                  const AhadiSectionCard(
-                    children: [Text('No users match this search.')],
+                  AhadiSectionCard(
+                    children: [Text(context.t('users.noneMatchSearch'))],
                   )
                 else ...[
                   ...visible.map(
                     (row) => AhadiListRow(
-                      title: _name(row),
+                      title: _name(context, row),
                       subtitle: [
                         _phone(row),
-                        _roleLabel(_primaryRole(row)),
+                        _roleLabel(context, _primaryRole(row)),
                       ].where((value) => value.isNotEmpty).join('\n'),
-                      status: _statusLabel(_status(row)),
+                      status: _statusLabel(context, _status(row)),
                       meta: _rowType(row) == 'INVITATION'
-                          ? 'Invited ${dateText(_text(row, ['created_at', 'createdAt']))}'
-                          : 'Joined ${dateText(_text(row, ['joined_at', 'joinedAt']))}',
+                          ? '${context.t('users.invited')} ${dateText(_text(row, ['created_at', 'createdAt']))}'
+                          : '${context.t('users.joined')} ${dateText(_text(row, ['joined_at', 'joinedAt']))}',
                       onTap: () => _openDetails(row),
                     ),
                   ),
@@ -217,7 +218,8 @@ class _InviteUserScreenState extends State<InviteUserScreen> {
       });
       if (mounted) Navigator.of(context).pop(true);
     } catch (err) {
-      setState(() => error = friendlyErrorText(err, 'Unable to invite user.'));
+      if (!mounted) return;
+      setState(() => error = friendlyErrorText(err, context.t('users.inviteError')));
     } finally {
       if (mounted) setState(() => saving = false);
     }
@@ -227,39 +229,39 @@ class _InviteUserScreenState extends State<InviteUserScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AhadiColors.background,
-      appBar: AppBar(title: const Text('Invite User')),
+      appBar: AppBar(title: Text(context.t('users.inviteUser'))),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
           AhadiSectionCard(
-            title: 'User',
+            title: context.t('users.user'),
             children: [
               TextField(
                 controller: fullName,
                 textCapitalization: TextCapitalization.words,
-                decoration: const InputDecoration(labelText: 'Full Name'),
+                decoration: InputDecoration(labelText: context.t('auth.fullName')),
               ),
               const SizedBox(height: 12),
               TextField(
                 controller: phone,
                 keyboardType: TextInputType.phone,
-                decoration: const InputDecoration(labelText: 'Phone Number'),
+                decoration: InputDecoration(labelText: context.t('auth.phoneNumber')),
               ),
               const SizedBox(height: 12),
               TextField(
                 controller: email,
                 keyboardType: TextInputType.emailAddress,
-                decoration: const InputDecoration(labelText: 'Email'),
+                decoration: InputDecoration(labelText: context.t('auth.email')),
               ),
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
                 initialValue: role,
-                decoration: const InputDecoration(labelText: 'Role'),
+                decoration: InputDecoration(labelText: context.t('users.role')),
                 items: _allowedRoles(widget.controller)
                     .map(
                       (value) => DropdownMenuItem(
                         value: value,
-                        child: Text(_roleLabel(value)),
+                        child: Text(_roleLabel(context, value)),
                       ),
                     )
                     .toList(),
@@ -279,14 +281,14 @@ class _InviteUserScreenState extends State<InviteUserScreen> {
               Expanded(
                 child: OutlinedButton(
                   onPressed: saving ? null : () => Navigator.of(context).pop(),
-                  child: const Text('Cancel'),
+                  child: Text(context.t('common.cancel')),
                 ),
               ),
               const SizedBox(width: 8),
               Expanded(
                 child: FilledButton(
                   onPressed: saving ? null : _save,
-                  child: Text(saving ? 'Sending...' : 'Send Invitation'),
+                  child: Text(saving ? context.t('users.sending') : context.t('users.sendInvitation')),
                 ),
               ),
             ],
@@ -329,14 +331,14 @@ class _UserRoleDetailsScreenState extends State<UserRoleDetailsScreen> {
           padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
           children: [
             Text(
-              'Change Role',
+              context.t('users.changeRole'),
               style: Theme.of(context).textTheme.titleLarge
                   ?.copyWith(fontWeight: FontWeight.w800),
             ),
             const SizedBox(height: 8),
             ..._allowedRoles(widget.controller).map(
               (role) => ListTile(
-                title: Text(_roleLabel(role)),
+                title: Text(_roleLabel(context, role)),
                 trailing: _primaryRole(row) == role
                     ? const Icon(Icons.check, color: AhadiColors.primary)
                     : null,
@@ -358,7 +360,7 @@ class _UserRoleDetailsScreenState extends State<UserRoleDetailsScreen> {
         ...updated,
         'roles': [selected],
       };
-      message = 'Role updated.';
+      if (mounted) message = context.t('users.roleUpdated');
     });
   }
 
@@ -371,13 +373,20 @@ class _UserRoleDetailsScreenState extends State<UserRoleDetailsScreen> {
         title: Text(label),
         content: Text(
           action == 'remove'
-              ? 'Remove ${_name(row)} from ${widget.controller.selectedTenantContext?.tenantName ?? 'this organization'}?\n\nTheir Ahadi account and access to other organizations will not be affected.'
-              : '$label for ${_name(row)}?',
+              ? context
+                    .t('users.removeConfirmBody')
+                    .replaceFirst('{name}', _name(context, row))
+                    .replaceFirst(
+                      '{organization}',
+                      widget.controller.selectedTenantContext?.tenantName ??
+                          context.t('users.thisOrganization'),
+                    )
+              : '$label ${context.t('users.forSomeone')} ${_name(context, row)}?',
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
+            child: Text(context.t('common.cancel')),
           ),
           FilledButton(
             onPressed: () => Navigator.of(context).pop(true),
@@ -405,7 +414,9 @@ class _UserRoleDetailsScreenState extends State<UserRoleDetailsScreen> {
         if (mounted) Navigator.of(context).pop(true);
         return;
       }
-      message = '$label complete.';
+      if (mounted) {
+        message = context.t('users.actionComplete').replaceFirst('{action}', label);
+      }
     });
   }
 
@@ -414,7 +425,7 @@ class _UserRoleDetailsScreenState extends State<UserRoleDetailsScreen> {
     if (invitationId.isEmpty) return;
     await _run(() async {
       await widget.controller.resendTenantInvitation(invitationId);
-      message = 'Invitation resent.';
+      if (mounted) message = context.t('users.invitationResent');
     });
   }
 
@@ -430,7 +441,8 @@ class _UserRoleDetailsScreenState extends State<UserRoleDetailsScreen> {
       final tenantId = widget.controller.selectedTenantId;
       if (tenantId != null) await widget.controller.selectTenant(tenantId);
     } catch (err) {
-      setState(() => error = friendlyErrorText(err, 'Unable to update user.'));
+      if (!mounted) return;
+      setState(() => error = friendlyErrorText(err, context.t('users.updateError')));
     } finally {
       if (mounted) setState(() => saving = false);
     }
@@ -447,14 +459,14 @@ class _UserRoleDetailsScreenState extends State<UserRoleDetailsScreen> {
     final status = _status(row);
     return Scaffold(
       backgroundColor: AhadiColors.background,
-      appBar: AppBar(title: const Text('User Details')),
+      appBar: AppBar(title: Text(context.t('users.userDetails'))),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
           AhadiSectionCard(
             children: [
               Text(
-                _name(row),
+                _name(context, row),
                 style: Theme.of(context).textTheme.titleLarge
                     ?.copyWith(fontWeight: FontWeight.w900),
               ),
@@ -466,18 +478,18 @@ class _UserRoleDetailsScreenState extends State<UserRoleDetailsScreen> {
             ],
           ),
           AhadiSectionCard(
-            title: 'Access',
+            title: context.t('users.access'),
             children: [
-              AhadiInfoRow(label: 'Role', value: _roleLabel(_primaryRole(row))),
-              AhadiInfoRow(label: 'Status', value: _statusLabel(status)),
+              AhadiInfoRow(label: context.t('users.role'), value: _roleLabel(context, _primaryRole(row))),
+              AhadiInfoRow(label: context.t('eventDetail.status'), value: _statusLabel(context, status)),
               AhadiInfoRow(
-                label: 'Organization',
+                label: context.t('billing.organization'),
                 value:
                     widget.controller.selectedTenantContext?.tenantName ??
-                    'Organization',
+                    context.t('billing.organization'),
               ),
               AhadiInfoRow(
-                label: isInvitation ? 'Invited' : 'Joined',
+                label: isInvitation ? context.t('users.invited') : context.t('users.joined'),
                 value: dateText(
                   _text(row, [
                     isInvitation ? 'created_at' : 'joined_at',
@@ -503,12 +515,12 @@ class _UserRoleDetailsScreenState extends State<UserRoleDetailsScreen> {
           if (isInvitation && canInvite)
             FilledButton(
               onPressed: saving ? null : _resend,
-              child: Text(saving ? 'Sending...' : 'Resend Invitation'),
+              child: Text(saving ? context.t('users.sending') : context.t('users.resendInvitation')),
             ),
           if (!isInvitation && canManage) ...[
             FilledButton(
               onPressed: saving ? null : _changeRole,
-              child: const Text('Change Role'),
+              child: Text(context.t('users.changeRole')),
             ),
             const SizedBox(height: 8),
           ],
@@ -517,22 +529,22 @@ class _UserRoleDetailsScreenState extends State<UserRoleDetailsScreen> {
               OutlinedButton(
                 onPressed: saving
                     ? null
-                    : () => _statusAction('reactivate', 'Reactivate'),
-                child: const Text('Reactivate'),
+                    : () => _statusAction('reactivate', context.t('users.reactivate')),
+                child: Text(context.t('users.reactivate')),
               )
             else
               OutlinedButton(
                 onPressed: saving
                     ? null
-                    : () => _statusAction('suspend', 'Suspend Access'),
-                child: const Text('Suspend Access'),
+                    : () => _statusAction('suspend', context.t('users.suspendAccess')),
+                child: Text(context.t('users.suspendAccess')),
               ),
             const SizedBox(height: 8),
             OutlinedButton(
               onPressed: saving
                   ? null
-                  : () => _statusAction('remove', 'Remove'),
-              child: const Text('Remove From Organization'),
+                  : () => _statusAction('remove', context.t('users.remove')),
+              child: Text(context.t('users.removeFromOrganization')),
             ),
           ],
         ],
@@ -565,7 +577,7 @@ class _Pager extends StatelessWidget {
         Expanded(
           child: Center(
             child: Text(
-              'Page ${page + 1}',
+              '${context.t('common.page')} ${page + 1}',
               style: const TextStyle(color: AhadiColors.muted),
             ),
           ),
@@ -595,10 +607,10 @@ bool _can(SessionController controller, String permission) {
       context?.permissions.contains(permission) == true;
 }
 
-String _name(Map<String, dynamic> row) {
+String _name(BuildContext context, Map<String, dynamic> row) {
   return titleCaseName(
     _text(row, ['full_name', 'fullName', 'name']),
-    'Ahadi user',
+    context.t('shell.ahadiUser'),
   );
 }
 
@@ -628,33 +640,33 @@ String _primaryRole(Map<String, dynamic> row) {
   return row['role']?.toString() ?? 'VIEWER';
 }
 
-String _roleLabel(String role) {
+String _roleLabel(BuildContext context, String role) {
   switch (role) {
     case 'TENANT_OWNER':
-      return 'Owner';
+      return context.t('users.role.owner');
     case 'EVENT_ADMIN':
-      return 'Event Admin';
+      return context.t('users.role.eventAdmin');
     case 'TREASURER':
-      return 'Treasurer';
+      return context.t('users.role.treasurer');
     case 'COLLECTOR':
-      return 'Collector';
+      return context.t('users.role.collector');
     case 'VIEWER':
-      return 'Viewer';
+      return context.t('users.role.viewer');
     default:
       return titleCaseName(role.replaceAll('_', ' '), role);
   }
 }
 
-String _statusLabel(String status) {
+String _statusLabel(BuildContext context, String status) {
   switch (status.toUpperCase()) {
     case 'ACTIVE':
-      return 'Active';
+      return context.t('users.status.active');
     case 'SUSPENDED':
-      return 'Suspended';
+      return context.t('users.status.suspended');
     case 'INVITED':
-      return 'Invitation Pending';
+      return context.t('users.status.invitationPending');
     case 'REMOVED':
-      return 'Removed';
+      return context.t('users.status.removed');
     default:
       return titleCaseName(status.replaceAll('_', ' '), status);
   }

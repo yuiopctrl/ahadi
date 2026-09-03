@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/localization/app_locale.dart';
 import '../../../core/theme/ahadi_theme.dart';
 import '../../../core/widgets/formatters.dart';
 import '../../auth/data/session_controller.dart';
@@ -60,7 +61,7 @@ class _CreateOrganizationScreenState extends State<CreateOrganizationScreen> {
       animation: widget.controller,
       builder: (context, _) {
         return Scaffold(
-          appBar: AppBar(title: const Text('Create Organization')),
+          appBar: AppBar(title: Text(context.t('organizations.createOrganizationTitle'))),
           body: FutureBuilder<List<SubscriptionPlan>>(
             future: plansFuture,
             builder: (context, snapshot) {
@@ -70,7 +71,7 @@ class _CreateOrganizationScreenState extends State<CreateOrganizationScreen> {
                 padding: const EdgeInsets.all(16),
                 children: [
                   Text(
-                    'Package',
+                    context.t('organizations.package'),
                     style: Theme.of(context).textTheme.titleMedium
                         ?.copyWith(fontWeight: FontWeight.w800),
                   ),
@@ -93,79 +94,79 @@ class _CreateOrganizationScreenState extends State<CreateOrganizationScreen> {
                     ),
                   const SizedBox(height: 20),
                   Text(
-                    'Organization details',
+                    context.t('organizations.organizationDetails'),
                     style: Theme.of(context).textTheme.titleMedium
                         ?.copyWith(fontWeight: FontWeight.w800),
                   ),
                   const SizedBox(height: 8),
                   _field(
                     tenantName,
-                    'Organization name',
+                    context.t('organizations.organizationName'),
                     key: 'tenant-name-input',
                   ),
                   _field(
                     tenantPhone,
-                    'Organization phone',
+                    context.t('organizations.organizationPhone'),
                     keyboardType: TextInputType.phone,
                   ),
                   _field(
                     tenantEmail,
-                    'Organization email',
+                    context.t('organizations.organizationEmail'),
                     keyboardType: TextInputType.emailAddress,
                   ),
                   const SizedBox(height: 12),
                   Text(
-                    'First event',
+                    context.t('organizations.firstEvent'),
                     style: Theme.of(context).textTheme.titleMedium
                         ?.copyWith(fontWeight: FontWeight.w800),
                   ),
                   const SizedBox(height: 8),
-                  _field(firstEventName, 'Event name'),
+                  _field(firstEventName, context.t('events.eventName')),
                   DropdownButtonFormField<String>(
                     initialValue: eventType,
-                    items: const [
+                    items: [
                       DropdownMenuItem(
                         value: 'WEDDING',
-                        child: Text('Wedding'),
+                        child: Text(context.t('events.type.WEDDING')),
                       ),
                       DropdownMenuItem(
                         value: 'SENDOFF',
-                        child: Text('Sendoff'),
+                        child: Text(context.t('events.type.SENDOFF')),
                       ),
                       DropdownMenuItem(
                         value: 'FUNERAL',
-                        child: Text('Funeral'),
+                        child: Text(context.t('events.type.FUNERAL')),
                       ),
                       DropdownMenuItem(
                         value: 'FUNDRAISER',
-                        child: Text('Fundraiser'),
+                        child: Text(context.t('events.type.FUNDRAISER')),
                       ),
-                      DropdownMenuItem(value: 'OTHER', child: Text('Other')),
+                      DropdownMenuItem(value: 'OTHER', child: Text(context.t('events.type.OTHER'))),
                     ],
                     onChanged: (value) =>
                         setState(() => eventType = value ?? 'WEDDING'),
-                    decoration: const InputDecoration(labelText: 'Event type'),
+                    decoration: InputDecoration(labelText: context.t('events.eventType')),
                   ),
                   const SizedBox(height: 12),
-                  _field(eventDate, 'Event date YYYY-MM-DD'),
-                  _field(venue, 'Venue'),
+                  _field(eventDate, context.t('events.eventDate')),
+                  _field(venue, context.t('events.venue')),
                   _field(
                     targetAmount,
-                    'Target amount',
+                    context.t('events.targetAmount'),
                     keyboardType: TextInputType.number,
                   ),
-                  _field(pledgeDeadline, 'Pledge deadline YYYY-MM-DD'),
+                  _field(pledgeDeadline, context.t('events.pledgeDeadline')),
                   const SizedBox(height: 12),
                   Text(
-                    'Account owner',
+                    context.t('organizations.accountOwner'),
                     style: Theme.of(context).textTheme.titleMedium
                         ?.copyWith(fontWeight: FontWeight.w800),
                   ),
                   const SizedBox(height: 8),
-                  _field(adminFullName, 'Full name'),
+                  _field(adminFullName, context.t('auth.fullName')),
                   _field(
                     adminEmail,
-                    'Email',
+                    context.t('auth.email'),
                     keyboardType: TextInputType.emailAddress,
                   ),
                   if (widget.controller.errorMessage != null) ...[
@@ -201,7 +202,7 @@ class _CreateOrganizationScreenState extends State<CreateOrganizationScreen> {
                             }
                             Navigator.of(context).pop();
                           },
-                    child: const Text('Create organization'),
+                    child: Text(context.t('organizations.createOrganization')),
                   ),
                 ],
               );
@@ -245,8 +246,8 @@ class _PlanUnavailableCard extends StatelessWidget {
         border: Border.all(color: AhadiColors.border),
         borderRadius: BorderRadius.circular(8),
       ),
-      child: const Text(
-        'No public packages are available. Contact Ahadi support before creating an organization.',
+      child: Text(
+        context.t('organizations.noPlansAvailable'),
         style: AhadiTypography.secondary,
       ),
     );

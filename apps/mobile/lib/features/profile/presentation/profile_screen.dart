@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/localization/app_locale.dart';
 import '../../../core/theme/ahadi_theme.dart';
 import '../../auth/data/session_controller.dart';
 import 'change_pin_screen.dart';
@@ -16,7 +17,7 @@ class ProfileScreen extends StatelessWidget {
       padding: const EdgeInsets.all(16),
       children: [
         Text(
-          'Profile',
+          context.t('shell.more.profile'),
           style: Theme.of(context).textTheme.headlineSmall
               ?.copyWith(fontWeight: FontWeight.w800),
         ),
@@ -39,9 +40,9 @@ class ProfileScreen extends StatelessWidget {
             title: Text(
               profile?.fullName.isNotEmpty == true
                   ? profile!.fullName
-                  : 'Ahadi user',
+                  : context.t('shell.ahadiUser'),
             ),
-            subtitle: Text(profile?.email ?? 'No email added'),
+            subtitle: Text(profile?.email ?? context.t('profile.noEmailAdded')),
           ),
         ),
         const SizedBox(height: 12),
@@ -50,7 +51,7 @@ class ProfileScreen extends StatelessWidget {
             children: [
               ListTile(
                 leading: const Icon(Icons.edit_outlined),
-                title: const Text('Edit Profile'),
+                title: Text(context.t('profile.editProfile')),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () => Navigator.of(context).push(
                   MaterialPageRoute(
@@ -61,7 +62,7 @@ class ProfileScreen extends StatelessWidget {
               const Divider(height: 1),
               ListTile(
                 leading: const Icon(Icons.pin_outlined),
-                title: const Text('Change PIN'),
+                title: Text(context.t('shell.changePin')),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () => Navigator.of(context).push(
                   MaterialPageRoute(
@@ -72,7 +73,7 @@ class ProfileScreen extends StatelessWidget {
               const Divider(height: 1),
               ListTile(
                 leading: const Icon(Icons.logout_outlined),
-                title: const Text('Sign out'),
+                title: Text(context.t('common.signOut')),
                 onTap: () async {
                   await controller.signOut();
                   if (context.mounted) {
@@ -135,26 +136,26 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       builder: (context, _) {
         return Scaffold(
           backgroundColor: AhadiColors.background,
-          appBar: AppBar(title: const Text('Edit Profile')),
+          appBar: AppBar(title: Text(context.t('profile.editProfile'))),
           body: ListView(
             padding: const EdgeInsets.all(16),
             children: [
               TextField(
                 controller: fullName,
                 textCapitalization: TextCapitalization.words,
-                decoration: const InputDecoration(labelText: 'Full Name'),
+                decoration: InputDecoration(labelText: context.t('auth.fullName')),
               ),
               const SizedBox(height: 12),
               TextField(
                 controller: email,
                 keyboardType: TextInputType.emailAddress,
-                decoration: const InputDecoration(labelText: 'Email'),
+                decoration: InputDecoration(labelText: context.t('auth.email')),
               ),
               const SizedBox(height: 12),
               TextFormField(
                 enabled: false,
                 initialValue: phone,
-                decoration: const InputDecoration(labelText: 'Phone Number'),
+                decoration: InputDecoration(labelText: context.t('auth.phoneNumber')),
               ),
               if (widget.controller.errorMessage != null) ...[
                 const SizedBox(height: 12),
@@ -167,7 +168,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
               FilledButton(
                 onPressed: widget.controller.isSubmitting ? null : _save,
                 child: Text(
-                  widget.controller.isSubmitting ? 'Saving...' : 'Save Profile',
+                  widget.controller.isSubmitting ? context.t('auth.saving') : context.t('profile.saveProfile'),
                 ),
               ),
             ],

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/localization/app_locale.dart';
 import '../../../core/theme/ahadi_theme.dart';
 import '../../../core/widgets/formatters.dart';
 import '../../auth/data/session_controller.dart';
@@ -64,21 +65,21 @@ class _PledgesScreenState extends State<PledgesScreen> {
     }
     return Scaffold(
       backgroundColor: AhadiColors.background,
-      appBar: AppBar(title: const Text('Pledges')),
+      appBar: AppBar(title: Text(context.t('shell.more.pledges'))),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
           Text(
-            widget.controller.selectedEvent?.name ?? 'No event selected',
+            widget.controller.selectedEvent?.name ?? context.t('common.noEventSelected'),
             style: const TextStyle(color: AhadiColors.muted),
           ),
           const SizedBox(height: 12),
           FilterTabs<String>(
-            items: const [
-              FilterTabItem(value: 'ALL', label: 'All'),
-              FilterTabItem(value: 'PENDING', label: 'Unpaid'),
-              FilterTabItem(value: 'PARTIALLY_PAID', label: 'Partial'),
-              FilterTabItem(value: 'PAID', label: 'Done'),
+            items: [
+              FilterTabItem(value: 'ALL', label: context.t('common.all')),
+              FilterTabItem(value: 'PENDING', label: context.t('pledges.unpaid')),
+              FilterTabItem(value: 'PARTIALLY_PAID', label: context.t('pledges.partial')),
+              FilterTabItem(value: 'PAID', label: context.t('pledges.done')),
             ],
             selected: filter,
             onChanged: (value) => setState(() {
@@ -89,9 +90,9 @@ class _PledgesScreenState extends State<PledgesScreen> {
           ),
           const SizedBox(height: 12),
           TextField(
-            decoration: const InputDecoration(
-              labelText: 'Search pledges',
-              prefixIcon: Icon(Icons.search),
+            decoration: InputDecoration(
+              labelText: context.t('eventDetail.searchPledges'),
+              prefixIcon: const Icon(Icons.search),
             ),
             onChanged: (value) => setState(() {
               query = value;
@@ -112,10 +113,10 @@ class _PledgesScreenState extends State<PledgesScreen> {
               final visible = filtered.take(pageSize).toList();
               final hasNext = filtered.length > pageSize;
               if (event == null) {
-                return const Card(
+                return Card(
                   child: Padding(
-                    padding: EdgeInsets.all(16),
-                    child: Text('No event is available for pledges.'),
+                    padding: const EdgeInsets.all(16),
+                    child: Text(context.t('pledges.noEventAvailable')),
                   ),
                 );
               }
@@ -135,11 +136,11 @@ class _PledgesScreenState extends State<PledgesScreen> {
                     ),
                   const SizedBox(height: 12),
                   if (visible.isEmpty)
-                    const Card(
+                    Card(
                       child: Padding(
-                        padding: EdgeInsets.all(16),
+                        padding: const EdgeInsets.all(16),
                         child: Text(
-                          'No pledges found for this event and filter.',
+                          context.t('pledges.noneForFilter'),
                         ),
                       ),
                     )
@@ -149,7 +150,7 @@ class _PledgesScreenState extends State<PledgesScreen> {
                         title: titleCaseName(
                           pledge['member_name'] ?? pledge['full_name'],
                         ),
-                        subtitle: stringFrom(pledge, 'phone_e164', 'No phone'),
+                        subtitle: stringFrom(pledge, 'phone_e164', context.t('contacts.noPhone')),
                         status: stringFrom(pledge, 'status', 'PENDING'),
                         financialSummary: FinancialSummary(
                           pledged: pledge['pledged_amount'],
@@ -158,7 +159,7 @@ class _PledgesScreenState extends State<PledgesScreen> {
                               pledge['paid_amount'],
                           outstanding: pledge['outstanding_amount'],
                         ),
-                        meta: 'Due ${dateText(stringFrom(pledge, 'due_date'))}',
+                        meta: '${context.t('eventDetail.due')} ${dateText(stringFrom(pledge, 'due_date'))}',
                         onTap: () => Navigator.of(context).push(
                           MaterialPageRoute(
                             builder: (_) => PledgeDetailScreen(
@@ -247,11 +248,11 @@ class _PledgePaginationControls extends StatelessWidget {
           IconButton.outlined(
             onPressed: onPrevious,
             icon: const Icon(Icons.chevron_left),
-            tooltip: 'Previous page',
+            tooltip: context.t('common.previousPage'),
           ),
           Expanded(
             child: Text(
-              'Page ${page + 1}',
+              '${context.t('common.page')} ${page + 1}',
               textAlign: TextAlign.center,
               style: const TextStyle(color: AhadiColors.muted),
             ),
@@ -259,7 +260,7 @@ class _PledgePaginationControls extends StatelessWidget {
           IconButton.outlined(
             onPressed: onNext,
             icon: const Icon(Icons.chevron_right),
-            tooltip: 'Next page',
+            tooltip: context.t('common.nextPage'),
           ),
         ],
       ),
@@ -305,10 +306,10 @@ class _PledgeDetailScreenState extends State<PledgeDetailScreen> {
     return Scaffold(
       backgroundColor: AhadiColors.background,
       appBar: AppBar(
-        title: const Text('Pledge Details'),
+        title: Text(context.t('pledges.pledgeDetails')),
         actions: [
           if (canEdit)
-            TextButton(onPressed: _openEdit, child: const Text('Edit')),
+            TextButton(onPressed: _openEdit, child: Text(context.t('common.edit'))),
         ],
       ),
       body: ListView(
@@ -326,7 +327,7 @@ class _PledgeDetailScreenState extends State<PledgeDetailScreen> {
           ),
           const SizedBox(height: 16),
           AhadiSectionCard(
-            title: 'Financial Summary',
+            title: context.t('eventDetail.financialSummary'),
             children: [
               FinancialSummary(
                 pledged: pledge['pledged_amount'],
@@ -336,25 +337,25 @@ class _PledgeDetailScreenState extends State<PledgeDetailScreen> {
             ],
           ),
           AhadiSectionCard(
-            title: 'Pledge Details',
+            title: context.t('pledges.pledgeDetails'),
             children: [
               AhadiInfoRow(
-                label: 'Due Date',
+                label: context.t('eventDetail.dueDate'),
                 value: dateText(stringFrom(pledge, 'due_date')),
               ),
               Row(
                 children: [
-                  const Expanded(
+                  Expanded(
                     child: Text(
-                      'Status',
-                      style: TextStyle(color: AhadiColors.muted),
+                      context.t('eventDetail.status'),
+                      style: const TextStyle(color: AhadiColors.muted),
                     ),
                   ),
                   StatusPill(status: stringFrom(pledge, 'status', 'PENDING')),
                 ],
               ),
               AhadiInfoRow(
-                label: 'Created',
+                label: context.t('pledges.created'),
                 value: dateText(
                   stringFrom(
                     pledge,
@@ -367,12 +368,12 @@ class _PledgeDetailScreenState extends State<PledgeDetailScreen> {
           ),
           if (canEdit)
             AhadiSectionCard(
-              title: 'Actions',
+              title: context.t('eventDetail.actions'),
               children: [
                 OutlinedButton.icon(
                   onPressed: _openEdit,
                   icon: const Icon(Icons.edit_outlined),
-                  label: const Text('Edit Pledge'),
+                  label: Text(context.t('pledges.editPledge')),
                 ),
               ],
             ),
@@ -441,7 +442,7 @@ class _EditPledgeScreenState extends State<EditPledgeScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AhadiColors.background,
-      appBar: AppBar(title: const Text('Edit Pledge')),
+      appBar: AppBar(title: Text(context.t('pledges.editPledge'))),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
@@ -449,15 +450,15 @@ class _EditPledgeScreenState extends State<EditPledgeScreen> {
             controller: amount,
             keyboardType: TextInputType.number,
             inputFormatters: const [MoneyInputFormatter()],
-            decoration: const InputDecoration(
-              labelText: 'Pledge Amount',
+            decoration: InputDecoration(
+              labelText: context.t('pledges.pledgeAmount'),
               prefixText: 'TZS ',
             ),
           ),
           const SizedBox(height: 12),
           TextField(
             controller: dueDate,
-            decoration: const InputDecoration(labelText: 'Due Date YYYY-MM-DD'),
+            decoration: InputDecoration(labelText: context.t('pledges.dueDateFormat')),
           ),
           if (error != null) ...[
             const SizedBox(height: 8),
@@ -469,14 +470,14 @@ class _EditPledgeScreenState extends State<EditPledgeScreen> {
               Expanded(
                 child: OutlinedButton(
                   onPressed: saving ? null : () => Navigator.of(context).pop(),
-                  child: const Text('Cancel'),
+                  child: Text(context.t('common.cancel')),
                 ),
               ),
               const SizedBox(width: 12),
               Expanded(
                 child: FilledButton(
                   onPressed: saving ? null : _save,
-                  child: Text(saving ? 'Saving...' : 'Save'),
+                  child: Text(saving ? context.t('auth.saving') : context.t('common.save')),
                 ),
               ),
             ],

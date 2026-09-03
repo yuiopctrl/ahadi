@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../core/config/app_config.dart';
+import '../core/localization/app_locale.dart';
 import '../core/networking/ahadi_api.dart';
 import '../core/networking/api_client.dart';
 import '../core/storage/session_storage.dart';
@@ -17,12 +18,14 @@ class AhadiApp extends StatefulWidget {
     this.api,
     this.storage,
     this.controller,
+    this.localeController,
   });
 
   final AppConfig? config;
   final AhadiApi? api;
   final SessionStorage? storage;
   final SessionController? controller;
+  final AppLocaleController? localeController;
 
   @override
   State<AhadiApp> createState() => _AhadiAppState();
@@ -30,6 +33,7 @@ class AhadiApp extends StatefulWidget {
 
 class _AhadiAppState extends State<AhadiApp> {
   late final SessionController controller;
+  late final AppLocaleController localeController;
 
   @override
   void initState() {
@@ -45,31 +49,36 @@ class _AhadiAppState extends State<AhadiApp> {
       );
       controller = SessionController(api: widget.api ?? api, storage: storage);
     }
+    localeController = widget.localeController ?? AppLocaleController();
+    localeController.load();
     controller.initialize();
   }
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Changisha',
-      debugShowCheckedModeBanner: false,
-      theme: ahadiTheme(),
-      home: AnimatedBuilder(
-        animation: controller,
-        builder: (context, _) {
-          return switch (controller.bootstrapState) {
-            BootstrapState.initializing ||
-            BootstrapState.restoringSession ||
-            BootstrapState.resolvingAccess => const SplashScreen(),
-            BootstrapState.unauthenticated => LoginScreen(
-              controller: controller,
-            ),
-            BootstrapState.error => BootstrapErrorScreen(
-              controller: controller,
-            ),
-            BootstrapState.ready => _ReadyScreen(controller: controller),
-          };
-        },
+    return AppLocaleScope(
+      controller: localeController,
+      child: MaterialApp(
+        title: 'Changisha',
+        debugShowCheckedModeBanner: false,
+        theme: ahadiTheme(),
+        home: AnimatedBuilder(
+          animation: controller,
+          builder: (context, _) {
+            return switch (controller.bootstrapState) {
+              BootstrapState.initializing ||
+              BootstrapState.restoringSession ||
+              BootstrapState.resolvingAccess => const SplashScreen(),
+              BootstrapState.unauthenticated => LoginScreen(
+                controller: controller,
+              ),
+              BootstrapState.error => BootstrapErrorScreen(
+                controller: controller,
+              ),
+              BootstrapState.ready => _ReadyScreen(controller: controller),
+            };
+          },
+        ),
       ),
     );
   }
