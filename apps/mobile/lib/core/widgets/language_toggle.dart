@@ -7,11 +7,7 @@ import '../theme/ahadi_theme.dart';
 /// this app — a bordered rounded-rect (matching the app's standard 8px
 /// button radius) with a filled selected segment instead.
 class LanguageToggle extends StatelessWidget {
-  const LanguageToggle({
-    super.key,
-    this.swLabel = 'SW',
-    this.enLabel = 'EN',
-  });
+  const LanguageToggle({super.key, this.swLabel = 'SW', this.enLabel = 'EN'});
 
   final String swLabel;
   final String enLabel;

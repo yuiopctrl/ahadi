@@ -70,15 +70,22 @@ class _PledgesScreenState extends State<PledgesScreen> {
         padding: const EdgeInsets.all(16),
         children: [
           Text(
-            widget.controller.selectedEvent?.name ?? context.t('common.noEventSelected'),
+            widget.controller.selectedEvent?.name ??
+                context.t('common.noEventSelected'),
             style: const TextStyle(color: AhadiColors.muted),
           ),
           const SizedBox(height: 12),
           FilterTabs<String>(
             items: [
               FilterTabItem(value: 'ALL', label: context.t('common.all')),
-              FilterTabItem(value: 'PENDING', label: context.t('pledges.unpaid')),
-              FilterTabItem(value: 'PARTIALLY_PAID', label: context.t('pledges.partial')),
+              FilterTabItem(
+                value: 'PENDING',
+                label: context.t('pledges.unpaid'),
+              ),
+              FilterTabItem(
+                value: 'PARTIALLY_PAID',
+                label: context.t('pledges.partial'),
+              ),
               FilterTabItem(value: 'PAID', label: context.t('pledges.done')),
             ],
             selected: filter,
@@ -139,9 +146,7 @@ class _PledgesScreenState extends State<PledgesScreen> {
                     Card(
                       child: Padding(
                         padding: const EdgeInsets.all(16),
-                        child: Text(
-                          context.t('pledges.noneForFilter'),
-                        ),
+                        child: Text(context.t('pledges.noneForFilter')),
                       ),
                     )
                   else ...[
@@ -150,7 +155,11 @@ class _PledgesScreenState extends State<PledgesScreen> {
                         title: titleCaseName(
                           pledge['member_name'] ?? pledge['full_name'],
                         ),
-                        subtitle: stringFrom(pledge, 'phone_e164', context.t('contacts.noPhone')),
+                        subtitle: stringFrom(
+                          pledge,
+                          'phone_e164',
+                          context.t('contacts.noPhone'),
+                        ),
                         status: stringFrom(pledge, 'status', 'PENDING'),
                         financialSummary: FinancialSummary(
                           pledged: pledge['pledged_amount'],
@@ -159,7 +168,8 @@ class _PledgesScreenState extends State<PledgesScreen> {
                               pledge['paid_amount'],
                           outstanding: pledge['outstanding_amount'],
                         ),
-                        meta: '${context.t('eventDetail.due')} ${dateText(stringFrom(pledge, 'due_date'))}',
+                        meta:
+                            '${context.t('eventDetail.due')} ${dateText(stringFrom(pledge, 'due_date'))}',
                         onTap: () => Navigator.of(context).push(
                           MaterialPageRoute(
                             builder: (_) => PledgeDetailScreen(
@@ -309,7 +319,10 @@ class _PledgeDetailScreenState extends State<PledgeDetailScreen> {
         title: Text(context.t('pledges.pledgeDetails')),
         actions: [
           if (canEdit)
-            TextButton(onPressed: _openEdit, child: Text(context.t('common.edit'))),
+            TextButton(
+              onPressed: _openEdit,
+              child: Text(context.t('common.edit')),
+            ),
         ],
       ),
       body: ListView(
@@ -458,7 +471,9 @@ class _EditPledgeScreenState extends State<EditPledgeScreen> {
           const SizedBox(height: 12),
           TextField(
             controller: dueDate,
-            decoration: InputDecoration(labelText: context.t('pledges.dueDateFormat')),
+            decoration: InputDecoration(
+              labelText: context.t('pledges.dueDateFormat'),
+            ),
           ),
           if (error != null) ...[
             const SizedBox(height: 8),
@@ -477,7 +492,11 @@ class _EditPledgeScreenState extends State<EditPledgeScreen> {
               Expanded(
                 child: FilledButton(
                   onPressed: saving ? null : _save,
-                  child: Text(saving ? context.t('auth.saving') : context.t('common.save')),
+                  child: Text(
+                    saving
+                        ? context.t('auth.saving')
+                        : context.t('common.save'),
+                  ),
                 ),
               ),
             ],

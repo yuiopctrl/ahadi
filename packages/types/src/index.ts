@@ -117,6 +117,7 @@ export type ApiErrorCode =
   | 'SUBSCRIPTION_NOT_FOUND'
   | 'INVALID_SUBSCRIPTION_STATUS'
   | 'REASON_REQUIRED'
+  | 'CONTACT_LIMIT_REACHED'
   | 'INTERNAL_ERROR'
 
 export interface SubscriptionPlan {

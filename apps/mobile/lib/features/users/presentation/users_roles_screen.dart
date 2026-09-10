@@ -219,7 +219,9 @@ class _InviteUserScreenState extends State<InviteUserScreen> {
       if (mounted) Navigator.of(context).pop(true);
     } catch (err) {
       if (!mounted) return;
-      setState(() => error = friendlyErrorText(err, context.t('users.inviteError')));
+      setState(
+        () => error = friendlyErrorText(err, context.t('users.inviteError')),
+      );
     } finally {
       if (mounted) setState(() => saving = false);
     }
@@ -239,13 +241,17 @@ class _InviteUserScreenState extends State<InviteUserScreen> {
               TextField(
                 controller: fullName,
                 textCapitalization: TextCapitalization.words,
-                decoration: InputDecoration(labelText: context.t('auth.fullName')),
+                decoration: InputDecoration(
+                  labelText: context.t('auth.fullName'),
+                ),
               ),
               const SizedBox(height: 12),
               TextField(
                 controller: phone,
                 keyboardType: TextInputType.phone,
-                decoration: InputDecoration(labelText: context.t('auth.phoneNumber')),
+                decoration: InputDecoration(
+                  labelText: context.t('auth.phoneNumber'),
+                ),
               ),
               const SizedBox(height: 12),
               TextField(
@@ -288,7 +294,11 @@ class _InviteUserScreenState extends State<InviteUserScreen> {
               Expanded(
                 child: FilledButton(
                   onPressed: saving ? null : _save,
-                  child: Text(saving ? context.t('users.sending') : context.t('users.sendInvitation')),
+                  child: Text(
+                    saving
+                        ? context.t('users.sending')
+                        : context.t('users.sendInvitation'),
+                  ),
                 ),
               ),
             ],
@@ -415,7 +425,9 @@ class _UserRoleDetailsScreenState extends State<UserRoleDetailsScreen> {
         return;
       }
       if (mounted) {
-        message = context.t('users.actionComplete').replaceFirst('{action}', label);
+        message = context
+            .t('users.actionComplete')
+            .replaceFirst('{action}', label);
       }
     });
   }
@@ -442,7 +454,9 @@ class _UserRoleDetailsScreenState extends State<UserRoleDetailsScreen> {
       if (tenantId != null) await widget.controller.selectTenant(tenantId);
     } catch (err) {
       if (!mounted) return;
-      setState(() => error = friendlyErrorText(err, context.t('users.updateError')));
+      setState(
+        () => error = friendlyErrorText(err, context.t('users.updateError')),
+      );
     } finally {
       if (mounted) setState(() => saving = false);
     }
@@ -480,8 +494,14 @@ class _UserRoleDetailsScreenState extends State<UserRoleDetailsScreen> {
           AhadiSectionCard(
             title: context.t('users.access'),
             children: [
-              AhadiInfoRow(label: context.t('users.role'), value: _roleLabel(context, _primaryRole(row))),
-              AhadiInfoRow(label: context.t('eventDetail.status'), value: _statusLabel(context, status)),
+              AhadiInfoRow(
+                label: context.t('users.role'),
+                value: _roleLabel(context, _primaryRole(row)),
+              ),
+              AhadiInfoRow(
+                label: context.t('eventDetail.status'),
+                value: _statusLabel(context, status),
+              ),
               AhadiInfoRow(
                 label: context.t('billing.organization'),
                 value:
@@ -489,7 +509,9 @@ class _UserRoleDetailsScreenState extends State<UserRoleDetailsScreen> {
                     context.t('billing.organization'),
               ),
               AhadiInfoRow(
-                label: isInvitation ? context.t('users.invited') : context.t('users.joined'),
+                label: isInvitation
+                    ? context.t('users.invited')
+                    : context.t('users.joined'),
                 value: dateText(
                   _text(row, [
                     isInvitation ? 'created_at' : 'joined_at',
@@ -515,7 +537,11 @@ class _UserRoleDetailsScreenState extends State<UserRoleDetailsScreen> {
           if (isInvitation && canInvite)
             FilledButton(
               onPressed: saving ? null : _resend,
-              child: Text(saving ? context.t('users.sending') : context.t('users.resendInvitation')),
+              child: Text(
+                saving
+                    ? context.t('users.sending')
+                    : context.t('users.resendInvitation'),
+              ),
             ),
           if (!isInvitation && canManage) ...[
             FilledButton(
@@ -529,14 +555,20 @@ class _UserRoleDetailsScreenState extends State<UserRoleDetailsScreen> {
               OutlinedButton(
                 onPressed: saving
                     ? null
-                    : () => _statusAction('reactivate', context.t('users.reactivate')),
+                    : () => _statusAction(
+                        'reactivate',
+                        context.t('users.reactivate'),
+                      ),
                 child: Text(context.t('users.reactivate')),
               )
             else
               OutlinedButton(
                 onPressed: saving
                     ? null
-                    : () => _statusAction('suspend', context.t('users.suspendAccess')),
+                    : () => _statusAction(
+                        'suspend',
+                        context.t('users.suspendAccess'),
+                      ),
                 child: Text(context.t('users.suspendAccess')),
               ),
             const SizedBox(height: 8),

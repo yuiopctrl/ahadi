@@ -183,7 +183,9 @@ class _CreateEventFormState extends State<_CreateEventForm> {
             const SizedBox(height: 12),
             TextField(
               controller: name,
-              decoration: InputDecoration(labelText: context.t('events.eventName')),
+              decoration: InputDecoration(
+                labelText: context.t('events.eventName'),
+              ),
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
@@ -208,7 +210,9 @@ class _CreateEventFormState extends State<_CreateEventForm> {
                       .toList(),
               onChanged: (value) =>
                   setState(() => eventType = value ?? 'WEDDING'),
-              decoration: InputDecoration(labelText: context.t('events.eventType')),
+              decoration: InputDecoration(
+                labelText: context.t('events.eventType'),
+              ),
             ),
             if (eventType == 'OTHER') ...[
               const SizedBox(height: 12),
@@ -255,7 +259,11 @@ class _CreateEventFormState extends State<_CreateEventForm> {
             const SizedBox(height: 12),
             FilledButton(
               onPressed: saving ? null : _submit,
-              child: Text(saving ? context.t('events.creating') : context.t('shell.createEvent')),
+              child: Text(
+                saving
+                    ? context.t('events.creating')
+                    : context.t('shell.createEvent'),
+              ),
             ),
           ],
         ),

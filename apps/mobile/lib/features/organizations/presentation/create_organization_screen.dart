@@ -61,7 +61,9 @@ class _CreateOrganizationScreenState extends State<CreateOrganizationScreen> {
       animation: widget.controller,
       builder: (context, _) {
         return Scaffold(
-          appBar: AppBar(title: Text(context.t('organizations.createOrganizationTitle'))),
+          appBar: AppBar(
+            title: Text(context.t('organizations.createOrganizationTitle')),
+          ),
           body: FutureBuilder<List<SubscriptionPlan>>(
             future: plansFuture,
             builder: (context, snapshot) {
@@ -141,11 +143,16 @@ class _CreateOrganizationScreenState extends State<CreateOrganizationScreen> {
                         value: 'FUNDRAISER',
                         child: Text(context.t('events.type.FUNDRAISER')),
                       ),
-                      DropdownMenuItem(value: 'OTHER', child: Text(context.t('events.type.OTHER'))),
+                      DropdownMenuItem(
+                        value: 'OTHER',
+                        child: Text(context.t('events.type.OTHER')),
+                      ),
                     ],
                     onChanged: (value) =>
                         setState(() => eventType = value ?? 'WEDDING'),
-                    decoration: InputDecoration(labelText: context.t('events.eventType')),
+                    decoration: InputDecoration(
+                      labelText: context.t('events.eventType'),
+                    ),
                   ),
                   const SizedBox(height: 12),
                   _field(eventDate, context.t('events.eventDate')),

@@ -621,7 +621,9 @@ class _MorePage extends StatelessWidget {
                 onTap: () => Navigator.of(context).push(
                   MaterialPageRoute(
                     builder: (_) => Scaffold(
-                      appBar: AppBar(title: Text(context.t('shell.more.profile'))),
+                      appBar: AppBar(
+                        title: Text(context.t('shell.more.profile')),
+                      ),
                       body: ProfileScreen(controller: controller),
                     ),
                   ),

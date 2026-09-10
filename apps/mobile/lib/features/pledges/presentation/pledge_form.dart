@@ -13,12 +13,24 @@ class PledgeForm extends StatefulWidget {
     required this.event,
     required this.members,
     required this.onDone,
+    this.initialEventMemberId,
+    this.startOpen = false,
   });
 
   final SessionController controller;
   final EventSummary event;
   final List<Map<String, dynamic>> members;
   final VoidCallback onDone;
+
+  /// Preselects this event member and hides the member picker, so callers
+  /// that already know exactly who the pledge is for (e.g. Member Details)
+  /// don't force the user to search/select again.
+  final String? initialEventMemberId;
+
+  /// Renders the form immediately instead of behind a "Record Pledge"
+  /// toggle button, for callers that present this inside their own
+  /// modal/sheet (which already carries the "record a pledge" intent).
+  final bool startOpen;
 
   @override
   State<PledgeForm> createState() => _PledgeFormState();
@@ -33,6 +45,13 @@ class _PledgeFormState extends State<PledgeForm> {
   bool open = false;
   bool saving = false;
   String? error;
+
+  @override
+  void initState() {
+    super.initState();
+    eventMemberId = widget.initialEventMemberId;
+    open = widget.startOpen;
+  }
 
   @override
   void dispose() {
@@ -104,7 +123,11 @@ class _PledgeFormState extends State<PledgeForm> {
                     contentPadding: EdgeInsets.zero,
                     title: Text(titleCaseName(member['full_name'])),
                     subtitle: Text(
-                      stringFrom(member, 'phone_e164', context.t('contacts.noPhone')),
+                      stringFrom(
+                        member,
+                        'phone_e164',
+                        context.t('contacts.noPhone'),
+                      ),
                     ),
                     trailing: const Icon(Icons.chevron_right),
                     onTap: () => setState(() => eventMemberId = id),
@@ -151,6 +174,7 @@ class _PledgeFormState extends State<PledgeForm> {
               ),
             const SizedBox(height: 12),
             TextField(
+              key: const Key('pledge-amount-input'),
               controller: amount,
               keyboardType: TextInputType.number,
               inputFormatters: const [MoneyInputFormatter()],
@@ -174,7 +198,9 @@ class _PledgeFormState extends State<PledgeForm> {
             const SizedBox(height: 12),
             TextField(
               controller: notes,
-              decoration: InputDecoration(labelText: context.t('pledges.notesOptional')),
+              decoration: InputDecoration(
+                labelText: context.t('pledges.notesOptional'),
+              ),
             ),
             if (error != null) ...[
               const SizedBox(height: 8),
@@ -192,8 +218,13 @@ class _PledgeFormState extends State<PledgeForm> {
                 const SizedBox(width: 12),
                 Expanded(
                   child: FilledButton(
+                    key: const Key('pledge-form-save'),
                     onPressed: saving ? null : _submit,
-                    child: Text(saving ? context.t('auth.saving') : context.t('common.save')),
+                    child: Text(
+                      saving
+                          ? context.t('auth.saving')
+                          : context.t('common.save'),
+                    ),
                   ),
                 ),
               ],

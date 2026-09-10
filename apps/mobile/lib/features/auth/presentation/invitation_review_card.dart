@@ -70,7 +70,10 @@ class InvitationReviewCard extends StatelessWidget {
           _InfoRow(label: context.t('auth.role'), value: role),
           if (invitation.fullName.trim().isNotEmpty) ...[
             const SizedBox(height: 10),
-            _InfoRow(label: context.t('auth.name'), value: invitation.fullName.trim()),
+            _InfoRow(
+              label: context.t('auth.name'),
+              value: invitation.fullName.trim(),
+            ),
           ],
           const SizedBox(height: 16),
           Row(
@@ -85,7 +88,11 @@ class InvitationReviewCard extends StatelessWidget {
               Expanded(
                 child: FilledButton(
                   onPressed: busy ? null : onJoin,
-                  child: Text(busy ? context.t('auth.joining') : context.t('auth.joinOrganization')),
+                  child: Text(
+                    busy
+                        ? context.t('auth.joining')
+                        : context.t('auth.joinOrganization'),
+                  ),
                 ),
               ),
             ],

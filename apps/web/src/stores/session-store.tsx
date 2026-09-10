@@ -5,6 +5,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import type { Session } from '@supabase/supabase-js'
 import type { TenantContext, UserContext } from '@ahadi/types'
 import { api, ApiClientError } from '../lib/api'
+import { setSessionExpiredHandler } from '../lib/query-client'
 import { supabase } from '../lib/supabase'
 
 export interface SessionLockState {
@@ -234,6 +235,39 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     setSelectedEventId(null)
     setSelectedTenantContext(null)
   }, [])
+
+  // Centralized, idempotent session-expiry cleanup for a session expiring
+  // mid-session (post-bootstrap) while the app stays open -- registered
+  // below as query-client's global onError handler, which is what a live
+  // query/mutation hits when the API starts returning SESSION_REQUIRED.
+  // (The bootstrap restore() effect further down has its own equivalent
+  // inline cleanup for the startup-time case.) A concurrent burst of
+  // failing queries/mutations can each call this, but the ref guard plus
+  // idempotent React state setters mean it still results in one effective
+  // sign-out, not one per failure.
+  const expiringSessionRef = useRef(false)
+  const expireSession = useCallback(async () => {
+    if (expiringSessionRef.current) return
+    expiringSessionRef.current = true
+    try {
+      await supabase.auth.signOut().catch(() => undefined)
+      setSession(null)
+      setUserContext(null)
+      clearTenant(true)
+      resetLockState()
+      queryClient.clear()
+      setBootstrapState('UNAUTHENTICATED')
+    } finally {
+      expiringSessionRef.current = false
+    }
+  }, [clearTenant, queryClient, resetLockState])
+
+  useEffect(() => {
+    setSessionExpiredHandler(() => {
+      void expireSession()
+    })
+    return () => setSessionExpiredHandler(null)
+  }, [expireSession])
 
   const signOut = useCallback(async () => {
     await queryClient.cancelQueries()

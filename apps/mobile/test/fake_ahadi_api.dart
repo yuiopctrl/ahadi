@@ -409,8 +409,14 @@ class FakeAhadiApi implements AhadiApi {
     };
   }
 
+  Map<String, dynamic> contactUsage = const {
+    'used': 0,
+    'limit': null,
+    'available': null,
+  };
+
   @override
-  Future<List<Map<String, dynamic>>> contacts(
+  Future<Map<String, dynamic>> contacts(
     String tenantId, {
     String? search,
     int? limit,
@@ -432,7 +438,19 @@ class FakeAhadiApi implements AhadiApi {
         ['phone_e164', 'alternative_phone_e164'],
       );
     }).toList();
-    return filtered.skip(offset ?? 0).take(limit ?? filtered.length).toList();
+    final safeOffset = offset ?? 0;
+    final safeLimit = limit ?? filtered.length;
+    final page = filtered.skip(safeOffset).take(safeLimit).toList();
+    return {
+      'data': page,
+      'pagination': {
+        'limit': safeLimit,
+        'offset': safeOffset,
+        'totalRows': filtered.length,
+        'hasMore': (safeOffset + safeLimit) < filtered.length,
+      },
+      'usage': contactUsage,
+    };
   }
 
   @override
@@ -563,6 +581,7 @@ class FakeAhadiApi implements AhadiApi {
         'event_member_id': eventMemberId,
         'full_name': 'Jane Contact',
         'phone_e164': '+255712345678',
+        'pledge_id': 'pledge-a',
         'pledged_amount': 100000,
         'total_allocated': 40000,
         'outstanding_amount': 60000,
@@ -694,6 +713,31 @@ class FakeAhadiApi implements AhadiApi {
         'pledge_status': 'PARTIALLY_PAID',
       },
     ];
+  }
+
+  @override
+  Future<Map<String, dynamic>> listEventMembers(
+    String tenantId,
+    String eventId, {
+    String? search,
+    String pledgeStatus = 'ALL',
+    String phoneStatus = 'ALL',
+    String sort = 'NAME',
+    String direction = 'ASC',
+    int? limit,
+    int? offset,
+  }) async {
+    lastTenantId = tenantId;
+    final rows = await eventMembers(tenantId, eventId);
+    return {
+      'data': rows,
+      'pagination': {
+        'limit': limit,
+        'offset': offset ?? 0,
+        'totalRows': rows.length,
+        'hasMore': false,
+      },
+    };
   }
 
   @override
@@ -1298,9 +1342,7 @@ class FakeAhadiApi implements AhadiApi {
   }
 
   @override
-  Future<List<Map<String, dynamic>>> customSmsTemplates(
-    String tenantId,
-  ) async {
+  Future<List<Map<String, dynamic>>> customSmsTemplates(String tenantId) async {
     lastTenantId = tenantId;
     return List<Map<String, dynamic>>.from(customTemplates);
   }

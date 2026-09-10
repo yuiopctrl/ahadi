@@ -38,6 +38,12 @@ class SessionController extends ChangeNotifier {
   String? errorMessage;
   bool isSubmitting = false;
 
+  /// Set when a live (post-bootstrap) API call detects an expired/invalid
+  /// session, so the Login screen can show a clear reason instead of a
+  /// silent bounce. Cleared on the next login attempt.
+  bool sessionExpired = false;
+  bool _handlingSessionExpiry = false;
+
   String? get accessToken => credentials?.accessToken;
   bool get isAuthenticated => credentials != null && userContext != null;
   List<TenantMembership> get activeMemberships =>
@@ -88,6 +94,7 @@ class SessionController extends ChangeNotifier {
     if (isSubmitting) return;
     isSubmitting = true;
     errorMessage = null;
+    sessionExpired = false;
     notifyListeners();
     try {
       final normalizedPhone = normalizeTanzaniaPhone(phone);
@@ -384,7 +391,30 @@ class SessionController extends ChangeNotifier {
     return _api.eventMembers(_requireTenantId(), eventId);
   }
 
-  Future<List<Map<String, dynamic>>> contacts({
+  Future<Map<String, dynamic>> listEventMembers(
+    String eventId, {
+    String? search,
+    String pledgeStatus = 'ALL',
+    String phoneStatus = 'ALL',
+    String sort = 'NAME',
+    String direction = 'ASC',
+    int? limit,
+    int? offset,
+  }) {
+    return _api.listEventMembers(
+      _requireTenantId(),
+      eventId,
+      search: search,
+      pledgeStatus: pledgeStatus,
+      phoneStatus: phoneStatus,
+      sort: sort,
+      direction: direction,
+      limit: limit,
+      offset: offset,
+    );
+  }
+
+  Future<Map<String, dynamic>> contacts({
     String? search,
     int? limit,
     int? offset,
@@ -642,44 +672,25 @@ class SessionController extends ChangeNotifier {
     return _api.customSmsBulkPreview(_requireTenantId(), eventId, payload);
   }
 
+  /// Submits the whole recipient set in a single call -- campaign
+  /// creation, entitlement checking, and provider batching all belong to
+  /// the server (see rpc_enqueue_custom_sms_bulk), not to the client. A
+  /// prior version chunked this into repeated 100-recipient requests,
+  /// which is exactly the pattern that made ">100 recipients" look like a
+  /// hard ceiling instead of a provider/request-size implementation
+  /// detail the server already handles.
   Future<Map<String, dynamic>> sendCustomSmsBulk(
     String eventId,
     String code,
     List<String> eventMemberIds,
     String senderId,
-  ) async {
-    const chunkSize = 100;
-    var requested = 0;
-    var queued = 0;
-    var noPhone = 0;
-    var smsDisabled = 0;
-    Object? lastBatchId;
-    for (var start = 0; start < eventMemberIds.length; start += chunkSize) {
-      final chunk = eventMemberIds.sublist(
-        start,
-        (start + chunkSize).clamp(0, eventMemberIds.length),
-      );
-      final response = await _api.sendCustomSmsBulk(_requireTenantId(), eventId, {
-        'code': code,
-        'eventMemberIds': chunk,
-        'senderId': senderId,
-        'idempotencyKey': _uuidV4(),
-      });
-      requested += _intFrom(response['requested']) ?? chunk.length;
-      queued += _intFrom(response['queued']) ?? 0;
-      final skipped = response['skipped'];
-      if (skipped is Map) {
-        noPhone += _intFrom(skipped['noPhone']) ?? 0;
-        smsDisabled += _intFrom(skipped['smsDisabled']) ?? 0;
-      }
-      lastBatchId = response['batchId'];
-    }
-    return {
-      'requested': requested,
-      'queued': queued,
-      'skipped': {'noPhone': noPhone, 'smsDisabled': smsDisabled},
-      'batchId': lastBatchId,
-    };
+  ) {
+    return _api.sendCustomSmsBulk(_requireTenantId(), eventId, {
+      'code': code,
+      'eventMemberIds': eventMemberIds,
+      'senderId': senderId,
+      'idempotencyKey': _uuidV4(),
+    });
   }
 
   Future<Map<String, dynamic>> smsBulkPreview(
@@ -905,6 +916,54 @@ class SessionController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Centralized session-expiry handling, called by [ApiClient] the
+  /// moment ANY authenticated request comes back 401/SESSION_REQUIRED --
+  /// not scattered across individual screens. Idempotent: several
+  /// requests failing concurrently (or a resume-time check landing after
+  /// one already did) each call this, but only the first actually clears
+  /// state / notifies; the rest are no-ops. No token refresh is attempted
+  /// first because this app has no refresh-token flow today (see
+  /// SessionCredentials.refreshToken -- stored but never used to mint a
+  /// new access token); the only way to obtain one is a fresh phone+PIN
+  /// login, so an expired session always goes straight to Login.
+  Future<void> handleSessionExpired() async {
+    if (_handlingSessionExpiry ||
+        bootstrapState == BootstrapState.unauthenticated) {
+      return;
+    }
+    _handlingSessionExpiry = true;
+    credentials = null;
+    userContext = null;
+    selectedTenantContext = null;
+    selectedTenantId = null;
+    selectedEventId = null;
+    sessionExpired = true;
+    await _storage.clearSession();
+    bootstrapState = BootstrapState.unauthenticated;
+    notifyListeners();
+    _handlingSessionExpiry = false;
+  }
+
+  /// Best-effort session check on app resume, so a session that expired
+  /// while the app was backgrounded doesn't sit showing stale
+  /// authenticated UI until the user happens to trigger a request. A
+  /// network hiccup here must never log the user out -- only an actual
+  /// expired-session response does, via the same [handleSessionExpired]
+  /// path every other request uses.
+  Future<void> validateSessionOnResume() async {
+    if (bootstrapState != BootstrapState.ready) return;
+    try {
+      await _api.me();
+    } on ApiFailure catch (failure) {
+      if (failure.isSessionExpired) {
+        await handleSessionExpired();
+      }
+    } catch (_) {
+      // Ignore -- best-effort only, and ApiClient's own onSessionExpired
+      // hook is the authoritative path for real expiry.
+    }
+  }
+
   String _requireTenantId() {
     final tenantId = selectedTenantId;
     if (tenantId == null) {
@@ -991,11 +1050,4 @@ String _uuidV4() {
   String hex(int length) =>
       List.generate(length, (_) => random.nextInt(16).toRadixString(16)).join();
   return '${hex(8)}-${hex(4)}-4${hex(3)}-${(8 + random.nextInt(4)).toRadixString(16)}${hex(3)}-${hex(12)}';
-}
-
-int? _intFrom(Object? value) {
-  if (value is int) return value;
-  if (value is num) return value.round();
-  if (value is String) return int.tryParse(value);
-  return null;
 }

@@ -57,7 +57,9 @@ class ReportsScreen extends StatelessWidget {
                   context,
                   PaymentsScreen(
                     controller: controller,
-                    appBar: AppBar(title: Text(context.t('reports.paymentsReportTitle'))),
+                    appBar: AppBar(
+                      title: Text(context.t('reports.paymentsReportTitle')),
+                    ),
                   ),
                 ),
               ),
@@ -164,7 +166,10 @@ class _FinancialSummaryReportScreenState
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            _EventHeader(title: context.t('reports.financialSummary'), event: event),
+            _EventHeader(
+              title: context.t('reports.financialSummary'),
+              event: event,
+            ),
             const SizedBox(height: 12),
             FutureBuilder<Map<String, dynamic>>(
               future: future,
@@ -174,7 +179,10 @@ class _FinancialSummaryReportScreenState
                 }
                 if (snapshot.hasError) {
                   return _ErrorCard(
-                    message: friendlyErrorText(snapshot.error, context.t('reports.loadError')),
+                    message: friendlyErrorText(
+                      snapshot.error,
+                      context.t('reports.loadError'),
+                    ),
                     onRetry: _refresh,
                   );
                 }
@@ -205,10 +213,22 @@ class _FinancialSummaryReportScreenState
                     const SizedBox(height: 12),
                     _MetricGrid(
                       metrics: [
-                        _Metric(context.t('dashboard.totalPledged'), moneyText(pledged)),
-                        _Metric(context.t('dashboard.received'), moneyText(received)),
-                        _Metric(context.t('dashboard.outstanding'), moneyText(outstanding)),
-                        _Metric(context.t('reports.collectionRate'), '${rate.round()}%'),
+                        _Metric(
+                          context.t('dashboard.totalPledged'),
+                          moneyText(pledged),
+                        ),
+                        _Metric(
+                          context.t('dashboard.received'),
+                          moneyText(received),
+                        ),
+                        _Metric(
+                          context.t('dashboard.outstanding'),
+                          moneyText(outstanding),
+                        ),
+                        _Metric(
+                          context.t('reports.collectionRate'),
+                          '${rate.round()}%',
+                        ),
                       ],
                     ),
                     const SizedBox(height: 12),
@@ -320,8 +340,16 @@ class _PledgeReportScreenState extends State<PledgeReportScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             _SortOption(context.t('reports.sort.memberAZ'), 'MEMBER', 'ASC'),
-            _SortOption(context.t('reports.sort.highestPledged'), 'PLEDGED', 'DESC'),
-            _SortOption(context.t('reports.sort.highestOutstanding'), 'OUTSTANDING', 'DESC'),
+            _SortOption(
+              context.t('reports.sort.highestPledged'),
+              'PLEDGED',
+              'DESC',
+            ),
+            _SortOption(
+              context.t('reports.sort.highestOutstanding'),
+              'OUTSTANDING',
+              'DESC',
+            ),
             _SortOption(context.t('reports.sort.dueDate'), 'DUE_DATE', 'ASC'),
           ],
         ),
@@ -373,14 +401,18 @@ class _PledgeReportScreenState extends State<PledgeReportScreen> {
                 }
                 if (snapshot.hasError) {
                   return _ErrorCard(
-                    message: friendlyErrorText(snapshot.error, context.t('reports.loadError')),
+                    message: friendlyErrorText(
+                      snapshot.error,
+                      context.t('reports.loadError'),
+                    ),
                     onRetry: _refresh,
                   );
                 }
                 final report = snapshot.data ?? _emptyReport();
                 final summary = _jsonMap(report['summary']);
                 final rows = _objectList(report['data']);
-                if (rows.isEmpty) return _EmptyCard(context.t('reports.noPledgesFound'));
+                if (rows.isEmpty)
+                  return _EmptyCard(context.t('reports.noPledgesFound'));
                 return Column(
                   children: [
                     _MetricGrid(
@@ -389,8 +421,14 @@ class _PledgeReportScreenState extends State<PledgeReportScreen> {
                           context.t('shell.more.pledges'),
                           '${numberFrom(summary['pledgeCount'])?.round() ?? rows.length}',
                         ),
-                        _Metric(context.t('common.pledged'), moneyText(summary['totalPledged'])),
-                        _Metric(context.t('billing.paid'), moneyText(summary['totalPaid'])),
+                        _Metric(
+                          context.t('common.pledged'),
+                          moneyText(summary['totalPledged']),
+                        ),
+                        _Metric(
+                          context.t('billing.paid'),
+                          moneyText(summary['totalPaid']),
+                        ),
                         _Metric(
                           context.t('dashboard.outstanding'),
                           moneyText(summary['totalOutstanding']),
@@ -454,7 +492,8 @@ class EventsSummaryReportScreen extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           Text(
-            controller.selectedTenantContext?.tenantName ?? context.t('billing.organization'),
+            controller.selectedTenantContext?.tenantName ??
+                context.t('billing.organization'),
             style: const TextStyle(color: AhadiColors.muted),
           ),
           const SizedBox(height: 12),
@@ -615,9 +654,18 @@ class _EventMetaCard extends StatelessWidget {
         padding: const EdgeInsets.all(14),
         child: Column(
           children: [
-            _InfoLine(label: context.t('events.eventName'), value: event?.name ?? context.t('contacts.notSet')),
-            _InfoLine(label: context.t('eventDetail.status'), value: event?.status ?? context.t('contacts.notSet')),
-            _InfoLine(label: context.t('reports.eventDateLabel'), value: dateText(event?.eventDate)),
+            _InfoLine(
+              label: context.t('events.eventName'),
+              value: event?.name ?? context.t('contacts.notSet'),
+            ),
+            _InfoLine(
+              label: context.t('eventDetail.status'),
+              value: event?.status ?? context.t('contacts.notSet'),
+            ),
+            _InfoLine(
+              label: context.t('reports.eventDateLabel'),
+              value: dateText(event?.eventDate),
+            ),
             _InfoLine(
               label: context.t('events.pledgeDeadlineShort'),
               value: dateText(event?.pledgeDeadline),
@@ -840,13 +888,19 @@ class _ThreeAmounts extends StatelessWidget {
     return Row(
       children: [
         Expanded(
-          child: _TinyAmount(label: context.t('common.pledged'), value: pledged),
+          child: _TinyAmount(
+            label: context.t('common.pledged'),
+            value: pledged,
+          ),
         ),
         Expanded(
           child: _TinyAmount(label: context.t('billing.paid'), value: paid),
         ),
         Expanded(
-          child: _TinyAmount(label: context.t('dashboard.outstanding'), value: outstanding),
+          child: _TinyAmount(
+            label: context.t('dashboard.outstanding'),
+            value: outstanding,
+          ),
         ),
       ],
     );
@@ -972,7 +1026,10 @@ class _ErrorCard extends StatelessWidget {
           children: [
             Text(message, style: const TextStyle(color: AhadiColors.danger)),
             const SizedBox(height: 12),
-            OutlinedButton(onPressed: onRetry, child: Text(context.t('common.retry'))),
+            OutlinedButton(
+              onPressed: onRetry,
+              child: Text(context.t('common.retry')),
+            ),
           ],
         ),
       ),
@@ -1014,9 +1071,12 @@ bool _hasNext(Map<String, dynamic> report) {
 
 String _sortLabel(BuildContext context, String sort, String direction) {
   if (sort == 'PLEDGED') return context.t('reports.sort.highestPledged');
-  if (sort == 'OUTSTANDING') return context.t('reports.sort.highestOutstanding');
+  if (sort == 'OUTSTANDING')
+    return context.t('reports.sort.highestOutstanding');
   if (sort == 'DUE_DATE') return context.t('reports.sort.dueDate');
-  return direction == 'DESC' ? context.t('reports.sort.memberZA') : context.t('reports.sort.memberAZ');
+  return direction == 'DESC'
+      ? context.t('reports.sort.memberZA')
+      : context.t('reports.sort.memberAZ');
 }
 
 String _text(

@@ -716,6 +716,11 @@ const exportLimits: Record<ReportExportFormat, number> = {
   PRINT: 2_000,
 }
 
+// Request-size sanity ceiling for a single custom SMS bulk-send call.
+// Deliberately its own constant, not env.BALANCE_REMINDER_MAX_BATCH_SIZE --
+// see the comment at its call site for why sharing that var was a bug.
+const CUSTOM_SMS_MAX_BATCH_SIZE = 2000
+
 const updateMemberSchema = z.object({
   fullName: z.string().trim().min(2).max(160).optional(),
   phoneE164: z.string().trim().optional().nullable(),
@@ -730,6 +735,15 @@ const updateMemberSchema = z.object({
 const listContactsQuerySchema = z.object({
   search: z.string().trim().max(160).optional().default(''),
   limit: z.coerce.number().int().min(1).max(100).optional().default(20),
+  offset: z.coerce.number().int().min(0).optional().default(0),
+})
+const listEventMembersQuerySchema = z.object({
+  search: z.string().trim().max(160).optional(),
+  pledgeStatus: z.enum(['ALL', 'HAS_PLEDGE', 'NO_PLEDGE', 'FULLY_PAID', 'PARTIALLY_PAID', 'UNPAID']).optional().default('ALL'),
+  phoneStatus: z.enum(['ALL', 'HAS_PHONE', 'NO_PHONE']).optional().default('ALL'),
+  sort: z.enum(['NAME', 'CREATED', 'PLEDGE_AMOUNT', 'OUTSTANDING']).optional().default('NAME'),
+  direction: z.enum(['ASC', 'DESC']).optional().default('ASC'),
+  limit: z.coerce.number().int().min(1).max(500).optional(),
   offset: z.coerce.number().int().min(0).optional().default(0),
 })
 const isoDateLikeSchema = z.string().trim().min(1).refine((value) => !Number.isNaN(Date.parse(value)), 'Invalid date')
@@ -853,6 +867,7 @@ const knownDatabaseCodes: ApiErrorCode[] = [
   'SUBSCRIPTION_NOT_FOUND',
   'INVALID_SUBSCRIPTION_STATUS',
   'REASON_REQUIRED',
+  'CONTACT_LIMIT_REACHED',
 ]
 
 const developmentWebOrigins = new Set([
@@ -3484,12 +3499,27 @@ app.get('/api/v1/events/:eventId/members', requireAuth, loadUserContext, require
   try {
     const tenantId = tenantIdFromRequest(request)
     const eventId = uuidParamSchema.parse(request.params['eventId'])
+    const query = listEventMembersQuerySchema.parse(request.query)
     const client = createUserSupabase(request.auth?.accessToken ?? '')
-    const { data, error } = await client.rpc('rpc_list_event_members', { p_tenant_id: tenantId, p_event_id: eventId })
+    const { data, error } = await client.rpc('rpc_list_event_members', {
+      p_tenant_id: tenantId,
+      p_event_id: eventId,
+      p_search: query.search || null,
+      p_pledge_status: query.pledgeStatus,
+      p_phone_status: query.phoneStatus,
+      p_sort: query.sort,
+      p_direction: query.direction,
+      p_limit: query.limit ?? null,
+      p_offset: query.offset,
+    })
     if (error) {
       throwFinancialDatabaseError(error, 'EVENT_MEMBERS_LIST_FAILED')
     }
-    response.json({ data: jsonArray(data) })
+    const result = jsonRecord(data)
+    response.json({
+      data: jsonArray(result['data']),
+      pagination: jsonRecord(result['pagination']),
+    })
   } catch (error) {
     next(error)
   }
@@ -3500,14 +3530,21 @@ app.get('/api/v1/contacts', requireAuth, loadUserContext, requireTenantContext, 
     const tenantId = tenantIdFromRequest(request)
     const query = listContactsQuerySchema.parse(request.query)
     const client = createUserSupabase(request.auth?.accessToken ?? '')
-    const { data, error } = await client.rpc('rpc_list_contacts', { p_tenant_id: tenantId })
+    const { data, error } = await client.rpc('rpc_list_contacts', {
+      p_tenant_id: tenantId,
+      p_search: query.search || null,
+      p_limit: query.limit,
+      p_offset: query.offset,
+    })
     if (error) {
       throwFinancialDatabaseError(error, 'CONTACTS_LIST_FAILED')
     }
-    const rows = jsonArray(data).filter((row) =>
-      matchesNameOrPhoneSearch(row, query.search, ['full_name'], ['phone_e164', 'alternative_phone_e164']),
-    )
-    response.json({ data: rows.slice(query.offset, query.offset + query.limit) })
+    const result = jsonRecord(data)
+    response.json({
+      data: jsonArray(result['data']),
+      pagination: jsonRecord(result['pagination']),
+      usage: jsonRecord(result['usage']),
+    })
   } catch (error) {
     next(error)
   }
@@ -4591,7 +4628,13 @@ app.post('/api/v1/events/:eventId/messages/custom/bulk', requireAuth, loadUserCo
       p_event_member_ids: input.eventMemberIds,
       p_sender_id: input.senderId,
       p_idempotency_key: input.idempotencyKey,
-      p_max_batch_size: env.BALANCE_REMINDER_MAX_BATCH_SIZE,
+      // Deliberately its own constant, not env.BALANCE_REMINDER_MAX_BATCH_SIZE:
+      // that env var previously governed this unrelated feature's per-call
+      // recipient cap too, so tuning it for balance reminders would have
+      // silently capped custom SMS campaigns as well. This is a request-size
+      // sanity ceiling only -- actual SMS entitlement is enforced separately
+      // by rpc_enqueue_custom_sms_bulk via sms_allowance_status.
+      p_max_batch_size: CUSTOM_SMS_MAX_BATCH_SIZE,
     })
     if (error) {
       throwFinancialDatabaseError(error, 'CUSTOM_SMS_BULK_QUEUE_FAILED')

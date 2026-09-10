@@ -190,7 +190,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
           const SizedBox(height: 16),
           FilledButton(
             onPressed: busy ? null : _start,
-            child: Text(busy ? context.t('auth.checking') : context.t('auth.continue')),
+            child: Text(
+              busy ? context.t('auth.checking') : context.t('auth.continue'),
+            ),
           ),
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
@@ -223,7 +225,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
             enabled: !busy,
             maxLength: 6,
             keyboardType: TextInputType.number,
-            decoration: InputDecoration(labelText: context.t('auth.sixDigitCode')),
+            decoration: InputDecoration(
+              labelText: context.t('auth.sixDigitCode'),
+            ),
             onChanged: (value) {
               if (value.length == 6) _verifyOtp();
             },
@@ -231,7 +235,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
           const SizedBox(height: 12),
           FilledButton(
             onPressed: busy || otp.text.length != 6 ? null : _verifyOtp,
-            child: Text(busy ? context.t('auth.verifying') : context.t('auth.verifyCode')),
+            child: Text(
+              busy ? context.t('auth.verifying') : context.t('auth.verifyCode'),
+            ),
           ),
         ];
       case _RegisterStep.pin:
@@ -247,7 +253,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
           const SizedBox(height: 16),
           FilledButton(
             onPressed: busy ? null : _setPin,
-            child: Text(busy ? context.t('auth.saving') : context.t('auth.continue')),
+            child: Text(
+              busy ? context.t('auth.saving') : context.t('auth.continue'),
+            ),
           ),
         ];
       case _RegisterStep.profile:
@@ -267,7 +275,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
           const SizedBox(height: 16),
           FilledButton(
             onPressed: busy ? null : _saveProfile,
-            child: Text(busy ? context.t('auth.saving') : context.t('auth.continue')),
+            child: Text(
+              busy ? context.t('auth.saving') : context.t('auth.continue'),
+            ),
           ),
         ];
       case _RegisterStep.invitations:

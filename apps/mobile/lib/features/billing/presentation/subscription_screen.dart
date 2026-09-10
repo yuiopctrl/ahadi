@@ -100,7 +100,10 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                   label: Text(context.t('billing.changePlan')),
                 ),
                 const SizedBox(height: 18),
-                Text(context.t('billing.invoices'), style: AhadiTypography.sectionTitle),
+                Text(
+                  context.t('billing.invoices'),
+                  style: AhadiTypography.sectionTitle,
+                ),
                 const SizedBox(height: 8),
                 if (invoices.isEmpty)
                   _StateCard(
@@ -276,7 +279,10 @@ class _UsageCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(context.t('billing.usageAndLimits'), style: AhadiTypography.sectionTitle),
+          Text(
+            context.t('billing.usageAndLimits'),
+            style: AhadiTypography.sectionTitle,
+          ),
           const SizedBox(height: 12),
           LinearProgressIndicator(
             value: progress,
@@ -288,9 +294,18 @@ class _UsageCard extends StatelessWidget {
             spacing: 8,
             runSpacing: 8,
             children: [
-              _LimitPill(label: context.t('billing.usedEventSlots'), value: used.toString()),
-              _LimitPill(label: context.t('billing.maxEventSlots'), value: limit.toString()),
-              _LimitPill(label: context.t('billing.availableSlots'), value: available.toString()),
+              _LimitPill(
+                label: context.t('billing.usedEventSlots'),
+                value: used.toString(),
+              ),
+              _LimitPill(
+                label: context.t('billing.maxEventSlots'),
+                value: limit.toString(),
+              ),
+              _LimitPill(
+                label: context.t('billing.availableSlots'),
+                value: available.toString(),
+              ),
               _LimitPill(
                 label: context.t('billing.includedSms'),
                 value: _number(subscription.limits, [
@@ -325,14 +340,23 @@ class _BillingStatsCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(context.t('billing.billing'), style: AhadiTypography.sectionTitle),
+          Text(
+            context.t('billing.billing'),
+            style: AhadiTypography.sectionTitle,
+          ),
           const SizedBox(height: 10),
-          _InfoRow(label: context.t('billing.openBalance'), value: moneyText(openBalance)),
+          _InfoRow(
+            label: context.t('billing.openBalance'),
+            value: moneyText(openBalance),
+          ),
           _InfoRow(
             label: context.t('billing.payableInvoices'),
             value: payableInvoiceCount.toString(),
           ),
-          _InfoRow(label: context.t('billing.verifiedPayments'), value: paymentCount.toString()),
+          _InfoRow(
+            label: context.t('billing.verifiedPayments'),
+            value: paymentCount.toString(),
+          ),
           _InfoRow(
             label: context.t('billing.pendingAttempts'),
             value: pendingIntentCount.toString(),

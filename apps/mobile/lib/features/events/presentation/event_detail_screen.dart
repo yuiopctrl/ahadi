@@ -89,7 +89,10 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
         title: Text(context.t('eventDetail.title')),
         actions: [
           if (canEdit)
-            TextButton(onPressed: _editEvent, child: Text(context.t('common.edit'))),
+            TextButton(
+              onPressed: _editEvent,
+              child: Text(context.t('common.edit')),
+            ),
         ],
       ),
       body: FutureBuilder<_EventDetailData>(
@@ -111,10 +114,22 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
                 const SizedBox(height: 12),
                 FilterTabs<int>(
                   items: [
-                    FilterTabItem(value: 0, label: context.t('eventDetail.overview')),
-                    FilterTabItem(value: 1, label: context.t('dashboard.members')),
-                    FilterTabItem(value: 2, label: context.t('shell.more.pledges')),
-                    FilterTabItem(value: 3, label: context.t('shell.nav.payments')),
+                    FilterTabItem(
+                      value: 0,
+                      label: context.t('eventDetail.overview'),
+                    ),
+                    FilterTabItem(
+                      value: 1,
+                      label: context.t('dashboard.members'),
+                    ),
+                    FilterTabItem(
+                      value: 2,
+                      label: context.t('shell.more.pledges'),
+                    ),
+                    FilterTabItem(
+                      value: 3,
+                      label: context.t('shell.nav.payments'),
+                    ),
                   ],
                   selected: tabIndex,
                   onChanged: (value) => setState(() => tabIndex = value),
@@ -125,7 +140,6 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
                   _MembersTab(
                     controller: widget.controller,
                     event: event,
-                    members: data.members,
                     onChanged: _refresh,
                   ),
                 if (tabIndex == 2)
@@ -218,7 +232,9 @@ class _EditEventScreenState extends State<EditEventScreen> {
         children: [
           TextField(
             controller: name,
-            decoration: InputDecoration(labelText: context.t('events.eventName')),
+            decoration: InputDecoration(
+              labelText: context.t('events.eventName'),
+            ),
           ),
           const SizedBox(height: 12),
           DropdownButtonFormField<String>(
@@ -233,13 +249,17 @@ class _EditEventScreenState extends State<EditEventScreen> {
                 .toList(),
             onChanged: (value) =>
                 setState(() => eventType = value ?? 'WEDDING'),
-            decoration: InputDecoration(labelText: context.t('events.eventType')),
+            decoration: InputDecoration(
+              labelText: context.t('events.eventType'),
+            ),
           ),
           if (eventType == 'OTHER') ...[
             const SizedBox(height: 12),
             TextField(
               controller: customType,
-              decoration: InputDecoration(labelText: context.t('events.customEventType')),
+              decoration: InputDecoration(
+                labelText: context.t('events.customEventType'),
+              ),
             ),
           ],
           const SizedBox(height: 12),
@@ -288,7 +308,11 @@ class _EditEventScreenState extends State<EditEventScreen> {
               Expanded(
                 child: FilledButton(
                   onPressed: saving ? null : _save,
-                  child: Text(saving ? context.t('auth.saving') : context.t('eventDetail.saveChanges')),
+                  child: Text(
+                    saving
+                        ? context.t('auth.saving')
+                        : context.t('eventDetail.saveChanges'),
+                  ),
                 ),
               ),
             ],
@@ -430,17 +454,41 @@ class _OverviewTab extends StatelessWidget {
   }
 }
 
+const _memberSortOptions = <(String, String, String)>[
+  ('NAME', 'ASC', 'eventDetail.sort.nameAsc'),
+  ('NAME', 'DESC', 'eventDetail.sort.nameDesc'),
+  ('CREATED', 'DESC', 'eventDetail.sort.newest'),
+  ('CREATED', 'ASC', 'eventDetail.sort.oldest'),
+  ('PLEDGE_AMOUNT', 'DESC', 'eventDetail.sort.pledgeHighLow'),
+  ('PLEDGE_AMOUNT', 'ASC', 'eventDetail.sort.pledgeLowHigh'),
+  ('OUTSTANDING', 'DESC', 'eventDetail.sort.outstandingHighLow'),
+  ('OUTSTANDING', 'ASC', 'eventDetail.sort.outstandingLowHigh'),
+];
+
+const _pledgeFilterOptions = <(String, String)>[
+  ('ALL', 'eventDetail.filter.all'),
+  ('HAS_PLEDGE', 'eventDetail.filter.hasPledge'),
+  ('NO_PLEDGE', 'eventDetail.filter.noPledge'),
+  ('FULLY_PAID', 'eventDetail.filter.fullyPaid'),
+  ('PARTIALLY_PAID', 'eventDetail.filter.partiallyPaid'),
+  ('UNPAID', 'eventDetail.filter.unpaid'),
+];
+
+const _phoneFilterOptions = <(String, String)>[
+  ('ALL', 'eventDetail.filter.all'),
+  ('HAS_PHONE', 'eventDetail.filter.hasPhone'),
+  ('NO_PHONE', 'eventDetail.filter.noPhone'),
+];
+
 class _MembersTab extends StatefulWidget {
   const _MembersTab({
     required this.controller,
     required this.event,
-    required this.members,
     required this.onChanged,
   });
 
   final SessionController controller;
   final EventSummary event;
-  final List<Map<String, dynamic>> members;
   final VoidCallback onChanged;
 
   @override
@@ -452,29 +500,65 @@ class _MembersTabState extends State<_MembersTab> {
 
   bool pickerOpen = false;
   String query = '';
+  String pledgeFilter = 'ALL';
+  String phoneFilter = 'ALL';
+  String sort = 'NAME';
+  String direction = 'ASC';
   int page = 0;
+  Timer? debounce;
+  late Future<Map<String, dynamic>> future;
+
+  @override
+  void initState() {
+    super.initState();
+    future = _load();
+  }
+
+  @override
+  void dispose() {
+    debounce?.cancel();
+    super.dispose();
+  }
+
+  Future<Map<String, dynamic>> _load() {
+    return widget.controller.listEventMembers(
+      widget.event.id,
+      search: query,
+      pledgeStatus: pledgeFilter,
+      phoneStatus: phoneFilter,
+      sort: sort,
+      direction: direction,
+      limit: pageSize,
+      offset: page * pageSize,
+    );
+  }
+
+  void _refresh() => setState(() => future = _load());
+
+  void _onSearch(String value) {
+    debounce?.cancel();
+    debounce = Timer(const Duration(milliseconds: 300), () {
+      if (!mounted) return;
+      setState(() {
+        query = value;
+        page = 0;
+        future = _load();
+      });
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
-    final filtered = widget.members.where((member) {
-      final haystack =
-          '${member['full_name'] ?? ''} ${member['phone_e164'] ?? ''}'
-              .toLowerCase();
-      return haystack.contains(query.toLowerCase());
-    }).toList();
-    final totalPages = filtered.isEmpty
-        ? 1
-        : ((filtered.length - 1) ~/ pageSize) + 1;
-    final effectivePage = page >= totalPages ? totalPages - 1 : page;
-    final visible = filtered.skip(effectivePage * pageSize).take(pageSize);
+    final canAssign =
+        widget.controller.selectedTenantContext?.isOwner == true ||
+        widget.controller.selectedTenantContext?.permissions.contains(
+              'members.assign_event',
+            ) ==
+            true;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (widget.controller.selectedTenantContext?.isOwner == true ||
-            widget.controller.selectedTenantContext?.permissions.contains(
-                  'members.assign_event',
-                ) ==
-                true)
+        if (canAssign)
           FilledButton.icon(
             onPressed: () => setState(() => pickerOpen = !pickerOpen),
             icon: const Icon(Icons.add),
@@ -486,6 +570,7 @@ class _MembersTabState extends State<_MembersTab> {
             event: widget.event,
             onDone: () {
               setState(() => pickerOpen = false);
+              _refresh();
               widget.onChanged();
             },
           ),
@@ -495,58 +580,231 @@ class _MembersTabState extends State<_MembersTab> {
             labelText: context.t('eventDetail.searchMembers'),
             prefixIcon: const Icon(Icons.search),
           ),
-          onChanged: (value) => setState(() {
-            query = value;
-            page = 0;
-          }),
+          onChanged: _onSearch,
         ),
         const SizedBox(height: 8),
-        if (filtered.isEmpty)
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Text(context.t('eventDetail.noMembersFound')),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            _SortDropdown(
+              sort: sort,
+              direction: direction,
+              onChanged: (nextSort, nextDirection) => setState(() {
+                sort = nextSort;
+                direction = nextDirection;
+                page = 0;
+                future = _load();
+              }),
             ),
-          )
-        else ...[
-          ...visible.map(
-            (member) => AhadiListRow(
-              title: titleCaseName(member['full_name']),
-              subtitle: stringFrom(member, 'phone_e164', context.t('contacts.noPhone')),
-              status: stringFrom(member, 'pledge_status', 'NO PLEDGE'),
-              financialSummary: FinancialSummary(
-                pledged: member['pledged_amount'],
-                received: member['total_allocated'] ?? member['paid_amount'],
-                outstanding: member['outstanding_amount'],
-              ),
-              meta: (numberFrom(member['pledged_amount']) ?? 0) <= 0
-                  ? context.t('eventDetail.noPledge')
-                  : null,
-              onTap: () => Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => EventMemberDetailScreen(
-                    controller: widget.controller,
-                    event: widget.event,
-                    eventMemberId: stringFrom(member, 'event_member_id'),
+            _FilterDropdown(
+              value: pledgeFilter,
+              options: _pledgeFilterOptions,
+              label: context.t('eventDetail.filter.pledgeHint'),
+              onChanged: (value) => setState(() {
+                pledgeFilter = value;
+                page = 0;
+                future = _load();
+              }),
+            ),
+            _FilterDropdown(
+              value: phoneFilter,
+              options: _phoneFilterOptions,
+              label: context.t('eventDetail.filter.phoneHint'),
+              onChanged: (value) => setState(() {
+                phoneFilter = value;
+                page = 0;
+                future = _load();
+              }),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        FutureBuilder<Map<String, dynamic>>(
+          future: future,
+          builder: (context, snapshot) {
+            if (snapshot.hasError) {
+              return ErrorPanel(
+                message: friendlyErrorText(
+                  snapshot.error,
+                  context.t('eventDetail.membersLoadError'),
+                ),
+                onRetry: _refresh,
+              );
+            }
+            if (!snapshot.hasData) {
+              return const LoadingCards(count: 3);
+            }
+            final response = snapshot.data!;
+            final rows =
+                (response['data'] is List
+                        ? (response['data'] as List)
+                        : const [])
+                    .whereType<Map<String, dynamic>>()
+                    .toList();
+            final pagination = response['pagination'] is Map
+                ? Map<String, dynamic>.from(response['pagination'] as Map)
+                : const <String, dynamic>{};
+            final totalRows =
+                numberFrom(pagination['totalRows'])?.round() ?? rows.length;
+            final totalPages = totalRows == 0
+                ? 1
+                : ((totalRows - 1) ~/ pageSize) + 1;
+            if (rows.isEmpty) {
+              return Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Text(context.t('eventDetail.noMembersFound')),
+                ),
+              );
+            }
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                ...rows.map(
+                  (member) => AhadiListRow(
+                    title: titleCaseName(member['full_name']),
+                    subtitle: stringFrom(
+                      member,
+                      'phone_e164',
+                      context.t('contacts.noPhone'),
+                    ),
+                    status: stringFrom(member, 'pledge_status', 'NO PLEDGE'),
+                    financialSummary: FinancialSummary(
+                      pledged: member['pledged_amount'],
+                      received: member['total_allocated'],
+                      outstanding: member['outstanding_amount'],
+                    ),
+                    meta: (numberFrom(member['pledged_amount']) ?? 0) <= 0
+                        ? context.t('eventDetail.noPledge')
+                        : null,
+                    onTap: () => Navigator.of(context)
+                        .push(
+                          MaterialPageRoute(
+                            builder: (_) => EventMemberDetailScreen(
+                              controller: widget.controller,
+                              event: widget.event,
+                              eventMemberId: stringFrom(
+                                member,
+                                'event_member_id',
+                              ),
+                            ),
+                          ),
+                        )
+                        .then((_) => _refresh()),
                   ),
                 ),
-              ),
-            ),
-          ),
-          _EventListPaginationControls(
-            page: effectivePage,
-            totalPages: totalPages,
-            totalRows: filtered.length,
-            label: context.t('dashboard.members').toLowerCase(),
-            onPrevious: effectivePage == 0
-                ? null
-                : () => setState(() => page = effectivePage - 1),
-            onNext: effectivePage >= totalPages - 1
-                ? null
-                : () => setState(() => page = effectivePage + 1),
-          ),
-        ],
+                _EventListPaginationControls(
+                  page: page,
+                  totalPages: totalPages,
+                  totalRows: totalRows,
+                  label: context.t('dashboard.members').toLowerCase(),
+                  onPrevious: page == 0
+                      ? null
+                      : () => setState(() {
+                          page -= 1;
+                          future = _load();
+                        }),
+                  onNext: page >= totalPages - 1
+                      ? null
+                      : () => setState(() {
+                          page += 1;
+                          future = _load();
+                        }),
+                ),
+              ],
+            );
+          },
+        ),
       ],
+    );
+  }
+}
+
+// Chip-triggered popup menus, not DropdownButtonFormField: a fixed-width
+// dropdown field overflows once the selected option's translated text
+// (e.g. "Outstanding: High to Low") is long, on narrower screens. A Chip
+// sizes to its own content and never has that failure mode.
+class _SortDropdown extends StatelessWidget {
+  const _SortDropdown({
+    required this.sort,
+    required this.direction,
+    required this.onChanged,
+  });
+
+  final String sort;
+  final String direction;
+  final void Function(String sort, String direction) onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final current = _memberSortOptions.firstWhere(
+      (option) => option.$1 == sort && option.$2 == direction,
+      orElse: () => _memberSortOptions.first,
+    );
+    return PopupMenuButton<String>(
+      initialValue: '${current.$1}|${current.$2}',
+      onSelected: (value) {
+        final parts = value.split('|');
+        onChanged(parts[0], parts[1]);
+      },
+      itemBuilder: (context) => _memberSortOptions
+          .map(
+            (option) => PopupMenuItem(
+              value: '${option.$1}|${option.$2}',
+              child: Text(context.t(option.$3)),
+            ),
+          )
+          .toList(),
+      child: Chip(
+        avatar: const Icon(Icons.sort, size: 16),
+        label: Text(
+          '${context.t('eventDetail.sort.label')}: ${context.t(current.$3)}',
+        ),
+      ),
+    );
+  }
+}
+
+class _FilterDropdown extends StatelessWidget {
+  const _FilterDropdown({
+    required this.value,
+    required this.options,
+    required this.label,
+    required this.onChanged,
+  });
+
+  final String value;
+  final List<(String, String)> options;
+  final String label;
+  final void Function(String value) onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final current = options.firstWhere(
+      (option) => option.$1 == value,
+      orElse: () => options.first,
+    );
+    final active = value != 'ALL';
+    return PopupMenuButton<String>(
+      initialValue: value,
+      onSelected: onChanged,
+      itemBuilder: (context) => options
+          .map(
+            (option) => PopupMenuItem(
+              value: option.$1,
+              child: Text(context.t(option.$2)),
+            ),
+          )
+          .toList(),
+      child: Chip(
+        label: Text('$label: ${context.t(current.$2)}'),
+        backgroundColor: active ? AhadiColors.primarySoft : null,
+        labelStyle: TextStyle(
+          color: active ? AhadiColors.primary : null,
+          fontWeight: active ? FontWeight.w700 : null,
+        ),
+      ),
     );
   }
 }
@@ -581,14 +839,107 @@ class _EventMemberDetailScreenState extends State<EventMemberDetailScreen> {
     );
   }
 
+  void _refresh() {
+    final next = widget.controller.eventMemberDetail(
+      widget.event.id,
+      widget.eventMemberId,
+    );
+    // Block body, not `() => future = next` -- an assignment expression
+    // evaluates to the assigned Future, which trips Flutter's "setState
+    // callback returned a Future" guard.
+    setState(() {
+      future = next;
+    });
+  }
+
+  bool _hasPermission(String permission) =>
+      widget.controller.selectedTenantContext?.isOwner == true ||
+      widget.controller.selectedTenantContext?.permissions.contains(
+            permission,
+          ) ==
+          true;
+
+  Future<void> _openRecordPledge(Map<String, dynamic> member) async {
+    final saved = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      builder: (sheetContext) => Padding(
+        padding: EdgeInsets.only(
+          left: 16,
+          right: 16,
+          top: 16,
+          bottom: MediaQuery.of(sheetContext).viewInsets.bottom + 16,
+        ),
+        child: SingleChildScrollView(
+          child: PledgeForm(
+            controller: widget.controller,
+            event: widget.event,
+            members: [member],
+            initialEventMemberId: widget.eventMemberId,
+            startOpen: true,
+            onDone: () => Navigator.of(sheetContext).pop(true),
+          ),
+        ),
+      ),
+    );
+    if (saved != true || !mounted) return;
+    _refresh();
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(context.t('pledges.pledgeSaved'))));
+  }
+
+  Future<void> _openEditPledge(Map<String, dynamic> member) async {
+    final updated = await Navigator.of(context).push<Map<String, dynamic>>(
+      MaterialPageRoute(
+        builder: (_) => EditPledgeScreen(
+          controller: widget.controller,
+          event: widget.event,
+          pledge: member,
+        ),
+      ),
+    );
+    if (updated == null || !mounted) return;
+    _refresh();
+  }
+
+  Future<void> _openRecordPayment(Map<String, dynamic> member) async {
+    // Note: RecordPaymentScreen navigates to a success screen via
+    // pushReplacement, which resolves *this* push's future with null at
+    // the moment of replacement (well before the user taps "Done") -- so
+    // the return value here can't reliably signal "a payment was saved".
+    // Refresh unconditionally instead; it's a cheap refetch and guarantees
+    // Member Details never shows a stale outstanding balance.
+    await Navigator.of(context).push<Map<String, dynamic>>(
+      MaterialPageRoute(
+        builder: (_) => RecordPaymentScreen(
+          controller: widget.controller,
+          initialMember: {
+            'eventMemberId': widget.eventMemberId,
+            'pledgeId': stringFrom(member, 'pledge_id'),
+            'member': member['full_name'],
+            'phone': stringFrom(member, 'phone_e164'),
+            'pledged': member['pledged_amount'],
+            'paid': member['total_allocated'],
+            'outstanding': member['outstanding_amount'],
+            'effectiveDueDate': stringFrom(member, 'effective_due_date'),
+          },
+          suggestedAmount: numberFrom(member['outstanding_amount']),
+        ),
+      ),
+    );
+    if (!mounted) return;
+    await widget.controller.refreshTenantContext();
+    if (!mounted) return;
+    _refresh();
+  }
+
   @override
   Widget build(BuildContext context) {
-    final canRemove =
-        widget.controller.selectedTenantContext?.isOwner == true ||
-        widget.controller.selectedTenantContext?.permissions.contains(
-              'members.assign_event',
-            ) ==
-            true;
+    final canRemove = _hasPermission('members.assign_event');
+    final canCreatePledge = _hasPermission('pledges.create');
+    final canEditPledge = _hasPermission('pledges.update');
+    final canRecordPayment = _hasPermission('payments.create');
     return Scaffold(
       appBar: AppBar(title: Text(context.t('eventDetail.memberDetails'))),
       body: FutureBuilder<Map<String, dynamic>>(
@@ -604,15 +955,20 @@ class _EventMemberDetailScreenState extends State<EventMemberDetailScreen> {
           final member = detail['member'] is Map<String, dynamic>
               ? detail['member'] as Map<String, dynamic>
               : detail;
-          final pledge = detail['pledge'] is Map<String, dynamic>
-              ? detail['pledge'] as Map<String, dynamic>
-              : member;
           final memberId = stringFrom(
             member,
             'member_id',
             stringFrom(member, 'id'),
           );
-          final pledgeId = stringFrom(pledge, 'pledge_id');
+          // The event-member-detail view already excludes CANCELLED pledges
+          // (see v_event_members_list), so an empty pledge_id here reliably
+          // means "no active pledge" -- a cancelled pledge is never treated
+          // as active.
+          final pledgeId = stringFrom(member, 'pledge_id');
+          final hasActivePledge = pledgeId.isNotEmpty;
+          final outstandingAmount =
+              numberFrom(member['outstanding_amount']) ?? 0;
+          final isFullyPaid = hasActivePledge && outstandingAmount <= 0;
           return ListView(
             padding: const EdgeInsets.all(16),
             children: [
@@ -628,44 +984,82 @@ class _EventMemberDetailScreenState extends State<EventMemberDetailScreen> {
               ),
               const SizedBox(height: 16),
               AhadiSectionCard(
-                title: context.t('eventDetail.financialSummary'),
-                children: [
-                  FinancialSummary(
-                    pledged: member['pledged_amount'],
-                    received:
-                        member['total_allocated'] ?? member['paid_amount'],
-                    outstanding: member['outstanding_amount'],
-                  ),
-                ],
-              ),
-              AhadiSectionCard(
                 title: context.t('eventDetail.pledge'),
                 children: [
-                  AhadiInfoRow(
-                    label: context.t('eventDetail.amount'),
-                    value: moneyText(pledge['pledged_amount']),
-                  ),
-                  AhadiInfoRow(
-                    label: context.t('eventDetail.dueDate'),
-                    value: dateText(stringFrom(pledge, 'due_date')),
-                  ),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          context.t('eventDetail.status'),
-                          style: const TextStyle(color: AhadiColors.muted),
-                        ),
+                  if (!hasActivePledge) ...[
+                    Text(
+                      context.t('eventDetail.noPledgeForMember'),
+                      style: const TextStyle(color: AhadiColors.muted),
+                    ),
+                    if (canCreatePledge) ...[
+                      const SizedBox(height: 12),
+                      FilledButton.icon(
+                        onPressed: () => _openRecordPledge(member),
+                        icon: const Icon(Icons.add),
+                        label: Text(context.t('pledges.recordPledge')),
                       ),
-                      StatusPill(
-                        status: stringFrom(
-                          pledge,
-                          'status',
-                          stringFrom(member, 'pledge_status', 'NO PLEDGE'),
+                    ],
+                  ] else ...[
+                    FinancialSummary(
+                      pledged: member['pledged_amount'],
+                      received: member['total_allocated'],
+                      outstanding: member['outstanding_amount'],
+                    ),
+                    const SizedBox(height: 12),
+                    AhadiInfoRow(
+                      label: context.t('eventDetail.dueDate'),
+                      value: dateText(stringFrom(member, 'due_date')),
+                    ),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            context.t('eventDetail.status'),
+                            style: const TextStyle(color: AhadiColors.muted),
+                          ),
+                        ),
+                        StatusPill(
+                          status: isFullyPaid
+                              ? 'PAID'
+                              : stringFrom(member, 'pledge_status', 'PENDING'),
+                        ),
+                      ],
+                    ),
+                    if (canEditPledge ||
+                        (!isFullyPaid && canRecordPayment)) ...[
+                      const SizedBox(height: 12),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          if (canEditPledge)
+                            OutlinedButton.icon(
+                              onPressed: () => _openEditPledge(member),
+                              icon: const Icon(Icons.edit_outlined),
+                              label: Text(context.t('pledges.editPledge')),
+                            ),
+                          if (!isFullyPaid && canRecordPayment)
+                            FilledButton.icon(
+                              onPressed: () => _openRecordPayment(member),
+                              icon: const Icon(Icons.payments_outlined),
+                              label: Text(
+                                context.t('eventDetail.recordPayment'),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ],
+                    if (isFullyPaid) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        context.t('eventDetail.paidInFull'),
+                        style: const TextStyle(
+                          color: AhadiColors.success,
+                          fontWeight: FontWeight.w800,
                         ),
                       ),
                     ],
-                  ),
+                  ],
                 ],
               ),
               AhadiSectionCard(
@@ -698,34 +1092,6 @@ class _EventMemberDetailScreenState extends State<EventMemberDetailScreen> {
                       icon: const Icon(Icons.person_outline),
                       label: Text(context.t('eventDetail.viewContact')),
                     ),
-                  if (pledgeId.isNotEmpty) ...[
-                    const SizedBox(height: 8),
-                    OutlinedButton.icon(
-                      onPressed: () => Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => PledgeDetailScreen(
-                            controller: widget.controller,
-                            event: widget.event,
-                            pledge: {
-                              ...pledge,
-                              'event_member_id': widget.eventMemberId,
-                              'member_name': member['full_name'],
-                              'phone_e164': member['phone_e164'],
-                            },
-                            onChanged: () => setState(
-                              () =>
-                                  future = widget.controller.eventMemberDetail(
-                                    widget.event.id,
-                                    widget.eventMemberId,
-                                  ),
-                            ),
-                          ),
-                        ),
-                      ),
-                      icon: const Icon(Icons.receipt_long_outlined),
-                      label: Text(context.t('eventDetail.viewEditPledge')),
-                    ),
-                  ],
                   if (error != null) ...[
                     const SizedBox(height: 8),
                     Text(
@@ -857,7 +1223,11 @@ class _AvailableContactPickerState extends State<_AvailableContactPicker> {
                         (row) => ListTile(
                           title: Text(titleCaseName(row['full_name'])),
                           subtitle: Text(
-                            stringFrom(row, 'phone_e164', context.t('contacts.noPhone')),
+                            stringFrom(
+                              row,
+                              'phone_e164',
+                              context.t('contacts.noPhone'),
+                            ),
                           ),
                           trailing: const Icon(Icons.add),
                           onTap: () async {
@@ -959,14 +1329,19 @@ class _PledgesTabState extends State<_PledgesTab> {
               title: titleCaseName(
                 pledge['member_name'] ?? pledge['full_name'],
               ),
-              subtitle: stringFrom(pledge, 'phone_e164', context.t('contacts.noPhone')),
+              subtitle: stringFrom(
+                pledge,
+                'phone_e164',
+                context.t('contacts.noPhone'),
+              ),
               status: stringFrom(pledge, 'status', 'PENDING'),
               financialSummary: FinancialSummary(
                 pledged: pledge['pledged_amount'],
                 received: pledge['total_allocated'] ?? pledge['paid_amount'],
                 outstanding: pledge['outstanding_amount'],
               ),
-              meta: '${context.t('eventDetail.due')} ${dateText(stringFrom(pledge, 'due_date'))}',
+              meta:
+                  '${context.t('eventDetail.due')} ${dateText(stringFrom(pledge, 'due_date'))}',
               onTap: () => Navigator.of(context).push(
                 MaterialPageRoute(
                   builder: (_) => PledgeDetailScreen(
@@ -1134,7 +1509,11 @@ class _PaymentsTabState extends State<_PaymentsTab> {
                 ...rows.map(
                   (payment) => AhadiListRow(
                     title: titleCaseName(
-                      stringFrom(payment, 'member', context.t('eventDetail.member')),
+                      stringFrom(
+                        payment,
+                        'member',
+                        context.t('eventDetail.member'),
+                      ),
                     ),
                     subtitle:
                         '${moneyText(payment['amount'])}\n${_methodLabel(context, payment)} • ${dateText(stringFrom(payment, 'date', stringFrom(payment, 'payment_date')))}',
