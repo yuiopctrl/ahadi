@@ -31,7 +31,7 @@ class AhadiApp extends StatefulWidget {
   State<AhadiApp> createState() => _AhadiAppState();
 }
 
-class _AhadiAppState extends State<AhadiApp> {
+class _AhadiAppState extends State<AhadiApp> with WidgetsBindingObserver {
   late final SessionController controller;
   late final AppLocaleController localeController;
 
@@ -46,12 +46,36 @@ class _AhadiAppState extends State<AhadiApp> {
       api = ApiClient(
         config: widget.config ?? AppConfig.fromEnvironment(),
         accessTokenProvider: () async => controller.accessToken,
+        // Single, central hook: whichever request first hits an
+        // expired/invalid session tells the controller once, instead of
+        // every screen having to detect and react to this itself.
+        onSessionExpired: () => controller.handleSessionExpired(),
       );
       controller = SessionController(api: widget.api ?? api, storage: storage);
     }
     localeController = widget.localeController ?? AppLocaleController();
     localeController.load();
     controller.initialize();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // A session that expired while the app sat in the background
+    // shouldn't keep showing stale authenticated UI until the user
+    // happens to trigger a request -- check as soon as the app is
+    // frontmost again. A network hiccup here never logs anyone out; only
+    // an actual expired-session response does (see
+    // SessionController.validateSessionOnResume).
+    if (state == AppLifecycleState.resumed) {
+      controller.validateSessionOnResume();
+    }
   }
 
   @override

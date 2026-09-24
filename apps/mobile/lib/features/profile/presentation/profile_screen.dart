@@ -143,7 +143,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
               TextField(
                 controller: fullName,
                 textCapitalization: TextCapitalization.words,
-                decoration: InputDecoration(labelText: context.t('auth.fullName')),
+                decoration: InputDecoration(
+                  labelText: context.t('auth.fullName'),
+                ),
               ),
               const SizedBox(height: 12),
               TextField(
@@ -155,7 +157,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
               TextFormField(
                 enabled: false,
                 initialValue: phone,
-                decoration: InputDecoration(labelText: context.t('auth.phoneNumber')),
+                decoration: InputDecoration(
+                  labelText: context.t('auth.phoneNumber'),
+                ),
               ),
               if (widget.controller.errorMessage != null) ...[
                 const SizedBox(height: 12),
@@ -168,7 +172,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
               FilledButton(
                 onPressed: widget.controller.isSubmitting ? null : _save,
                 child: Text(
-                  widget.controller.isSubmitting ? context.t('auth.saving') : context.t('profile.saveProfile'),
+                  widget.controller.isSubmitting
+                      ? context.t('auth.saving')
+                      : context.t('profile.saveProfile'),
                 ),
               ),
             ],

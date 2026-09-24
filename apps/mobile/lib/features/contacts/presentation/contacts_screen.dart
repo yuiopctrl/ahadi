@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../../core/errors/api_failure.dart';
 import '../../../core/localization/app_locale.dart';
 import '../../../core/theme/ahadi_theme.dart';
 import '../../../core/widgets/formatters.dart';
@@ -20,7 +21,7 @@ class ContactsScreen extends StatefulWidget {
 class _ContactsScreenState extends State<ContactsScreen> {
   static const pageSize = 20;
 
-  late Future<List<Map<String, dynamic>>> future;
+  late Future<Map<String, dynamic>> future;
   final search = TextEditingController();
   Timer? debounce;
   String query = '';
@@ -52,10 +53,10 @@ class _ContactsScreenState extends State<ContactsScreen> {
     });
   }
 
-  Future<List<Map<String, dynamic>>> _load() {
+  Future<Map<String, dynamic>> _load() {
     return widget.controller.contacts(
       search: query,
-      limit: pageSize + 1,
+      limit: pageSize,
       offset: page * pageSize,
     );
   }
@@ -108,17 +109,53 @@ class _ContactsScreenState extends State<ContactsScreen> {
           const SizedBox(width: 8),
         ],
       ),
-      body: FutureBuilder<List<Map<String, dynamic>>>(
+      body: FutureBuilder<Map<String, dynamic>>(
         future: future,
         builder: (context, snapshot) {
-          final rows = snapshot.data ?? const <Map<String, dynamic>>[];
-          final visible = rows.take(pageSize).toList();
-          final hasNext = rows.length > pageSize;
+          if (snapshot.hasError) {
+            return ListView(
+              padding: const EdgeInsets.all(16),
+              children: [
+                ErrorPanel(
+                  message: friendlyErrorText(
+                    snapshot.error,
+                    context.t('contacts.loadError'),
+                  ),
+                  onRetry: () => setState(() => future = _load()),
+                ),
+              ],
+            );
+          }
+          final response = snapshot.data;
+          final rows = response == null
+              ? const <Map<String, dynamic>>[]
+              : (response['data'] is List
+                    ? (response['data'] as List)
+                          .whereType<Map<String, dynamic>>()
+                          .toList()
+                    : <Map<String, dynamic>>[]);
+          final pagination = response?['pagination'] is Map
+              ? Map<String, dynamic>.from(response!['pagination'] as Map)
+              : const <String, dynamic>{};
+          final usage = response?['usage'] is Map
+              ? Map<String, dynamic>.from(response!['usage'] as Map)
+              : const <String, dynamic>{};
+          final totalRows = numberFrom(pagination['totalRows'])?.round();
+          final hasNext = pagination['hasMore'] == true;
           return RefreshIndicator(
             onRefresh: _refresh,
             child: ListView(
               padding: const EdgeInsets.all(16),
               children: [
+                Text(
+                  context.t('shell.more.contacts'),
+                  style: Theme.of(context).textTheme.headlineSmall
+                      ?.copyWith(fontWeight: FontWeight.w900),
+                ),
+                const SizedBox(height: 4),
+                if (snapshot.hasData)
+                  _ContactsUsageLine(totalRows: totalRows, usage: usage),
+                const SizedBox(height: 12),
                 TextField(
                   controller: search,
                   onChanged: _onSearch,
@@ -138,7 +175,7 @@ class _ContactsScreenState extends State<ContactsScreen> {
                 const SizedBox(height: 12),
                 if (!snapshot.hasData)
                   const LoadingCards(count: 4)
-                else if (visible.isEmpty)
+                else if (rows.isEmpty)
                   Card(
                     child: Padding(
                       padding: const EdgeInsets.all(16),
@@ -146,10 +183,14 @@ class _ContactsScreenState extends State<ContactsScreen> {
                     ),
                   )
                 else ...[
-                  ...visible.map(
+                  ...rows.map(
                     (contact) => AhadiListRow(
                       title: titleCaseName(contact['full_name']),
-                      subtitle: stringFrom(contact, 'phone_e164', context.t('contacts.noPhone')),
+                      subtitle: stringFrom(
+                        contact,
+                        'phone_e164',
+                        context.t('contacts.noPhone'),
+                      ),
                       meta:
                           '${numberFrom(contact['event_count'])?.round() ?? 0} ${context.t('shell.nav.events').toLowerCase()}',
                       onTap: () => _openContact(contact),
@@ -229,7 +270,13 @@ class _ContactFormScreenState extends State<ContactFormScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AhadiColors.background,
-      appBar: AppBar(title: Text(editing ? context.t('contacts.editContact') : context.t('contacts.addContact'))),
+      appBar: AppBar(
+        title: Text(
+          editing
+              ? context.t('contacts.editContact')
+              : context.t('contacts.addContact'),
+        ),
+      ),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
@@ -241,13 +288,17 @@ class _ContactFormScreenState extends State<ContactFormScreen> {
           TextField(
             controller: phone,
             keyboardType: TextInputType.phone,
-            decoration: InputDecoration(labelText: context.t('auth.phoneNumber')),
+            decoration: InputDecoration(
+              labelText: context.t('auth.phoneNumber'),
+            ),
           ),
           const SizedBox(height: 12),
           TextField(
             controller: alternativePhone,
             keyboardType: TextInputType.phone,
-            decoration: InputDecoration(labelText: context.t('contacts.alternativePhone')),
+            decoration: InputDecoration(
+              labelText: context.t('contacts.alternativePhone'),
+            ),
           ),
           const SizedBox(height: 12),
           TextField(
@@ -258,7 +309,9 @@ class _ContactFormScreenState extends State<ContactFormScreen> {
           const SizedBox(height: 12),
           TextField(
             controller: location,
-            decoration: InputDecoration(labelText: context.t('contacts.location')),
+            decoration: InputDecoration(
+              labelText: context.t('contacts.location'),
+            ),
           ),
           if (error != null) ...[
             const SizedBox(height: 8),
@@ -267,7 +320,11 @@ class _ContactFormScreenState extends State<ContactFormScreen> {
           const SizedBox(height: 16),
           FilledButton(
             onPressed: saving ? null : _submit,
-            child: Text(saving ? context.t('auth.saving') : context.t('contacts.saveContact')),
+            child: Text(
+              saving
+                  ? context.t('auth.saving')
+                  : context.t('contacts.saveContact'),
+            ),
           ),
         ],
       ),
@@ -320,16 +377,13 @@ class _ContactFormScreenState extends State<ContactFormScreen> {
       if (mounted) Navigator.of(context).pop(true);
     } on FormatException {
       if (!mounted) return;
-      setState(
-        () => error = context.t('contacts.invalidPhone'),
-      );
+      setState(() => error = context.t('contacts.invalidPhone'));
     } catch (err) {
       if (!mounted) return;
       setState(
-        () => error = friendlyErrorText(
-          err,
-          context.t('contacts.saveContactError'),
-        ),
+        () => error = err is ApiFailure && err.code == 'CONTACT_LIMIT_REACHED'
+            ? context.t('contacts.limitReached')
+            : friendlyErrorText(err, context.t('contacts.saveContactError')),
       );
     } finally {
       if (mounted) setState(() => saving = false);
@@ -424,7 +478,11 @@ class _ContactDetailScreenState extends State<ContactDetailScreen> {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  stringFrom(contact, 'phone_e164', context.t('contacts.noPhone')),
+                  stringFrom(
+                    contact,
+                    'phone_e164',
+                    context.t('contacts.noPhone'),
+                  ),
                   style: const TextStyle(color: AhadiColors.muted),
                 ),
                 const SizedBox(height: 16),
@@ -433,15 +491,27 @@ class _ContactDetailScreenState extends State<ContactDetailScreen> {
                   children: [
                     AhadiInfoRow(
                       label: context.t('contacts.phone'),
-                      value: stringFrom(contact, 'phone_e164', context.t('contacts.noPhone')),
+                      value: stringFrom(
+                        contact,
+                        'phone_e164',
+                        context.t('contacts.noPhone'),
+                      ),
                     ),
                     AhadiInfoRow(
                       label: context.t('auth.email'),
-                      value: stringFrom(contact, 'email', context.t('contacts.notSet')),
+                      value: stringFrom(
+                        contact,
+                        'email',
+                        context.t('contacts.notSet'),
+                      ),
                     ),
                     AhadiInfoRow(
                       label: context.t('contacts.location'),
-                      value: stringFrom(contact, 'location', context.t('contacts.notSet')),
+                      value: stringFrom(
+                        contact,
+                        'location',
+                        context.t('contacts.notSet'),
+                      ),
                     ),
                   ],
                 ),
@@ -488,6 +558,55 @@ class _ContactDetailScreenState extends State<ContactDetailScreen> {
           },
         ),
       ),
+    );
+  }
+}
+
+/// "287 contacts" or, when the tenant's plan has a known limit,
+/// "287 / 500 contacts" with a subtle progress indicator that only turns
+/// informational/warning-colored close to the limit -- never alarming by
+/// default. The count and limit are both authoritative (from the backend
+/// pagination/usage response), never derived from loaded page rows.
+class _ContactsUsageLine extends StatelessWidget {
+  const _ContactsUsageLine({required this.totalRows, required this.usage});
+
+  final int? totalRows;
+  final Map<String, dynamic> usage;
+
+  @override
+  Widget build(BuildContext context) {
+    if (totalRows == null) return const SizedBox.shrink();
+    final limit = numberFrom(usage['limit'])?.round();
+    final countText = '$totalRows ${context.t('contacts.contactsCount')}';
+    if (limit == null) {
+      return Text(countText, style: const TextStyle(color: AhadiColors.muted));
+    }
+    final ratio = limit <= 0
+        ? 1.0
+        : (totalRows! / limit).clamp(0, 1).toDouble();
+    final color = ratio >= 0.95
+        ? AhadiColors.danger
+        : ratio >= 0.80
+        ? AhadiColors.warning
+        : AhadiColors.muted;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          '$totalRows / $limit ${context.t('contacts.contactsCount')}',
+          style: TextStyle(color: color, fontWeight: FontWeight.w700),
+        ),
+        const SizedBox(height: 4),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(4),
+          child: LinearProgressIndicator(
+            value: ratio,
+            minHeight: 4,
+            backgroundColor: AhadiColors.border,
+            valueColor: AlwaysStoppedAnimation<Color>(color),
+          ),
+        ),
+      ],
     );
   }
 }

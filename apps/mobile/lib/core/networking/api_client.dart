@@ -17,13 +17,23 @@ class ApiClient implements AhadiApi {
     required AppConfig config,
     required AccessTokenProvider accessTokenProvider,
     HttpClient? httpClient,
+    void Function()? onSessionExpired,
   }) : _config = config,
        _accessTokenProvider = accessTokenProvider,
-       _httpClient = httpClient ?? HttpClient();
+       _httpClient = httpClient ?? HttpClient(),
+       _onSessionExpired = onSessionExpired;
 
   final AppConfig _config;
   final AccessTokenProvider _accessTokenProvider;
   final HttpClient _httpClient;
+
+  /// Fired centrally, once per failing request, whenever any authenticated
+  /// call comes back as an expired/invalid session -- this is the single
+  /// place that detects it, rather than every screen checking for it
+  /// separately. The receiver (SessionController.handleSessionExpired) is
+  /// itself idempotent, so concurrent requests failing together still
+  /// result in exactly one cleanup/notification.
+  final void Function()? _onSessionExpired;
 
   @override
   Future<LoginResult> loginWithPin({
@@ -337,7 +347,33 @@ class ApiClient implements AhadiApi {
   }
 
   @override
-  Future<List<Map<String, dynamic>>> contacts(
+  Future<Map<String, dynamic>> listEventMembers(
+    String tenantId,
+    String eventId, {
+    String? search,
+    String pledgeStatus = 'ALL',
+    String phoneStatus = 'ALL',
+    String sort = 'NAME',
+    String direction = 'ASC',
+    int? limit,
+    int? offset,
+  }) async {
+    final query = Uri(
+      queryParameters: {
+        if (search != null && search.trim().isNotEmpty) 'search': search,
+        'pledgeStatus': pledgeStatus,
+        'phoneStatus': phoneStatus,
+        'sort': sort,
+        'direction': direction,
+        if (limit != null) 'limit': '$limit',
+        if (offset != null) 'offset': '$offset',
+      },
+    ).query;
+    return _request('/events/$eventId/members?$query', tenantId: tenantId);
+  }
+
+  @override
+  Future<Map<String, dynamic>> contacts(
     String tenantId, {
     String? search,
     int? limit,
@@ -350,11 +386,10 @@ class ApiClient implements AhadiApi {
         if (offset != null) 'offset': '$offset',
       },
     ).query;
-    final json = await _request(
+    return _request(
       query.isEmpty ? '/contacts' : '/contacts?$query',
       tenantId: tenantId,
     );
-    return objectList(json['data']);
   }
 
   @override
@@ -715,9 +750,7 @@ class ApiClient implements AhadiApi {
   }
 
   @override
-  Future<List<Map<String, dynamic>>> customSmsTemplates(
-    String tenantId,
-  ) async {
+  Future<List<Map<String, dynamic>>> customSmsTemplates(String tenantId) async {
     final json = await _request(
       '/messages/templates/custom',
       tenantId: tenantId,
@@ -945,7 +978,10 @@ class ApiClient implements AhadiApi {
       }
 
       return jsonMap(decoded);
-    } on ApiFailure {
+    } on ApiFailure catch (failure) {
+      if (failure.isSessionExpired) {
+        _onSessionExpired?.call();
+      }
       rethrow;
     } on SocketException {
       throw const ApiFailure(

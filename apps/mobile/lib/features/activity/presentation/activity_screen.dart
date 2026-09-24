@@ -62,7 +62,8 @@ String activityFieldLabel(BuildContext context, String key) {
 
 String _activityValueText(BuildContext context, Object? value) {
   if (value == null) return '—';
-  if (value is bool) return value ? context.t('common.yes') : context.t('common.no');
+  if (value is bool)
+    return value ? context.t('common.yes') : context.t('common.no');
   final text = value.toString().trim();
   return text.isEmpty ? '—' : text;
 }
@@ -208,7 +209,10 @@ class _ActivityScreenState extends State<ActivityScreen> {
                   selected: entityType,
                   onChanged: _onEntityTypeChanged,
                   items: [
-                    FilterTabItem(value: _EntityTypeFilter.all, label: context.t('common.all')),
+                    FilterTabItem(
+                      value: _EntityTypeFilter.all,
+                      label: context.t('common.all'),
+                    ),
                     FilterTabItem(
                       value: _EntityTypeFilter.member,
                       label: context.t('shell.more.contacts'),
@@ -290,7 +294,11 @@ class _ActivityRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final action = stringFrom(row, 'action');
-    final actorName = stringFrom(row, 'actor_name', context.t('activity.unknownUser'));
+    final actorName = stringFrom(
+      row,
+      'actor_name',
+      context.t('activity.unknownUser'),
+    );
     final entityLabel = _subjectLabel(row);
     return AhadiListRow(
       title: actorName,
@@ -304,6 +312,11 @@ class _ActivityRow extends StatelessWidget {
 }
 
 String _subjectLabel(Map<String, dynamic> row) {
+  // Resolved server-side (rpc_list_organization_activity) for the entity
+  // types it records -- preferred over guessing from whatever full_name
+  // key happens to be present in the raw old/new value diff.
+  final resolvedName = stringFrom(row, 'entity_display_name');
+  if (resolvedName.isNotEmpty) return titleCaseName(resolvedName);
   final newValues = row['new_values'] is Map
       ? Map<String, dynamic>.from(row['new_values'] as Map)
       : const <String, dynamic>{};
@@ -334,6 +347,12 @@ class ActivityDetailScreen extends StatelessWidget {
       ..sort();
     final reason = stringFrom(row, 'reason');
     final eventName = stringFrom(row, 'event_name');
+    final subject = _subjectLabel(row);
+    final actorName = stringFrom(
+      row,
+      'actor_name',
+      context.t('activity.unknownUser'),
+    );
 
     return Scaffold(
       backgroundColor: AhadiColors.background,
@@ -346,29 +365,40 @@ class ActivityDetailScreen extends StatelessWidget {
             style: Theme.of(context).textTheme.headlineSmall
                 ?.copyWith(fontWeight: FontWeight.w900),
           ),
-          const SizedBox(height: 16),
-          AhadiSectionCard(
-            title: context.t('activity.details'),
-            children: [
-              AhadiInfoRow(
-                label: context.t('activity.actor'),
-                value: stringFrom(row, 'actor_name', context.t('activity.unknownUser')),
-              ),
-              AhadiInfoRow(
-                label: context.t('activity.dateAndTime'),
-                value: activityDateTimeText(context, stringFrom(row, 'created_at')),
-              ),
-              AhadiInfoRow(label: context.t('activity.action'), value: activityActionLabel(context, action)),
-              AhadiInfoRow(
-                label: context.t('activity.entity'),
-                value: activityFieldLabel(context, stringFrom(row, 'entity_type')),
-              ),
-              if (eventName.isNotEmpty)
-                AhadiInfoRow(label: context.t('activity.event'), value: eventName),
-              if (reason.isNotEmpty)
-                AhadiInfoRow(label: context.t('activity.reason'), value: reason),
-            ],
+          if (subject.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text(
+              subject,
+              style: Theme.of(context).textTheme.titleMedium
+                  ?.copyWith(fontWeight: FontWeight.w700),
+            ),
+          ],
+          const SizedBox(height: 4),
+          Text(
+            activityDateTimeText(context, stringFrom(row, 'created_at')),
+            style: const TextStyle(color: AhadiColors.muted),
           ),
+          Text(
+            '${context.t('activity.changedBy')} $actorName',
+            style: const TextStyle(color: AhadiColors.muted),
+          ),
+          const SizedBox(height: 16),
+          if (eventName.isNotEmpty || reason.isNotEmpty)
+            AhadiSectionCard(
+              title: context.t('activity.details'),
+              children: [
+                if (eventName.isNotEmpty)
+                  AhadiInfoRow(
+                    label: context.t('activity.event'),
+                    value: eventName,
+                  ),
+                if (reason.isNotEmpty)
+                  AhadiInfoRow(
+                    label: context.t('activity.reason'),
+                    value: reason,
+                  ),
+              ],
+            ),
           if (changedKeys.isNotEmpty) ...[
             const SizedBox(height: 16),
             Text(
@@ -393,7 +423,9 @@ class ActivityDetailScreen extends StatelessWidget {
                         Row(
                           children: [
                             Expanded(
-                              child: Text(_activityValueText(context, oldValues[key])),
+                              child: Text(
+                                _activityValueText(context, oldValues[key]),
+                              ),
                             ),
                             const Padding(
                               padding: EdgeInsets.symmetric(horizontal: 8),
@@ -421,6 +453,45 @@ class ActivityDetailScreen extends StatelessWidget {
               ],
             ),
           ],
+          const SizedBox(height: 16),
+          Theme(
+            data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+            child: ExpansionTile(
+              tilePadding: EdgeInsets.zero,
+              title: Text(
+                context.t('activity.technicalDetails'),
+                style: const TextStyle(
+                  color: AhadiColors.muted,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              children: [
+                AhadiSectionCard(
+                  children: [
+                    AhadiInfoRow(
+                      label: context.t('activity.entityType'),
+                      value: activityFieldLabel(
+                        context,
+                        stringFrom(row, 'entity_type'),
+                      ),
+                    ),
+                    AhadiInfoRow(
+                      label: context.t('activity.entityId'),
+                      value: stringFrom(row, 'entity_id', '-'),
+                    ),
+                    AhadiInfoRow(
+                      label: context.t('activity.auditId'),
+                      value: '${row['id'] ?? '-'}',
+                    ),
+                    AhadiInfoRow(
+                      label: context.t('activity.requestId'),
+                      value: stringFrom(row, 'request_id', '-'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );

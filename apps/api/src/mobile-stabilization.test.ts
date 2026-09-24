@@ -6,6 +6,7 @@ const app = readFileSync(new URL('./app.ts', import.meta.url), 'utf8')
 const mobileApi = readFileSync(new URL('../../../apps/mobile/lib/core/networking/api_client.dart', import.meta.url), 'utf8')
 const searchMigration = readFileSync(new URL('../../../supabase/migrations/058_mobile_stabilization_search_and_payment_reports.sql', import.meta.url), 'utf8')
 const phoneReportMigration = readFileSync(new URL('../../../supabase/migrations/059_mobile_phone_search_reports.sql', import.meta.url), 'utf8')
+const entitlementsMigration = readFileSync(new URL('../../../supabase/migrations/070_entitlements_sms_batching_list_ux.sql', import.meta.url), 'utf8')
 const shareMigration = readFileSync(new URL('../../../supabase/migrations/052_dynamic_whatsapp_muhtasari.sql', import.meta.url), 'utf8')
 
 test('mobile edit routes use canonical backend methods', () => {
@@ -17,7 +18,13 @@ test('mobile edit routes use canonical backend methods', () => {
 
 test('mobile search contract normalizes phone searches consistently', () => {
   assert.match(app, /function compactPhoneSearch/)
-  assert.match(app, /matchesNameOrPhoneSearch\(row, query\.search, \['full_name'\], \['phone_e164', 'alternative_phone_e164'\]\)/)
+  // Contacts search moved server-side into rpc_list_contacts (migration
+  // 070) so pagination/total-count could be authoritative; it must still
+  // apply the same compact-phone normalization the old Node-side
+  // matchesNameOrPhoneSearch helper used, not a naive raw ilike.
+  assert.match(entitlementsMigration, /phone_search text := nullif\(public\.compact_phone_search\(coalesce\(p_search, ''\)\), ''\)/)
+  assert.match(entitlementsMigration, /public\.compact_phone_search\(m\.phone_e164\) like '%' \|\| phone_search \|\| '%'/)
+  assert.match(entitlementsMigration, /public\.compact_phone_search\(m\.alternative_phone_e164\) like '%' \|\| phone_search \|\| '%'/)
   assert.match(app, /matchesNameOrPhoneSearch\(row, query\.search, \['member_name', 'full_name'\], \['phone_e164', 'alternative_phone_e164'\]\)/)
   assert.match(searchMigration, /compact_phone_search/)
   assert.match(searchMigration, /m\.phone_e164 as "phone"/)

@@ -24,7 +24,9 @@ class SubscriptionPlanCard extends StatelessWidget {
     final borderColor = selected || current
         ? AhadiColors.primary
         : AhadiColors.border;
-    final title = current ? '${plan.name} · ${context.t('billing.current')}' : plan.name;
+    final title = current
+        ? '${plan.name} · ${context.t('billing.current')}'
+        : plan.name;
     final body = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -65,7 +67,10 @@ class SubscriptionPlanCard extends StatelessWidget {
           children: [
             _LimitChip(text: _activeEventLimit(context, plan.maxActiveEvents)),
             _LimitChip(text: '${plan.maxUsers} ${context.t('billing.users')}'),
-            _LimitChip(text: '${plan.maxMembers} ${context.t('dashboard.members').toLowerCase()}'),
+            _LimitChip(
+              text:
+                  '${plan.maxMembers} ${context.t('dashboard.members').toLowerCase()}',
+            ),
             _LimitChip(text: '${plan.includedSms} SMS'),
           ],
         ),
@@ -137,11 +142,15 @@ String _planPrice(BuildContext context, SubscriptionPlan plan) {
 String _billingInterval(BuildContext context, String value) {
   final key = 'billing.interval.${value.toUpperCase()}';
   final translated = context.t(key);
-  return translated == key ? value.toLowerCase().replaceAll('_', ' ') : translated;
+  return translated == key
+      ? value.toLowerCase().replaceAll('_', ' ')
+      : translated;
 }
 
 String _activeEventLimit(BuildContext context, int value) {
   if (value <= 0) return context.t('billing.noActiveEvents');
   if (value == 1) return context.t('billing.oneActiveEvent');
-  return context.t('billing.activeEventsCount').replaceFirst('{count}', '$value');
+  return context
+      .t('billing.activeEventsCount')
+      .replaceFirst('{count}', '$value');
 }

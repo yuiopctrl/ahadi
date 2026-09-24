@@ -77,7 +77,26 @@ abstract class AhadiApi {
     String tenantId,
     String eventId,
   );
-  Future<List<Map<String, dynamic>>> contacts(
+
+  /// Server-side sorted/filtered/paginated event member list. Returns
+  /// `{data, pagination: {limit, offset, totalRows, hasMore}}`.
+  Future<Map<String, dynamic>> listEventMembers(
+    String tenantId,
+    String eventId, {
+    String? search,
+    String pledgeStatus = 'ALL',
+    String phoneStatus = 'ALL',
+    String sort = 'NAME',
+    String direction = 'ASC',
+    int? limit,
+    int? offset,
+  });
+
+  /// Returns `{data, pagination: {limit, offset, totalRows, hasMore},
+  /// usage: {used, limit, available}}` -- an authoritative total count and
+  /// the tenant's current contact-capacity entitlement, not just the page
+  /// of rows requested.
+  Future<Map<String, dynamic>> contacts(
     String tenantId, {
     String? search,
     int? limit,

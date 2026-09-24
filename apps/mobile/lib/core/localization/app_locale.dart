@@ -57,8 +57,7 @@ class AppLocaleScope extends InheritedNotifier<AppLocaleController> {
   /// present in the tree, so widgets/screens can still be tested in
   /// isolation without wrapping them in [AppLocaleScope].
   static AppLocaleController of(BuildContext context) {
-    final scope = context
-        .dependOnInheritedWidgetOfExactType<AppLocaleScope>();
+    final scope = context.dependOnInheritedWidgetOfExactType<AppLocaleScope>();
     return scope?.notifier ?? _fallback;
   }
 }

@@ -20,7 +20,9 @@ class OrganizationSelectionScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(context.t('organizations.chooseOrganization'))),
+      appBar: AppBar(
+        title: Text(context.t('organizations.chooseOrganization')),
+      ),
       body: SafeArea(
         child: ListView.separated(
           padding: const EdgeInsets.all(16),
@@ -49,7 +51,8 @@ class OrganizationSelectionScreen extends StatelessWidget {
                   style: const TextStyle(fontWeight: FontWeight.w800),
                 ),
                 subtitle: Text(
-                  membership.subscription?.planName ?? context.t('organizations.ahadiWorkspace'),
+                  membership.subscription?.planName ??
+                      context.t('organizations.ahadiWorkspace'),
                 ),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () => controller.selectTenant(membership.tenantId),
@@ -143,7 +146,9 @@ class InvitationsReviewScreen extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(16, 18, 16, 24),
         children: [
           Text(
-            invitations.length == 1 ? context.t('auth.youreInvited') : context.t('organizations.invitations'),
+            invitations.length == 1
+                ? context.t('auth.youreInvited')
+                : context.t('organizations.invitations'),
             style: Theme.of(context).textTheme.headlineSmall
                 ?.copyWith(fontWeight: FontWeight.w800),
           ),

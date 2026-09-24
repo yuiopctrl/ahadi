@@ -192,10 +192,13 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Contact 0'), findsOneWidget);
     expect(find.text('Contact 20'), findsNothing);
-    expect(api.lastContactsLimit, 21);
+    expect(api.lastContactsLimit, 20);
     expect(api.lastContactsOffset, 0);
-    final secondPage = await controller.contacts(limit: 21, offset: 20);
-    expect(secondPage.first['full_name'], 'Contact 20');
+    final secondPage = await controller.contacts(limit: 20, offset: 20);
+    final secondPageRows = (secondPage['data'] as List)
+        .cast<Map<String, dynamic>>();
+    expect(secondPageRows.first['full_name'], 'Contact 20');
+    expect(secondPage['pagination']['totalRows'], 22);
   });
 
   testWidgets('contact details edit visibility follows permissions', (
@@ -617,7 +620,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    expect(find.text('FINANCIAL SUMMARY'), findsOneWidget);
+    expect(find.text('PLEDGE'), findsOneWidget);
     expect(find.text('TZS 100,000'), findsWidgets);
     expect(find.text('TZS 40,000'), findsOneWidget);
     expect(find.text('TZS 60,000'), findsOneWidget);

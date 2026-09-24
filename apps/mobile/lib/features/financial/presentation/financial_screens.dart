@@ -24,7 +24,11 @@ Future<Map<String, Object?>> receiptImageSharePayload(
     '${(directory ?? Directory.systemTemp).path}/ahadi-receipt-${(now ?? DateTime.now()).microsecondsSinceEpoch}.png',
   );
   await file.writeAsBytes(bytes);
-  return {'path': file.path, 'mimeType': 'image/png', 'title': 'Changisha Receipt'};
+  return {
+    'path': file.path,
+    'mimeType': 'image/png',
+    'title': 'Changisha Receipt',
+  };
 }
 
 class PaymentsScreen extends StatefulWidget {
@@ -216,10 +220,16 @@ class RecordPaymentScreen extends StatefulWidget {
     super.key,
     required this.controller,
     this.initialMember,
+    this.suggestedAmount,
   });
 
   final SessionController controller;
   final Map<String, dynamic>? initialMember;
+
+  /// Prefills the amount field, e.g. with a pledge's outstanding balance
+  /// when this screen is opened contextually (from Member Details). Opt-in
+  /// so the general outstanding-members flow keeps requiring manual entry.
+  final num? suggestedAmount;
 
   @override
   State<RecordPaymentScreen> createState() => _RecordPaymentScreenState();
@@ -241,6 +251,9 @@ class _RecordPaymentScreenState extends State<RecordPaymentScreen> {
   void initState() {
     super.initState();
     selectedMember = widget.initialMember;
+    if (widget.suggestedAmount != null && widget.suggestedAmount! > 0) {
+      amount.text = moneyInputText(widget.suggestedAmount);
+    }
     future = _loadMembers();
   }
 
@@ -293,8 +306,14 @@ class _RecordPaymentScreenState extends State<RecordPaymentScreen> {
           children: [
             Text(titleCaseName(_memberName(context, member))),
             const SizedBox(height: 12),
-            AhadiInfoRow(label: context.t('eventDetail.amount'), value: moneyText(parsed)),
-            AhadiInfoRow(label: context.t('financial.method'), value: _methodName(context, method)),
+            AhadiInfoRow(
+              label: context.t('eventDetail.amount'),
+              value: moneyText(parsed),
+            ),
+            AhadiInfoRow(
+              label: context.t('financial.method'),
+              value: _methodName(context, method),
+            ),
           ],
         ),
         actions: [
@@ -352,7 +371,10 @@ class _RecordPaymentScreenState extends State<RecordPaymentScreen> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          _EventContextHeader(title: context.t('financial.recordPayment'), event: event),
+          _EventContextHeader(
+            title: context.t('financial.recordPayment'),
+            event: event,
+          ),
           const SizedBox(height: 12),
           if (selected == null) ...[
             TextField(
@@ -371,7 +393,9 @@ class _RecordPaymentScreenState extends State<RecordPaymentScreen> {
                 if (!snapshot.hasData) return const LoadingCards(count: 3);
                 final rows = objectList(snapshot.data!['data']);
                 if (rows.isEmpty) {
-                  return _EmptyCard(context.t('financial.noOutstandingMembers'));
+                  return _EmptyCard(
+                    context.t('financial.noOutstandingMembers'),
+                  );
                 }
                 return Column(
                   children: rows.map((member) {
@@ -438,7 +462,9 @@ class _RecordPaymentScreenState extends State<RecordPaymentScreen> {
                 const SizedBox(height: 12),
                 TextField(
                   controller: notes,
-                  decoration: InputDecoration(labelText: context.t('financial.notes')),
+                  decoration: InputDecoration(
+                    labelText: context.t('financial.notes'),
+                  ),
                   minLines: 2,
                   maxLines: 3,
                 ),
@@ -454,9 +480,11 @@ class _RecordPaymentScreenState extends State<RecordPaymentScreen> {
             FilledButton(
               key: const Key('record-payment-submit'),
               onPressed: saving ? null : _confirm,
-              child: Text(saving
-                  ? context.t('financial.recording')
-                  : context.t('financial.recordPayment')),
+              child: Text(
+                saving
+                    ? context.t('financial.recording')
+                    : context.t('financial.recordPayment'),
+              ),
             ),
           ],
         ],
@@ -488,7 +516,10 @@ class PaymentSuccessScreen extends StatelessWidget {
             children: [
               Text(
                 context.t('financial.paymentRecordedSuccessfully'),
-                style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 18),
+                style: const TextStyle(
+                  fontWeight: FontWeight.w900,
+                  fontSize: 18,
+                ),
               ),
               const SizedBox(height: 12),
               Row(
@@ -604,7 +635,10 @@ class _PaymentDetailScreenState extends State<PaymentDetailScreen> {
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            AhadiInfoRow(label: context.t('eventDetail.amount'), value: moneyText(payment['amount'])),
+            AhadiInfoRow(
+              label: context.t('eventDetail.amount'),
+              value: moneyText(payment['amount']),
+            ),
             AhadiInfoRow(
               label: context.t('eventDetail.member'),
               value: titleCaseName(_text(payment, ['member_name', 'member'])),
@@ -612,7 +646,9 @@ class _PaymentDetailScreenState extends State<PaymentDetailScreen> {
             const SizedBox(height: 8),
             TextField(
               controller: reason,
-              decoration: InputDecoration(labelText: context.t('financial.reason')),
+              decoration: InputDecoration(
+                labelText: context.t('financial.reason'),
+              ),
               minLines: 2,
               maxLines: 3,
             ),
@@ -674,7 +710,10 @@ class _PaymentDetailScreenState extends State<PaymentDetailScreen> {
                     label: context.t('eventDetail.amount'),
                     value: moneyText(payment['amount']),
                   ),
-                  AhadiInfoRow(label: context.t('financial.method'), value: _method(context, payment)),
+                  AhadiInfoRow(
+                    label: context.t('financial.method'),
+                    value: _method(context, payment),
+                  ),
                   AhadiInfoRow(
                     label: context.t('financial.reference'),
                     value: _text(payment, [
@@ -820,7 +859,8 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> {
                     ]).isNotEmpty,
                   )
                   .toList();
-              if (rows.isEmpty) return _EmptyCard(context.t('financial.noReceiptsFound'));
+              if (rows.isEmpty)
+                return _EmptyCard(context.t('financial.noReceiptsFound'));
               return Column(
                 children: [
                   ...rows.map(
@@ -931,9 +971,9 @@ class _ReceiptDetailScreenState extends State<ReceiptDetailScreen> {
       await _shareChannel.invokeMethod<void>('shareImage', payload);
     }
     if (mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(context.t('financial.receiptReadyToShare'))));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.t('financial.receiptReadyToShare'))),
+      );
     }
   }
 
@@ -1000,7 +1040,10 @@ class _ReceiptDetailScreenState extends State<ReceiptDetailScreen> {
                       receipt['payment_amount'] ?? receipt['amount'],
                     ),
                   ),
-                  AhadiInfoRow(label: context.t('financial.method'), value: _method(context, receipt)),
+                  AhadiInfoRow(
+                    label: context.t('financial.method'),
+                    value: _method(context, receipt),
+                  ),
                   AhadiInfoRow(
                     label: context.t('financial.date'),
                     value: dateText(
@@ -1014,7 +1057,10 @@ class _ReceiptDetailScreenState extends State<ReceiptDetailScreen> {
                       'receivedBy',
                     ], '-'),
                   ),
-                  AhadiInfoRow(label: context.t('financial.paymentStatus'), value: paymentStatus),
+                  AhadiInfoRow(
+                    label: context.t('financial.paymentStatus'),
+                    value: paymentStatus,
+                  ),
                   AhadiInfoRow(
                     label: context.t('financial.receiptStatus'),
                     value: paymentStatus == 'REVERSED' ? 'REVERSED' : 'ISSUED',
@@ -1144,8 +1190,16 @@ class _OutstandingScreenState extends State<OutstandingScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            _SortTile(context.t('reports.sort.highestOutstanding'), 'OUTSTANDING', 'DESC'),
-            _SortTile(context.t('financial.lowestOutstanding'), 'OUTSTANDING', 'ASC'),
+            _SortTile(
+              context.t('reports.sort.highestOutstanding'),
+              'OUTSTANDING',
+              'DESC',
+            ),
+            _SortTile(
+              context.t('financial.lowestOutstanding'),
+              'OUTSTANDING',
+              'ASC',
+            ),
             _SortTile(context.t('reports.sort.dueDate'), 'DUE_DATE', 'ASC'),
             _SortTile(context.t('financial.name'), 'MEMBER', 'ASC'),
           ],
@@ -1353,8 +1407,9 @@ class _ShareListScreenState extends State<ShareListScreen> {
   Future<void> _copy(String text) async {
     await Clipboard.setData(ClipboardData(text: text));
     if (mounted) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(context.t('financial.listCopied'))));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.t('financial.listCopied'))),
+      );
     }
   }
 
@@ -1393,9 +1448,14 @@ class _ShareListScreenState extends State<ShareListScreen> {
           const SizedBox(height: 12),
           DropdownButtonFormField<String>(
             initialValue: format,
-            decoration: InputDecoration(labelText: context.t('financial.format')),
+            decoration: InputDecoration(
+              labelText: context.t('financial.format'),
+            ),
             items: [
-              DropdownMenuItem(value: 'DETAILED', child: Text(context.t('financial.formatDetailed'))),
+              DropdownMenuItem(
+                value: 'DETAILED',
+                child: Text(context.t('financial.formatDetailed')),
+              ),
               DropdownMenuItem(
                 value: 'PRIVACY',
                 child: Text(context.t('financial.formatPrivacyFriendly')),
@@ -1438,7 +1498,9 @@ class _ShareListScreenState extends State<ShareListScreen> {
                 'body',
               ]);
               if (text.isEmpty) {
-                return _EmptyCard(context.t('financial.shareListPreviewUnavailable'));
+                return _EmptyCard(
+                  context.t('financial.shareListPreviewUnavailable'),
+                );
               }
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1582,7 +1644,8 @@ class _ShareSettingsScreenState extends State<ShareSettingsScreen> {
       });
       if (mounted) Navigator.of(context).pop(true);
     } catch (_) {
-      if (mounted) setState(() => error = context.t('financial.settingsSaveError'));
+      if (mounted)
+        setState(() => error = context.t('financial.settingsSaveError'));
     } finally {
       if (mounted) setState(() => saving = false);
     }
@@ -1598,7 +1661,11 @@ class _ShareSettingsScreenState extends State<ShareSettingsScreen> {
         child: FilledButton(
           key: const Key('share-settings-save-button'),
           onPressed: saving ? null : _save,
-          child: Text(saving ? context.t('auth.saving') : context.t('financial.saveSettings')),
+          child: Text(
+            saving
+                ? context.t('auth.saving')
+                : context.t('financial.saveSettings'),
+          ),
         ),
       ),
       body: ListView(
@@ -1611,14 +1678,18 @@ class _ShareSettingsScreenState extends State<ShareSettingsScreen> {
                 controller: headerText,
                 minLines: 2,
                 maxLines: 4,
-                decoration: InputDecoration(labelText: context.t('financial.header')),
+                decoration: InputDecoration(
+                  labelText: context.t('financial.header'),
+                ),
               ),
               const SizedBox(height: 12),
               TextField(
                 controller: footerText,
                 minLines: 2,
                 maxLines: 4,
-                decoration: InputDecoration(labelText: context.t('financial.footer')),
+                decoration: InputDecoration(
+                  labelText: context.t('financial.footer'),
+                ),
               ),
             ],
           ),
@@ -1653,17 +1724,23 @@ class _ShareSettingsScreenState extends State<ShareSettingsScreen> {
               ),
               TextField(
                 controller: completed,
-                decoration: InputDecoration(labelText: context.t('financial.completedLabel')),
+                decoration: InputDecoration(
+                  labelText: context.t('financial.completedLabel'),
+                ),
               ),
               const SizedBox(height: 12),
               TextField(
                 controller: partial,
-                decoration: InputDecoration(labelText: context.t('financial.partialLabel')),
+                decoration: InputDecoration(
+                  labelText: context.t('financial.partialLabel'),
+                ),
               ),
               const SizedBox(height: 12),
               TextField(
                 controller: noPledge,
-                decoration: InputDecoration(labelText: context.t('financial.noPledgeLabel')),
+                decoration: InputDecoration(
+                  labelText: context.t('financial.noPledgeLabel'),
+                ),
               ),
             ],
           ),
@@ -1704,7 +1781,10 @@ class _SelectedMemberCard extends StatelessWidget {
           outstanding: member['outstanding'],
         ),
         const SizedBox(height: 8),
-        OutlinedButton(onPressed: onChange, child: Text(context.t('financial.changeMember'))),
+        OutlinedButton(
+          onPressed: onChange,
+          child: Text(context.t('financial.changeMember')),
+        ),
       ],
     );
   }
@@ -1806,10 +1886,19 @@ Future<List<int>> _receiptImageBytes(
     context.t('financial.receivedFrom'),
     titleCaseName(_text(receipt, ['member_name', 'member'])),
   );
-  row(context.t('eventDetail.amount'), moneyText(receipt['payment_amount'] ?? receipt['amount']));
+  row(
+    context.t('eventDetail.amount'),
+    moneyText(receipt['payment_amount'] ?? receipt['amount']),
+  );
   row(context.t('financial.method'), _method(context, receipt));
-  row(context.t('financial.date'), dateText(_text(receipt, ['payment_date', 'date', 'issued_at'])));
-  row(context.t('eventDetail.status'), _text(receipt, ['payment_status', 'status'], 'CONFIRMED'));
+  row(
+    context.t('financial.date'),
+    dateText(_text(receipt, ['payment_date', 'date', 'issued_at'])),
+  );
+  row(
+    context.t('eventDetail.status'),
+    _text(receipt, ['payment_status', 'status'], 'CONFIRMED'),
+  );
   y += 10;
   canvas.drawLine(Offset(margin, y), Offset(width - margin, y), dividerPaint);
   y += 36;
@@ -1853,7 +1942,10 @@ class _PaymentPreview extends StatelessWidget {
           label: context.t('financial.currentOutstanding'),
           value: moneyText(outstanding),
         ),
-        AhadiInfoRow(label: context.t('eventDetail.payment'), value: moneyText(payment)),
+        AhadiInfoRow(
+          label: context.t('eventDetail.payment'),
+          value: moneyText(payment),
+        ),
         if (!overpay)
           AhadiInfoRow(
             label: context.t('financial.expectedRemaining'),
@@ -2038,8 +2130,11 @@ String _text(
   return fallback;
 }
 
-String _memberName(BuildContext context, Map<String, dynamic> row) =>
-    _text(row, ['member', 'member_name', 'full_name'], context.t('eventDetail.member'));
+String _memberName(BuildContext context, Map<String, dynamic> row) => _text(
+  row,
+  ['member', 'member_name', 'full_name'],
+  context.t('eventDetail.member'),
+);
 
 String _method(BuildContext context, Map<String, dynamic> row) =>
     _methodName(context, _text(row, ['paymentMethod', 'payment_method']));
@@ -2075,7 +2170,8 @@ String _receiptMeta(BuildContext context, Map<String, dynamic> row) {
   final recordedBy = _text(row, ['receivedBy', 'received_by_name']);
   return [
     if (receipt.isNotEmpty) '${context.t('financial.receipt')} $receipt',
-    if (recordedBy.isNotEmpty) '${context.t('financial.recordedBy')} $recordedBy',
+    if (recordedBy.isNotEmpty)
+      '${context.t('financial.recordedBy')} $recordedBy',
   ].join(' • ');
 }
 

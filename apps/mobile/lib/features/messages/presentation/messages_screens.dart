@@ -37,8 +37,14 @@ class _MessagesScreenState extends State<MessagesScreen> {
           const SizedBox(height: 12),
           FilterTabs<String>(
             items: [
-              FilterTabItem(value: 'compose', label: context.t('messages.compose')),
-              FilterTabItem(value: 'history', label: context.t('messages.history')),
+              FilterTabItem(
+                value: 'compose',
+                label: context.t('messages.compose'),
+              ),
+              FilterTabItem(
+                value: 'history',
+                label: context.t('messages.history'),
+              ),
             ],
             selected: tab,
             onChanged: (value) => setState(() => tab = value),
@@ -106,7 +112,10 @@ class _MessageComposerState extends State<MessageComposer> {
     for (final type in _manualTypes) {
       if (seen.add(type)) {
         items.add(
-          DropdownMenuItem(value: type, child: Text(_messageTypeLabel(context, type))),
+          DropdownMenuItem(
+            value: type,
+            child: Text(_messageTypeLabel(context, type)),
+          ),
         );
       }
     }
@@ -116,7 +125,9 @@ class _MessageComposerState extends State<MessageComposer> {
       items.add(
         DropdownMenuItem(
           value: code,
-          child: Text(_text(template, ['name'], context.t('messages.customTemplate'))),
+          child: Text(
+            _text(template, ['name'], context.t('messages.customTemplate')),
+          ),
         ),
       );
     }
@@ -161,11 +172,10 @@ class _MessageComposerState extends State<MessageComposer> {
       final providers = _providerOptions(results[1] as Map<String, dynamic>);
       final settings = results[2] as Map<String, dynamic>;
       final provider = _text(settings, ['provider', 'smsProvider'], 'NEXTSMS');
-      final defaultSender = _text(
-        settings,
-        ['senderId', 'sender_id'],
-        'MICHANGO',
-      );
+      final defaultSender = _text(settings, [
+        'senderId',
+        'sender_id',
+      ], 'MICHANGO');
       final senders = _resolveSenderIds(
         providers: providers,
         provider: provider,
@@ -327,7 +337,9 @@ class _MessageComposerState extends State<MessageComposer> {
               children: [
                 DropdownButtonFormField<String>(
                   initialValue: messageType,
-                  decoration: InputDecoration(labelText: context.t('messages.messageType')),
+                  decoration: InputDecoration(
+                    labelText: context.t('messages.messageType'),
+                  ),
                   items: _messageTypeItems(),
                   onChanged: (value) {
                     setState(() {
@@ -346,11 +358,15 @@ class _MessageComposerState extends State<MessageComposer> {
                     initialValue: senderOptions.contains(senderId)
                         ? senderId
                         : senderOptions.firstOrNull,
-                    decoration: InputDecoration(labelText: context.t('messages.senderId')),
+                    decoration: InputDecoration(
+                      labelText: context.t('messages.senderId'),
+                    ),
                     items: senderOptions
                         .map(
-                          (value) =>
-                              DropdownMenuItem(value: value, child: Text(value)),
+                          (value) => DropdownMenuItem(
+                            value: value,
+                            child: Text(value),
+                          ),
                         )
                         .toList(),
                     onChanged: (value) => setState(() => senderId = value),
@@ -359,12 +375,18 @@ class _MessageComposerState extends State<MessageComposer> {
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
                   initialValue: recipientGroup,
-                  decoration: InputDecoration(labelText: context.t('messages.recipients_label')),
+                  decoration: InputDecoration(
+                    labelText: context.t('messages.recipients_label'),
+                  ),
                   items: _isCustomType
                       ? [
                           DropdownMenuItem(
                             value: 'outstanding',
-                            child: Text(context.t('messages.membersWithOutstandingBalance')),
+                            child: Text(
+                              context.t(
+                                'messages.membersWithOutstandingBalance',
+                              ),
+                            ),
                           ),
                           DropdownMenuItem(
                             value: 'all',
@@ -381,7 +403,9 @@ class _MessageComposerState extends State<MessageComposer> {
                             child: Text(
                               messageType == 'PLEDGE_REQUEST'
                                   ? context.t('messages.membersWithoutPledge')
-                                  : context.t('messages.membersWithOutstandingBalance'),
+                                  : context.t(
+                                      'messages.membersWithOutstandingBalance',
+                                    ),
                             ),
                           ),
                           DropdownMenuItem(
@@ -536,6 +560,19 @@ class _MessagePreviewScreenState extends State<_MessagePreviewScreen> {
               widget.event.id,
               widget.targetIds,
             );
+      if (response['reason'] == 'SMS_BALANCE_INSUFFICIENT') {
+        final allowance = _map(response['smsAllowance']);
+        final requestedUnits =
+            numberFrom(allowance['requested'])?.round() ?? recipientCount;
+        final availableUnits = numberFrom(allowance['allowed'])?.round() ?? 0;
+        setState(
+          () => error = context
+              .t('messages.smsBalanceInsufficient')
+              .replaceFirst('{requested}', '$requestedUnits')
+              .replaceFirst('{available}', '$availableUnits'),
+        );
+        return;
+      }
       final queued =
           numberFrom(
             response['queued'] ?? response['queuedCount'] ?? response['count'],
@@ -544,10 +581,7 @@ class _MessagePreviewScreenState extends State<_MessagePreviewScreen> {
       if (mounted) Navigator.of(context).pop(queued);
     } catch (err) {
       setState(
-        () => error = friendlyErrorText(
-          err,
-          context.t('messages.sendError'),
-        ),
+        () => error = friendlyErrorText(err, context.t('messages.sendError')),
       );
     } finally {
       if (mounted) setState(() => sending = false);
@@ -603,7 +637,10 @@ class _MessagePreviewScreenState extends State<_MessagePreviewScreen> {
                     AhadiSectionCard(
                       title: context.t('messages.readyToSend'),
                       children: [
-                        AhadiInfoRow(label: context.t('activity.event'), value: widget.event.name),
+                        AhadiInfoRow(
+                          label: context.t('activity.event'),
+                          value: widget.event.name,
+                        ),
                         AhadiInfoRow(
                           label: context.t('messages.type'),
                           value:
@@ -616,10 +653,40 @@ class _MessagePreviewScreenState extends State<_MessagePreviewScreen> {
                             label: context.t('messages.senderId'),
                             value: widget.senderId ?? '-',
                           ),
-                        AhadiInfoRow(
-                          label: context.t('messages.recipients_label'),
-                          value: '${previews.length}',
-                        ),
+                        if (widget.isCustom) ...[
+                          AhadiInfoRow(
+                            label: context.t('messages.recipientsSelected'),
+                            value:
+                                '${numberFrom(data['selected'])?.round() ?? widget.targetIds.length}',
+                          ),
+                          AhadiInfoRow(
+                            label: context.t('messages.validPhoneNumbers'),
+                            value:
+                                '${numberFrom(data['eligible'])?.round() ?? previews.length}',
+                          ),
+                          AhadiInfoRow(
+                            label: context.t('messages.missingInvalidPhone'),
+                            value:
+                                '${(numberFrom(data['noPhone'])?.round() ?? 0) + (numberFrom(data['smsDisabled'])?.round() ?? 0)}',
+                          ),
+                          AhadiInfoRow(
+                            label: context.t('messages.estimatedSmsUnits'),
+                            value:
+                                '${numberFrom(data['eligible'])?.round() ?? previews.length}',
+                          ),
+                          if (_map(data['smsAllowance'])['status'] != null &&
+                              _map(data['smsAllowance'])['status'] !=
+                                  'UNLIMITED')
+                            AhadiInfoRow(
+                              label: context.t('messages.availableSmsBalance'),
+                              value:
+                                  '${numberFrom(_map(data['smsAllowance'])['allowed'])?.round() ?? '-'}',
+                            ),
+                        ] else
+                          AhadiInfoRow(
+                            label: context.t('messages.recipients_label'),
+                            value: '${previews.length}',
+                          ),
                         if (skipped.isNotEmpty)
                           AhadiInfoRow(
                             label: context.t('messages.skipped'),
@@ -656,7 +723,9 @@ class _MessagePreviewScreenState extends State<_MessagePreviewScreen> {
                                     Expanded(
                                       child: Text(
                                         titleCaseName(
-                                          _text(member, ['name'], context.t('eventDetail.member')),
+                                          _text(member, [
+                                            'name',
+                                          ], context.t('eventDetail.member')),
                                         ),
                                         style: const TextStyle(
                                           fontWeight: FontWeight.w800,
@@ -720,7 +789,10 @@ class _MessagePreviewScreenState extends State<_MessagePreviewScreen> {
                               ? context.t('messages.sending')
                               : context
                                     .t('messages.sendCount')
-                                    .replaceFirst('{count}', '${previews.length}'),
+                                    .replaceFirst(
+                                      '{count}',
+                                      '${previews.length}',
+                                    ),
                         ),
                       ),
                     ],
@@ -812,7 +884,8 @@ class _MessageHistoryState extends State<MessageHistory> {
                 ...visible.map(
                   (campaign) => AhadiListRow(
                     title: campaign.displayLabel(context),
-                    subtitle: '${campaign.total} ${context.t('messages.recipients')}',
+                    subtitle:
+                        '${campaign.total} ${context.t('messages.recipients')}',
                     status: campaign.primaryStatus,
                     meta:
                         '${dateText(campaign.createdAt)} • ${campaign.summaryText(context)}',
@@ -879,7 +952,9 @@ class _MessageDetailScreenState extends State<_MessageDetailScreen> {
       builder: (context) => AlertDialog(
         title: Text(context.t('messages.retryFailedMessage')),
         content: Text(
-          context.t('messages.retryMessageTo').replaceFirst('{name}', recipient.name),
+          context
+              .t('messages.retryMessageTo')
+              .replaceFirst('{name}', recipient.name),
         ),
         actions: [
           TextButton(
@@ -904,7 +979,8 @@ class _MessageDetailScreenState extends State<_MessageDetailScreen> {
     } catch (err) {
       if (!mounted) return;
       setState(
-        () => message = friendlyErrorText(err, context.t('messages.retryError')),
+        () =>
+            message = friendlyErrorText(err, context.t('messages.retryError')),
       );
     } finally {
       if (mounted) setState(() => retrying = false);
@@ -924,16 +1000,31 @@ class _MessageDetailScreenState extends State<_MessageDetailScreen> {
           AhadiSectionCard(
             title: context.t('messages.message'),
             children: [
-              AhadiInfoRow(label: context.t('messages.type'), value: c.displayLabel(context)),
-              AhadiInfoRow(label: context.t('activity.event'), value: c.eventName),
-              AhadiInfoRow(label: context.t('pledges.created'), value: dateText(c.createdAt)),
-              AhadiInfoRow(label: context.t('messages.sender'), value: c.senderId),
+              AhadiInfoRow(
+                label: context.t('messages.type'),
+                value: c.displayLabel(context),
+              ),
+              AhadiInfoRow(
+                label: context.t('activity.event'),
+                value: c.eventName,
+              ),
+              AhadiInfoRow(
+                label: context.t('pledges.created'),
+                value: dateText(c.createdAt),
+              ),
+              AhadiInfoRow(
+                label: context.t('messages.sender'),
+                value: c.senderId,
+              ),
             ],
           ),
           AhadiSectionCard(
             title: context.t('messages.recipientSummary'),
             children: [
-              AhadiInfoRow(label: context.t('financial.total'), value: '${c.total}'),
+              AhadiInfoRow(
+                label: context.t('financial.total'),
+                value: '${c.total}',
+              ),
               ...c.statusCounts.entries.map(
                 (entry) => AhadiInfoRow(
                   label: _statusLabel(context, entry.key),
@@ -942,7 +1033,10 @@ class _MessageDetailScreenState extends State<_MessageDetailScreen> {
               ),
             ],
           ),
-          AhadiSectionCard(title: context.t('messages.messageText'), children: [Text(c.body)]),
+          AhadiSectionCard(
+            title: context.t('messages.messageText'),
+            children: [Text(c.body)],
+          ),
           if (message != null)
             Padding(
               padding: const EdgeInsets.only(bottom: 8),
@@ -1173,7 +1267,9 @@ class _MessagingSettingsScreenState extends State<MessagingSettingsScreen> {
                     initialValue: senders.contains(senderId)
                         ? senderId
                         : senders.firstOrNull,
-                    decoration: InputDecoration(labelText: context.t('messages.senderId')),
+                    decoration: InputDecoration(
+                      labelText: context.t('messages.senderId'),
+                    ),
                     items: senders
                         .map(
                           (value) => DropdownMenuItem(
@@ -1189,7 +1285,11 @@ class _MessagingSettingsScreenState extends State<MessagingSettingsScreen> {
                   const SizedBox(height: 12),
                   FilledButton(
                     onPressed: canManage && !saving ? _save : null,
-                    child: Text(saving ? context.t('auth.saving') : context.t('financial.saveSettings')),
+                    child: Text(
+                      saving
+                          ? context.t('auth.saving')
+                          : context.t('financial.saveSettings'),
+                    ),
                   ),
                   if (message != null) ...[
                     const SizedBox(height: 8),
@@ -1222,7 +1322,9 @@ class _MessagingSettingsScreenState extends State<MessagingSettingsScreen> {
                             ),
                             subtitle: Text(
                               _text(template, ['body']).isEmpty
-                                  ? context.t('messages.templateManagedByBackend')
+                                  ? context.t(
+                                      'messages.templateManagedByBackend',
+                                    )
                                   : _text(template, ['body']),
                             ),
                             trailing: const Icon(Icons.chevron_right),
@@ -1263,7 +1365,9 @@ class _MessagingSettingsScreenState extends State<MessagingSettingsScreen> {
                         clipBehavior: Clip.antiAlias,
                         child: ListTile(
                           title: Text(
-                            _text(template, ['name'], context.t('messages.customTemplate')),
+                            _text(template, [
+                              'name',
+                            ], context.t('messages.customTemplate')),
                             style: const TextStyle(fontWeight: FontWeight.w800),
                           ),
                           subtitle: Text(_text(template, ['body'])),
@@ -1342,7 +1446,10 @@ class _SmsTemplateScreenState extends State<SmsTemplateScreen> {
     } catch (err) {
       if (!mounted) return;
       setState(
-        () => message = friendlyErrorText(err, context.t('messages.templateSaveError')),
+        () => message = friendlyErrorText(
+          err,
+          context.t('messages.templateSaveError'),
+        ),
       );
     } finally {
       if (mounted) setState(() => saving = false);
@@ -1363,7 +1470,10 @@ class _SmsTemplateScreenState extends State<SmsTemplateScreen> {
     } catch (err) {
       if (!mounted) return;
       setState(
-        () => message = friendlyErrorText(err, context.t('messages.templateResetError')),
+        () => message = friendlyErrorText(
+          err,
+          context.t('messages.templateResetError'),
+        ),
       );
     } finally {
       if (mounted) setState(() => saving = false);
@@ -1397,7 +1507,9 @@ class _SmsTemplateScreenState extends State<SmsTemplateScreen> {
                 controller: body,
                 minLines: 5,
                 maxLines: 8,
-                decoration: InputDecoration(labelText: context.t('messages.message')),
+                decoration: InputDecoration(
+                  labelText: context.t('messages.message'),
+                ),
                 onChanged: (_) => setState(() {}),
               ),
               const SizedBox(height: 8),
@@ -1407,7 +1519,10 @@ class _SmsTemplateScreenState extends State<SmsTemplateScreen> {
               ),
               if (variables.isNotEmpty) ...[
                 const SizedBox(height: 12),
-                Text(context.t('messages.availableVariables'), style: AhadiTypography.label),
+                Text(
+                  context.t('messages.availableVariables'),
+                  style: AhadiTypography.label,
+                ),
                 const SizedBox(height: 4),
                 Text(variables),
               ],
@@ -1449,7 +1564,11 @@ class _SmsTemplateScreenState extends State<SmsTemplateScreen> {
               Expanded(
                 child: FilledButton(
                   onPressed: saving ? null : _save,
-                  child: Text(saving ? context.t('auth.saving') : context.t('common.save')),
+                  child: Text(
+                    saving
+                        ? context.t('auth.saving')
+                        : context.t('common.save'),
+                  ),
                 ),
               ),
             ],
@@ -1519,7 +1638,10 @@ class _CustomTemplateEditorScreenState
     } catch (err) {
       if (!mounted) return;
       setState(
-        () => error = friendlyErrorText(err, context.t('messages.templateSaveError')),
+        () => error = friendlyErrorText(
+          err,
+          context.t('messages.templateSaveError'),
+        ),
       );
     } finally {
       if (mounted) setState(() => saving = false);
@@ -1531,7 +1653,11 @@ class _CustomTemplateEditorScreenState
     return Scaffold(
       backgroundColor: AhadiColors.background,
       appBar: AppBar(
-        title: Text(isEditing ? context.t('messages.editCustomTemplate') : context.t('messages.newCustomTemplate')),
+        title: Text(
+          isEditing
+              ? context.t('messages.editCustomTemplate')
+              : context.t('messages.newCustomTemplate'),
+        ),
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),
@@ -1541,7 +1667,9 @@ class _CustomTemplateEditorScreenState
             children: [
               TextField(
                 controller: name,
-                decoration: InputDecoration(labelText: context.t('messages.titleLabel')),
+                decoration: InputDecoration(
+                  labelText: context.t('messages.titleLabel'),
+                ),
                 onChanged: (_) => setState(() {}),
               ),
               const SizedBox(height: 12),
@@ -1549,7 +1677,9 @@ class _CustomTemplateEditorScreenState
                 controller: body,
                 minLines: 5,
                 maxLines: 8,
-                decoration: InputDecoration(labelText: context.t('messages.message')),
+                decoration: InputDecoration(
+                  labelText: context.t('messages.message'),
+                ),
                 onChanged: (_) => setState(() {}),
               ),
               const SizedBox(height: 8),
@@ -1584,7 +1714,11 @@ class _CustomTemplateEditorScreenState
               Expanded(
                 child: FilledButton(
                   onPressed: saving ? null : _save,
-                  child: Text(saving ? context.t('auth.saving') : context.t('common.save')),
+                  child: Text(
+                    saving
+                        ? context.t('auth.saving')
+                        : context.t('common.save'),
+                  ),
                 ),
               ),
             ],
@@ -1667,8 +1801,9 @@ class _MessageCampaign {
 
   int get total => recipients.length;
 
-  String displayLabel(BuildContext context) =>
-      templateName.isNotEmpty ? templateName : _messageTypeLabel(context, templateCode);
+  String displayLabel(BuildContext context) => templateName.isNotEmpty
+      ? templateName
+      : _messageTypeLabel(context, templateCode);
 
   String get primaryStatus {
     if (statusCounts.containsKey('FAILED')) return 'FAILED';
@@ -1756,8 +1891,9 @@ List<String> _resolveSenderIds({
         (row) => _text(row, ['provider', 'providerCode', 'code']) == provider,
       )
       .expand(
-        (row) => _list(row['senderIds'])
-            .map((sender) => _text(sender, ['senderId', 'id', 'code'])),
+        (row) =>
+            _list(row['senderIds'])
+                .map((sender) => _text(sender, ['senderId', 'id', 'code'])),
       )
       .where((value) => value.isNotEmpty)
       .toSet()
@@ -1803,11 +1939,19 @@ String _id(Map<String, dynamic> row) =>
     _text(row, ['eventMemberId', 'event_member_id']);
 
 String _name(BuildContext context, Map<String, dynamic> row) => titleCaseName(
-  _text(row, ['fullName', 'full_name', 'member', 'member_name'], context.t('eventDetail.member')),
+  _text(row, [
+    'fullName',
+    'full_name',
+    'member',
+    'member_name',
+  ], context.t('eventDetail.member')),
 );
 
-String _phone(BuildContext context, Map<String, dynamic> row) =>
-    _text(row, ['maskedPhone', 'phone', 'phone_e164'], context.t('contacts.noPhone'));
+String _phone(BuildContext context, Map<String, dynamic> row) => _text(row, [
+  'maskedPhone',
+  'phone',
+  'phone_e164',
+], context.t('contacts.noPhone'));
 
 String _messageTypeLabel(BuildContext context, String value) {
   switch (value) {

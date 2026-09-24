@@ -82,6 +82,39 @@ class _LoginScreenState extends State<LoginScreen> {
                               crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
                                 const BrandHeader(),
+                                if (widget.controller.sessionExpired) ...[
+                                  const SizedBox(height: 16),
+                                  Container(
+                                    key: const Key('session-expired-notice'),
+                                    padding: const EdgeInsets.all(12),
+                                    decoration: BoxDecoration(
+                                      color: AhadiColors.primarySoft,
+                                      borderRadius: BorderRadius.circular(8),
+                                      border: Border.all(
+                                        color: AhadiColors.danger,
+                                      ),
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        const Icon(
+                                          Icons.lock_clock_outlined,
+                                          color: AhadiColors.danger,
+                                          size: 20,
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          child: Text(
+                                            context.t('auth.sessionExpired'),
+                                            style: const TextStyle(
+                                              color: AhadiColors.danger,
+                                              fontWeight: FontWeight.w700,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
                                 const SizedBox(height: 32),
                                 Text(
                                   context.t('auth.signIn'),
@@ -116,8 +149,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                   enabled: !widget.controller.isSubmitting,
                                   onCompleted: submit,
                                 ),
-                                if (widget.controller.errorMessage !=
-                                    null) ...[
+                                if (widget.controller.errorMessage != null) ...[
                                   const SizedBox(height: 12),
                                   Text(
                                     widget.controller.errorMessage!,
@@ -133,7 +165,9 @@ class _LoginScreenState extends State<LoginScreen> {
                                       ? null
                                       : () {
                                           final pin =
-                                              pinKey.currentState?.controller
+                                              pinKey
+                                                  .currentState
+                                                  ?.controller
                                                   .text ??
                                               '';
                                           if (pin.length == 4) submit(pin);
@@ -205,4 +239,3 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 }
-
