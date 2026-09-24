@@ -946,12 +946,59 @@ function tenantIdFromRequest(request: express.Request): string {
   return tenantId
 }
 
-function jsonArray(data: unknown): Record<string, unknown>[] {
+export function jsonArray(data: unknown): Record<string, unknown>[] {
   return Array.isArray(data) ? data as Record<string, unknown>[] : []
 }
 
-function jsonRecord(data: unknown): Record<string, unknown> {
+export function jsonRecord(data: unknown): Record<string, unknown> {
   return typeof data === 'object' && data !== null && !Array.isArray(data) ? data as Record<string, unknown> : {}
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function safeJsonPreview(value: unknown): string {
+  try {
+    return JSON.stringify(value)?.slice(0, 500) ?? String(value)
+  } catch {
+    return String(value)
+  }
+}
+
+// A paginated list RPC (rpc_list_contacts, rpc_list_event_members, ...) is
+// contracted to return a jsonb object shaped { data: [...], pagination: {...},
+// ...optional extra object fields }. A malformed response here -- the wrong
+// overload resolving, a schema-cache-stale PostgREST response, a function
+// that regressed back to returning a bare array -- must NEVER be silently
+// coalesced into "0 rows" (jsonArray/jsonRecord on the whole result would do
+// exactly that, since a non-object or array input just falls through to []
+// / {}). Instead, validate the envelope shape explicitly and fail loudly
+// with full diagnostics, before falling back to jsonArray/jsonRecord for the
+// already-validated inner fields.
+export function expectPaginatedListResponse(
+  data: unknown,
+  requestId: string,
+  operation: string,
+  requiredObjectKeys: string[] = [],
+): Record<string, unknown> {
+  const record = isPlainRecord(data) ? data : null
+  const malformed =
+    !record ||
+    !Array.isArray(record['data']) ||
+    !isPlainRecord(record['pagination']) ||
+    requiredObjectKeys.some((key) => !isPlainRecord(record[key]))
+  if (malformed) {
+    console.error('RPC returned an unexpected response shape for a paginated list', {
+      requestId,
+      operation,
+      receivedType: Array.isArray(data) ? 'array' : data === null ? 'null' : typeof data,
+      requiredObjectKeys,
+      preview: safeJsonPreview(data),
+    })
+    throw new AppError('INTERNAL_ERROR', 'Unexpected application error', 500, `${operation}_MALFORMED_RESPONSE`)
+  }
+  return record
 }
 
 function compactPhoneSearch(value: unknown): string {
@@ -3513,9 +3560,10 @@ app.get('/api/v1/events/:eventId/members', requireAuth, loadUserContext, require
       p_offset: query.offset,
     })
     if (error) {
+      logDatabaseError(request.requestId, 'event-members-list', error, { tenantId, eventId })
       throwFinancialDatabaseError(error, 'EVENT_MEMBERS_LIST_FAILED')
     }
-    const result = jsonRecord(data)
+    const result = expectPaginatedListResponse(data, request.requestId, 'EVENT_MEMBERS_LIST')
     response.json({
       data: jsonArray(result['data']),
       pagination: jsonRecord(result['pagination']),
@@ -3537,9 +3585,10 @@ app.get('/api/v1/contacts', requireAuth, loadUserContext, requireTenantContext, 
       p_offset: query.offset,
     })
     if (error) {
+      logDatabaseError(request.requestId, 'contacts-list', error, { tenantId })
       throwFinancialDatabaseError(error, 'CONTACTS_LIST_FAILED')
     }
-    const result = jsonRecord(data)
+    const result = expectPaginatedListResponse(data, request.requestId, 'CONTACTS_LIST', ['usage'])
     response.json({
       data: jsonArray(result['data']),
       pagination: jsonRecord(result['pagination']),
