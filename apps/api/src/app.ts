@@ -34,6 +34,7 @@ import {
   type ReportExportFormat,
 } from './report-exports.js'
 import { createUserSupabase, supabaseAdmin, supabasePublic } from './supabase.js'
+import { buildPublicInvitationUrl, verifyInvitationToken } from './invitation-token.js'
 import { loadUserContext, requestIdMiddleware, requireAuth, requirePlatformPermission, requireTenantContext } from './middleware.js'
 import { normalizeProfile } from './context-normalization.js'
 
@@ -146,6 +147,25 @@ const paymentIntentLimiter = rateLimit({
       error: {
         code: 'RATE_LIMITED',
         message: 'Too many payment attempts. Try again shortly.',
+        requestId: request.requestId,
+      },
+    })
+  },
+})
+
+// Public invitation routes have no auth of any kind -- this is the only
+// abuse guard against token brute-forcing/guessing and repeated invalid
+// requests. Generous enough for a guest genuinely refreshing/resubmitting.
+const publicInvitationLimiter = rateLimit({
+  windowMs: 60_000,
+  limit: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: (request, response) => {
+    response.status(429).json({
+      error: {
+        code: 'RATE_LIMITED',
+        message: 'Too many requests. Try again shortly.',
         requestId: request.requestId,
       },
     })
@@ -747,6 +767,70 @@ const listEventMembersQuerySchema = z.object({
   offset: z.coerce.number().int().min(0).optional().default(0),
 })
 const isoDateLikeSchema = z.string().trim().min(1).refine((value) => !Number.isNaN(Date.parse(value)), 'Invalid date')
+
+// --- RSVP-1: invitation + RSVP domain schemas ---
+const invitationSettingsUpsertSchema = z.object({
+  hostDisplayName: z.string().trim().max(160).optional(),
+  invitationTitle: z.string().trim().max(160).optional(),
+  invitationMessage: z.string().trim().max(2000).optional(),
+  venueNameOverride: z.string().trim().max(160).optional(),
+  venueAddressOverride: z.string().trim().max(300).optional(),
+  mapsUrl: z.union([z.string().trim().url().max(500), z.literal('')]).optional(),
+  eventTimeDisplay: z.string().trim().max(60).optional(),
+  rsvpEnabled: z.boolean().optional().default(true),
+  rsvpDeadline: isoDateLikeSchema.optional(),
+  allowLateRsvp: z.boolean().optional().default(false),
+  defaultMaxGuests: z.coerce.number().int().min(1).max(50).optional().default(1),
+  templateId: z.string().uuid().optional(),
+})
+const createInvitationSchema = z.object({
+  eventMemberId: z.string().uuid(),
+  displayName: z.string().trim().min(1).max(160).optional(),
+  maxGuests: z.coerce.number().int().min(1).max(50).optional(),
+  templateId: z.string().uuid().optional(),
+})
+const bulkCreateInvitationsSchema = z.object({
+  eventMemberIds: z.array(z.string().uuid()).min(1).max(2000),
+  defaultMaxGuests: z.coerce.number().int().min(1).max(50).optional(),
+  templateId: z.string().uuid().optional(),
+  // Applied identically to every created invitation's display_name (e.g.
+  // "& Family") -- never touches the Contact's full_name.
+  displayNameSuffix: z.string().trim().max(60).optional(),
+})
+const updateInvitationSchema = z.object({
+  displayName: z.string().trim().min(1).max(160).optional(),
+  maxGuests: z.coerce.number().int().min(1).max(50).optional(),
+  templateId: z.string().uuid().optional(),
+})
+const cancelInvitationSchema = z.object({
+  reason: z.string().trim().max(300).optional(),
+})
+const manualRsvpSchema = z.object({
+  response: z.enum(['ATTENDING', 'MAYBE', 'NOT_ATTENDING']),
+  attendingCount: z.coerce.number().int().min(0).max(500),
+  guestNames: z.array(z.string().trim().min(1).max(120)).max(500).optional().default([]),
+  note: z.string().trim().max(500).optional(),
+})
+const listInvitationsQuerySchema = z.object({
+  search: z.string().trim().max(160).optional(),
+  status: z.enum(['ALL', 'DRAFT', 'ACTIVE', 'CANCELLED']).optional().default('ALL'),
+  rsvpStatus: z.enum(['ALL', 'ATTENDING', 'MAYBE', 'NOT_ATTENDING', 'NO_RESPONSE']).optional().default('ALL'),
+  limit: z.coerce.number().int().min(1).max(100).optional().default(20),
+  offset: z.coerce.number().int().min(0).optional().default(0),
+})
+// Public guest input -- validated defensively here, but the database
+// transaction (rpc_submit_public_invitation_rsvp) remains authoritative for
+// the real business rules (guest limit vs. max_guests, deadline, etc.).
+// Kept deliberately small (max 50 guests/500-char note) as abuse protection
+// independent of rate limiting.
+const publicRsvpSubmitSchema = z.object({
+  response: z.enum(['ATTENDING', 'MAYBE', 'NOT_ATTENDING']),
+  attendingCount: z.coerce.number().int().min(0).max(50),
+  guestNames: z.array(z.string().trim().min(1).max(120)).max(50).optional().default([]),
+  note: z.string().trim().max(500).optional(),
+})
+const publicInvitationTokenParamSchema = z.string().trim().min(1).max(512)
+
 const listActivityQuerySchema = z.object({
   search: z.string().trim().max(160).optional().default(''),
   action: z.string().trim().max(80).optional(),
@@ -868,6 +952,19 @@ const knownDatabaseCodes: ApiErrorCode[] = [
   'INVALID_SUBSCRIPTION_STATUS',
   'REASON_REQUIRED',
   'CONTACT_LIMIT_REACHED',
+  'INVITATION_ALREADY_EXISTS',
+  'INVITATION_NOT_FOUND',
+  'INVITATION_CANCELLED',
+  'INVITATION_NOT_ACTIVE',
+  'INVITATION_GUEST_LIMIT_INVALID',
+  'INVITATION_GUEST_LIMIT_BELOW_RSVP_COUNT',
+  'INVITATION_TOKEN_INVALID',
+  'INVITATION_TOKEN_EXPIRED_OR_ROTATED',
+  'INVITATION_TEMPLATE_NOT_FOUND',
+  'RSVP_DISABLED',
+  'RSVP_DEADLINE_PASSED',
+  'RSVP_GUEST_COUNT_INVALID',
+  'RSVP_GUEST_NAMES_EXCEED_COUNT',
 ]
 
 const developmentWebOrigins = new Set([
@@ -3716,6 +3813,26 @@ app.get('/api/v1/events/:eventId/members/:eventMemberId', requireAuth, loadUserC
   }
 })
 
+// RSVP-2 identity hardening: exact (tenant, event, event_member) lookup --
+// never resolve "does this event member have an invitation" via a name
+// search. Returns { data: null } when no invitation exists.
+app.get('/api/v1/events/:eventId/members/:eventMemberId/invitation', requireAuth, loadUserContext, requireTenantContext, async (request, response, next) => {
+  try {
+    const tenantId = tenantIdFromRequest(request)
+    const eventId = uuidParamSchema.parse(request.params['eventId'])
+    const eventMemberId = uuidParamSchema.parse(request.params['eventMemberId'])
+    const client = createUserSupabase(request.auth?.accessToken ?? '')
+    const { data, error } = await client.rpc('rpc_get_event_member_invitation', { p_tenant_id: tenantId, p_event_id: eventId, p_event_member_id: eventMemberId })
+    if (error) {
+      logDatabaseError(request.requestId, 'event-member-invitation-lookup', error, { tenantId, eventId, eventMemberId })
+      throwFinancialDatabaseError(error, 'EVENT_MEMBER_INVITATION_LOOKUP_FAILED')
+    }
+    response.json({ data: data ?? null })
+  } catch (error) {
+    next(error)
+  }
+})
+
 app.patch('/api/v1/members/:memberId', requireAuth, loadUserContext, requireTenantContext, async (request, response, next) => {
   try {
     const tenantId = tenantIdFromRequest(request)
@@ -4861,6 +4978,368 @@ app.get('/api/v1/activity', requireAuth, loadUserContext, requireTenantContext, 
       data: jsonArray(result['data']),
       pagination: jsonRecord(result['pagination']),
     })
+  } catch (error) {
+    next(error)
+  }
+})
+
+// ============================================================
+// RSVP-1: Invitation + RSVP domain -- authenticated routes
+// ============================================================
+
+// RSVP-2 addition: the smallest additive backend change genuinely needed --
+// RSVP-1 let an invitation reference a template but never exposed a way for
+// the organizer UI to discover which active templates exist to offer as a
+// picker in bulk-create/single-create/settings.
+app.get('/api/v1/invitation-templates', requireAuth, loadUserContext, requireTenantContext, async (request, response, next) => {
+  try {
+    const tenantId = tenantIdFromRequest(request)
+    const client = createUserSupabase(request.auth?.accessToken ?? '')
+    const { data, error } = await client.rpc('rpc_list_invitation_templates', { p_tenant_id: tenantId })
+    if (error) {
+      logDatabaseError(request.requestId, 'invitation-templates-list', error, { tenantId })
+      throwFinancialDatabaseError(error, 'INVITATION_TEMPLATES_LIST_FAILED')
+    }
+    response.json({ data: jsonArray(data) })
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.get('/api/v1/events/:eventId/invitation-settings', requireAuth, loadUserContext, requireTenantContext, async (request, response, next) => {
+  try {
+    const tenantId = tenantIdFromRequest(request)
+    const eventId = uuidParamSchema.parse(request.params['eventId'])
+    const client = createUserSupabase(request.auth?.accessToken ?? '')
+    const { data, error } = await client.rpc('rpc_get_event_invitation_settings', { p_tenant_id: tenantId, p_event_id: eventId })
+    if (error) {
+      logDatabaseError(request.requestId, 'invitation-settings-get', error, { tenantId, eventId })
+      throwFinancialDatabaseError(error, 'INVITATION_SETTINGS_FAILED')
+    }
+    response.json({ data })
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.put('/api/v1/events/:eventId/invitation-settings', requireAuth, loadUserContext, requireTenantContext, async (request, response, next) => {
+  try {
+    const tenantId = tenantIdFromRequest(request)
+    const eventId = uuidParamSchema.parse(request.params['eventId'])
+    const input = invitationSettingsUpsertSchema.parse(request.body)
+    const client = createUserSupabase(request.auth?.accessToken ?? '')
+    const { data, error } = await client.rpc('rpc_upsert_event_invitation_settings', {
+      p_tenant_id: tenantId,
+      p_event_id: eventId,
+      p_host_display_name: input.hostDisplayName || null,
+      p_invitation_title: input.invitationTitle || null,
+      p_invitation_message: input.invitationMessage || null,
+      p_venue_name_override: input.venueNameOverride || null,
+      p_venue_address_override: input.venueAddressOverride || null,
+      p_maps_url: input.mapsUrl || null,
+      p_event_time_display: input.eventTimeDisplay || null,
+      p_rsvp_enabled: input.rsvpEnabled,
+      p_rsvp_deadline: input.rsvpDeadline || null,
+      p_allow_late_rsvp: input.allowLateRsvp,
+      p_default_max_guests: input.defaultMaxGuests,
+      p_template_id: input.templateId || null,
+    })
+    if (error) {
+      logDatabaseError(request.requestId, 'invitation-settings-upsert', error, { tenantId, eventId })
+      throwFinancialDatabaseError(error, 'INVITATION_SETTINGS_FAILED')
+    }
+    response.json({ data })
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.get('/api/v1/events/:eventId/invitations', requireAuth, loadUserContext, requireTenantContext, async (request, response, next) => {
+  try {
+    const tenantId = tenantIdFromRequest(request)
+    const eventId = uuidParamSchema.parse(request.params['eventId'])
+    const query = listInvitationsQuerySchema.parse(request.query)
+    const client = createUserSupabase(request.auth?.accessToken ?? '')
+    const { data, error } = await client.rpc('rpc_list_event_invitations', {
+      p_tenant_id: tenantId,
+      p_event_id: eventId,
+      p_search: query.search || null,
+      p_status: query.status,
+      p_rsvp_status: query.rsvpStatus,
+      p_limit: query.limit,
+      p_offset: query.offset,
+    })
+    if (error) {
+      logDatabaseError(request.requestId, 'invitations-list', error, { tenantId, eventId })
+      throwFinancialDatabaseError(error, 'INVITATIONS_LIST_FAILED')
+    }
+    const result = expectPaginatedListResponse(data, request.requestId, 'INVITATIONS_LIST')
+    response.json({
+      data: jsonArray(result['data']),
+      pagination: jsonRecord(result['pagination']),
+    })
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.post('/api/v1/events/:eventId/invitations', requireAuth, loadUserContext, requireTenantContext, async (request, response, next) => {
+  try {
+    const tenantId = tenantIdFromRequest(request)
+    const eventId = uuidParamSchema.parse(request.params['eventId'])
+    const input = createInvitationSchema.parse(request.body)
+    const client = createUserSupabase(request.auth?.accessToken ?? '')
+    const { data, error } = await client.rpc('rpc_create_event_invitation', {
+      p_tenant_id: tenantId,
+      p_event_id: eventId,
+      p_event_member_id: input.eventMemberId,
+      p_display_name: input.displayName || null,
+      p_max_guests: input.maxGuests ?? null,
+      p_template_id: input.templateId || null,
+    })
+    if (error) {
+      logDatabaseError(request.requestId, 'invitation-create', error, { tenantId, eventId })
+      throwFinancialDatabaseError(error, 'INVITATION_CREATE_FAILED')
+    }
+    response.status(201).json({ data })
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.post('/api/v1/events/:eventId/invitations/bulk', requireAuth, loadUserContext, requireTenantContext, async (request, response, next) => {
+  try {
+    const tenantId = tenantIdFromRequest(request)
+    const eventId = uuidParamSchema.parse(request.params['eventId'])
+    const input = bulkCreateInvitationsSchema.parse(request.body)
+    const client = createUserSupabase(request.auth?.accessToken ?? '')
+    const { data, error } = await client.rpc('rpc_bulk_create_event_invitations', {
+      p_tenant_id: tenantId,
+      p_event_id: eventId,
+      p_event_member_ids: input.eventMemberIds,
+      p_default_max_guests: input.defaultMaxGuests ?? null,
+      p_template_id: input.templateId || null,
+      p_display_name_suffix: input.displayNameSuffix || null,
+    })
+    if (error) {
+      logDatabaseError(request.requestId, 'invitation-bulk-create', error, { tenantId, eventId })
+      throwFinancialDatabaseError(error, 'INVITATION_BULK_CREATE_FAILED')
+    }
+    response.status(201).json({ data })
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.get('/api/v1/events/:eventId/invitations/:invitationId', requireAuth, loadUserContext, requireTenantContext, async (request, response, next) => {
+  try {
+    const tenantId = tenantIdFromRequest(request)
+    const eventId = uuidParamSchema.parse(request.params['eventId'])
+    const invitationId = uuidParamSchema.parse(request.params['invitationId'])
+    const client = createUserSupabase(request.auth?.accessToken ?? '')
+    const { data, error } = await client.rpc('rpc_get_event_invitation_detail', { p_tenant_id: tenantId, p_event_id: eventId, p_invitation_id: invitationId })
+    if (error) {
+      logDatabaseError(request.requestId, 'invitation-detail', error, { tenantId, eventId, invitationId })
+      throwFinancialDatabaseError(error, 'INVITATION_DETAIL_FAILED')
+    }
+    const invitation = jsonRecord(data)
+    const tokenVersion = Number(invitation['publicTokenVersion'])
+    response.json({
+      data: {
+        ...invitation,
+        // Generated on demand for an authorized organizer viewing/sharing
+        // this invitation -- never returned from the list endpoint.
+        shareUrl: Number.isInteger(tokenVersion) ? buildPublicInvitationUrl(invitationId, tokenVersion) : null,
+      },
+    })
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.patch('/api/v1/events/:eventId/invitations/:invitationId', requireAuth, loadUserContext, requireTenantContext, async (request, response, next) => {
+  try {
+    const tenantId = tenantIdFromRequest(request)
+    const eventId = uuidParamSchema.parse(request.params['eventId'])
+    const invitationId = uuidParamSchema.parse(request.params['invitationId'])
+    const input = updateInvitationSchema.parse(request.body)
+    const client = createUserSupabase(request.auth?.accessToken ?? '')
+    const { data, error } = await client.rpc('rpc_update_event_invitation', {
+      p_tenant_id: tenantId,
+      p_event_id: eventId,
+      p_invitation_id: invitationId,
+      p_display_name: input.displayName || null,
+      p_max_guests: input.maxGuests ?? null,
+      p_template_id: input.templateId || null,
+    })
+    if (error) {
+      logDatabaseError(request.requestId, 'invitation-update', error, { tenantId, eventId, invitationId })
+      throwFinancialDatabaseError(error, 'INVITATION_UPDATE_FAILED')
+    }
+    response.json({ data })
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.post('/api/v1/events/:eventId/invitations/:invitationId/activate', requireAuth, loadUserContext, requireTenantContext, async (request, response, next) => {
+  try {
+    const tenantId = tenantIdFromRequest(request)
+    const eventId = uuidParamSchema.parse(request.params['eventId'])
+    const invitationId = uuidParamSchema.parse(request.params['invitationId'])
+    const client = createUserSupabase(request.auth?.accessToken ?? '')
+    const { data, error } = await client.rpc('rpc_activate_event_invitation', { p_tenant_id: tenantId, p_event_id: eventId, p_invitation_id: invitationId })
+    if (error) {
+      logDatabaseError(request.requestId, 'invitation-activate', error, { tenantId, eventId, invitationId })
+      throwFinancialDatabaseError(error, 'INVITATION_ACTIVATE_FAILED')
+    }
+    response.json({ data })
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.post('/api/v1/events/:eventId/invitations/:invitationId/cancel', requireAuth, loadUserContext, requireTenantContext, async (request, response, next) => {
+  try {
+    const tenantId = tenantIdFromRequest(request)
+    const eventId = uuidParamSchema.parse(request.params['eventId'])
+    const invitationId = uuidParamSchema.parse(request.params['invitationId'])
+    const input = cancelInvitationSchema.parse(request.body ?? {})
+    const client = createUserSupabase(request.auth?.accessToken ?? '')
+    const { data, error } = await client.rpc('rpc_cancel_event_invitation', {
+      p_tenant_id: tenantId, p_event_id: eventId, p_invitation_id: invitationId, p_reason: input.reason || null,
+    })
+    if (error) {
+      logDatabaseError(request.requestId, 'invitation-cancel', error, { tenantId, eventId, invitationId })
+      throwFinancialDatabaseError(error, 'INVITATION_CANCEL_FAILED')
+    }
+    response.json({ data })
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.post('/api/v1/events/:eventId/invitations/:invitationId/rotate-link', requireAuth, loadUserContext, requireTenantContext, async (request, response, next) => {
+  try {
+    const tenantId = tenantIdFromRequest(request)
+    const eventId = uuidParamSchema.parse(request.params['eventId'])
+    const invitationId = uuidParamSchema.parse(request.params['invitationId'])
+    const client = createUserSupabase(request.auth?.accessToken ?? '')
+    const { data, error } = await client.rpc('rpc_rotate_invitation_public_token', { p_tenant_id: tenantId, p_event_id: eventId, p_invitation_id: invitationId })
+    if (error) {
+      logDatabaseError(request.requestId, 'invitation-rotate-link', error, { tenantId, eventId, invitationId })
+      throwFinancialDatabaseError(error, 'INVITATION_ROTATE_LINK_FAILED')
+    }
+    const result = jsonRecord(data)
+    const tokenVersion = Number(result['publicTokenVersion'])
+    response.json({
+      data: {
+        ...result,
+        shareUrl: Number.isInteger(tokenVersion) ? buildPublicInvitationUrl(invitationId, tokenVersion) : null,
+      },
+    })
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.post('/api/v1/events/:eventId/invitations/:invitationId/rsvp', requireAuth, loadUserContext, requireTenantContext, async (request, response, next) => {
+  try {
+    const tenantId = tenantIdFromRequest(request)
+    const eventId = uuidParamSchema.parse(request.params['eventId'])
+    const invitationId = uuidParamSchema.parse(request.params['invitationId'])
+    const input = manualRsvpSchema.parse(request.body)
+    const client = createUserSupabase(request.auth?.accessToken ?? '')
+    const { data, error } = await client.rpc('rpc_record_manual_rsvp', {
+      p_tenant_id: tenantId,
+      p_event_id: eventId,
+      p_invitation_id: invitationId,
+      p_response: input.response,
+      p_attending_count: input.attendingCount,
+      p_guest_names: input.guestNames,
+      p_note: input.note || null,
+    })
+    if (error) {
+      logDatabaseError(request.requestId, 'invitation-manual-rsvp', error, { tenantId, eventId, invitationId })
+      throwFinancialDatabaseError(error, 'MANUAL_RSVP_FAILED')
+    }
+    response.json({ data })
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.get('/api/v1/events/:eventId/rsvp/dashboard', requireAuth, loadUserContext, requireTenantContext, async (request, response, next) => {
+  try {
+    const tenantId = tenantIdFromRequest(request)
+    const eventId = uuidParamSchema.parse(request.params['eventId'])
+    const client = createUserSupabase(request.auth?.accessToken ?? '')
+    const { data, error } = await client.rpc('rpc_get_event_rsvp_dashboard', { p_tenant_id: tenantId, p_event_id: eventId })
+    if (error) {
+      logDatabaseError(request.requestId, 'rsvp-dashboard', error, { tenantId, eventId })
+      throwFinancialDatabaseError(error, 'RSVP_DASHBOARD_FAILED')
+    }
+    response.json({ data })
+  } catch (error) {
+    next(error)
+  }
+})
+
+// ============================================================
+// RSVP-1: public invitation routes -- no Changisha login. Token
+// verification happens here in Node; only after it succeeds does the
+// service-role client call the service-only, PostgREST-unreachable RPCs
+// (see migration 072's require_service_role() guard).
+// ============================================================
+
+app.get('/api/v1/public/invitations/:token', publicInvitationLimiter, async (request, response, next) => {
+  try {
+    if (!supabaseAdmin) {
+      throw new AppError('AUTH_CONFIGURATION_REQUIRED', 'Public invitations require SUPABASE_SERVICE_ROLE_KEY in the API environment')
+    }
+    const token = publicInvitationTokenParamSchema.parse(request.params['token'])
+    const verified = verifyInvitationToken(token)
+    if (!verified) {
+      throw new AppError('INVITATION_TOKEN_INVALID', 'This invitation link is invalid.', 401)
+    }
+    const { data, error } = await supabaseAdmin.rpc('rpc_get_public_invitation_detail', {
+      p_invitation_id: verified.invitationId,
+      p_token_version: verified.tokenVersion,
+    })
+    if (error) {
+      logDatabaseError(request.requestId, 'public-invitation-detail', error)
+      throwFinancialDatabaseError(error, 'PUBLIC_INVITATION_DETAIL_FAILED')
+    }
+    response.json({ data })
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.post('/api/v1/public/invitations/:token/rsvp', publicInvitationLimiter, async (request, response, next) => {
+  try {
+    if (!supabaseAdmin) {
+      throw new AppError('AUTH_CONFIGURATION_REQUIRED', 'Public invitations require SUPABASE_SERVICE_ROLE_KEY in the API environment')
+    }
+    const token = publicInvitationTokenParamSchema.parse(request.params['token'])
+    const verified = verifyInvitationToken(token)
+    if (!verified) {
+      throw new AppError('INVITATION_TOKEN_INVALID', 'This invitation link is invalid.', 401)
+    }
+    const input = publicRsvpSubmitSchema.parse(request.body)
+    const { data, error } = await supabaseAdmin.rpc('rpc_submit_public_invitation_rsvp', {
+      p_invitation_id: verified.invitationId,
+      p_token_version: verified.tokenVersion,
+      p_response: input.response,
+      p_attending_count: input.attendingCount,
+      p_guest_names: input.guestNames,
+      p_note: input.note || null,
+    })
+    if (error) {
+      logDatabaseError(request.requestId, 'public-invitation-rsvp', error)
+      throwFinancialDatabaseError(error, 'PUBLIC_INVITATION_RSVP_FAILED')
+    }
+    response.json({ data })
   } catch (error) {
     next(error)
   }

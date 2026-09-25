@@ -5,9 +5,15 @@ import { TenantAppLayout } from '../layouts/TenantAppLayout'
 import { AuthPage } from '../pages/auth'
 import { PlatformBetaPage, PlatformBillingGatewaysPage, PlatformBillingReconciliationPage, PlatformErrorsPage, PlatformFeaturesPage, PlatformFeedbackPage, PlatformPage, PlatformSmsProvidersPage, PlatformSupportPage, PlatformTenantDetailPage } from '../pages/platform'
 import { ContactDetailPage, ContactsPage, EventDetailPage, MemberDetailPage, OutstandingPage, PaymentEntryPage, ReceiptPage, ReportsPage, ShareListPage, SmsHistoryPage, SmsSettingsPage, SmsTemplatesPage, TenantActivityPage, TenantBillingInvoicePage, TenantBillingPage, TenantChangePinPage, TenantDashboardPage, TenantHelpPage, TenantListPage, TenantSettingsPage, TenantUsersPage } from '../pages/tenant'
+import { PublicInvitationPage } from '../pages/public-invitation'
 import { AuthenticatedRoute, OnboardingRoute, PinUnlockedRoute, PlatformGuard, PublicRoute, TenantRoute } from './guards'
 
 export const router = createBrowserRouter([
+  // RSVP-2 public invitation page: deliberately NOT nested under
+  // PublicRoute/AuthenticatedRoute/any guard -- those wait on session
+  // bootstrap and can redirect, which a guest with no Changisha account
+  // must never hit. This route has zero dependency on session state.
+  { path: '/i/:token', element: <PublicInvitationPage /> },
   {
     element: <PublicRoute />,
     children: [

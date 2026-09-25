@@ -524,6 +524,149 @@ class SessionController extends ChangeNotifier {
     });
   }
 
+  // --- RSVP-2: Invitations + RSVP ---
+
+  Future<List<Map<String, dynamic>>> invitationTemplates() {
+    return _api.invitationTemplates(_requireTenantId());
+  }
+
+  Future<Map<String, dynamic>> eventInvitationSettings(String eventId) {
+    return _api.eventInvitationSettings(_requireTenantId(), eventId);
+  }
+
+  Future<Map<String, dynamic>> upsertEventInvitationSettings(
+    String eventId,
+    Map<String, dynamic> payload,
+  ) {
+    return _api.upsertEventInvitationSettings(
+      _requireTenantId(),
+      eventId,
+      payload,
+    );
+  }
+
+  Future<Map<String, dynamic>> listEventInvitations(
+    String eventId, {
+    String? search,
+    String status = 'ALL',
+    String rsvpStatus = 'ALL',
+    int? limit,
+    int? offset,
+  }) {
+    return _api.listEventInvitations(
+      _requireTenantId(),
+      eventId,
+      search: search,
+      status: status,
+      rsvpStatus: rsvpStatus,
+      limit: limit,
+      offset: offset,
+    );
+  }
+
+  Future<Map<String, dynamic>> createEventInvitation(
+    String eventId,
+    Map<String, dynamic> payload,
+  ) {
+    return _api.createEventInvitation(_requireTenantId(), eventId, payload);
+  }
+
+  Future<Map<String, dynamic>> bulkCreateEventInvitations(
+    String eventId,
+    Map<String, dynamic> payload,
+  ) {
+    return _api.bulkCreateEventInvitations(
+      _requireTenantId(),
+      eventId,
+      payload,
+    );
+  }
+
+  Future<Map<String, dynamic>> eventInvitationDetail(
+    String eventId,
+    String invitationId,
+  ) {
+    return _api.eventInvitationDetail(
+      _requireTenantId(),
+      eventId,
+      invitationId,
+    );
+  }
+
+  Future<Map<String, dynamic>> updateEventInvitation(
+    String eventId,
+    String invitationId,
+    Map<String, dynamic> payload,
+  ) {
+    return _api.updateEventInvitation(
+      _requireTenantId(),
+      eventId,
+      invitationId,
+      payload,
+    );
+  }
+
+  Future<Map<String, dynamic>> activateEventInvitation(
+    String eventId,
+    String invitationId,
+  ) {
+    return _api.activateEventInvitation(
+      _requireTenantId(),
+      eventId,
+      invitationId,
+    );
+  }
+
+  Future<Map<String, dynamic>> cancelEventInvitation(
+    String eventId,
+    String invitationId, {
+    String? reason,
+  }) {
+    return _api.cancelEventInvitation(
+      _requireTenantId(),
+      eventId,
+      invitationId,
+      {'reason': reason},
+    );
+  }
+
+  Future<Map<String, dynamic>> rotateInvitationLink(
+    String eventId,
+    String invitationId,
+  ) {
+    return _api.rotateInvitationLink(_requireTenantId(), eventId, invitationId);
+  }
+
+  Future<Map<String, dynamic>> recordManualRsvp(
+    String eventId,
+    String invitationId,
+    Map<String, dynamic> payload,
+  ) {
+    return _api.recordManualRsvp(
+      _requireTenantId(),
+      eventId,
+      invitationId,
+      payload,
+    );
+  }
+
+  Future<Map<String, dynamic>> eventRsvpDashboard(String eventId) {
+    return _api.eventRsvpDashboard(_requireTenantId(), eventId);
+  }
+
+  /// Exact (tenant, event, event_member) identity lookup -- returns `null`
+  /// when the event member has no invitation.
+  Future<Map<String, dynamic>?> eventMemberInvitation(
+    String eventId,
+    String eventMemberId,
+  ) {
+    return _api.eventMemberInvitation(
+      _requireTenantId(),
+      eventId,
+      eventMemberId,
+    );
+  }
+
   Future<List<Map<String, dynamic>>> eventPledges(
     String eventId, {
     String? search,

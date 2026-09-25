@@ -1910,4 +1910,623 @@ const Map<String, Map<AppLanguage, String>> appTranslations = {
     AppLanguage.sw: 'Tumia {{member_name}} kuingiza jina la mpokeaji.',
     AppLanguage.en: 'Use {{member_name}} to insert the recipient\'s name.',
   },
+
+  // --- RSVP-2: invitations tab ---
+  'eventDetail.invitations': {
+    AppLanguage.sw: 'Mialiko',
+    AppLanguage.en: 'Invitations',
+  },
+  'eventDetail.rsvp': {AppLanguage.sw: 'RSVP', AppLanguage.en: 'RSVP'},
+  'invitations.title': {
+    AppLanguage.sw: 'Mialiko',
+    AppLanguage.en: 'Invitations',
+  },
+  'invitations.createInvitations': {
+    AppLanguage.sw: 'Unda Mialiko',
+    AppLanguage.en: 'Create Invitations',
+  },
+  'invitations.total': {AppLanguage.sw: 'Jumla', AppLanguage.en: 'Total'},
+  'invitations.draft': {AppLanguage.sw: 'Rasimu', AppLanguage.en: 'Draft'},
+  'invitations.active': {AppLanguage.sw: 'Amilifu', AppLanguage.en: 'Active'},
+  'invitations.cancelled': {
+    AppLanguage.sw: 'Imeghairiwa',
+    AppLanguage.en: 'Cancelled',
+  },
+  'invitations.noResponse': {
+    AppLanguage.sw: 'Hakuna Jibu',
+    AppLanguage.en: 'No Response',
+  },
+  'invitations.searchHint': {
+    AppLanguage.sw: 'Tafuta jina la mpokeaji au mwaliko',
+    AppLanguage.en: 'Search recipient or invitation name',
+  },
+  'invitations.emptyState': {
+    AppLanguage.sw: 'Hakuna mialiko iliyoundwa kwa tukio hili.',
+    AppLanguage.en: 'No invitations have been created for this event.',
+  },
+  'invitations.emptyFiltered': {
+    AppLanguage.sw: 'Hakuna mialiko inayolingana na vichujio hivi.',
+    AppLanguage.en: 'No invitations match these filters.',
+  },
+  'invitations.open': {AppLanguage.sw: 'Fungua', AppLanguage.en: 'Open'},
+  'invitations.status.label': {
+    AppLanguage.sw: 'Hali',
+    AppLanguage.en: 'Status',
+  },
+  'invitations.status.all': {AppLanguage.sw: 'Zote', AppLanguage.en: 'All'},
+  'invitations.status.draft': {
+    AppLanguage.sw: 'Rasimu',
+    AppLanguage.en: 'Draft',
+  },
+  'invitations.status.active': {
+    AppLanguage.sw: 'Amilifu',
+    AppLanguage.en: 'Active',
+  },
+  'invitations.status.cancelled': {
+    AppLanguage.sw: 'Imeghairiwa',
+    AppLanguage.en: 'Cancelled',
+  },
+  'invitations.rsvpFilter.label': {
+    AppLanguage.sw: 'RSVP',
+    AppLanguage.en: 'RSVP',
+  },
+  'invitations.rsvpFilter.all': {AppLanguage.sw: 'Zote', AppLanguage.en: 'All'},
+  'invitations.rsvpFilter.attending': {
+    AppLanguage.sw: 'Anahudhuria',
+    AppLanguage.en: 'Attending',
+  },
+  'invitations.rsvpFilter.maybe': {
+    AppLanguage.sw: 'Labda',
+    AppLanguage.en: 'Maybe',
+  },
+  'invitations.rsvpFilter.notAttending': {
+    AppLanguage.sw: 'Hahudhurii',
+    AppLanguage.en: 'Not Attending',
+  },
+  'invitations.rsvpFilter.noResponse': {
+    AppLanguage.sw: 'Hakuna Jibu',
+    AppLanguage.en: 'No Response',
+  },
+  'invitations.rsvpSummary': {
+    AppLanguage.sw: 'RSVP: {response} · {count} kati ya {max}',
+    AppLanguage.en: 'RSVP: {response} · {count} of {max}',
+  },
+  'invitations.loadError': {
+    AppLanguage.sw: 'Mialiko haikuweza kupakiwa.',
+    AppLanguage.en: 'Unable to load invitations.',
+  },
+
+  // --- bulk create ---
+  'bulkCreate.title': {
+    AppLanguage.sw: 'Unda Mialiko',
+    AppLanguage.en: 'Create Invitations',
+  },
+  'bulkCreate.step1Title': {
+    AppLanguage.sw: 'Chagua Wanachama wa Tukio',
+    AppLanguage.en: 'Select Event Members',
+  },
+  'bulkCreate.searchMembers': {
+    AppLanguage.sw: 'Tafuta wanachama',
+    AppLanguage.en: 'Search members',
+  },
+  'bulkCreate.selectAllEligible': {
+    AppLanguage.sw: 'Chagua wote wanaostahili',
+    AppLanguage.en: 'Select all eligible members',
+  },
+  'bulkCreate.alreadyInvited': {
+    AppLanguage.sw: 'Mwaliko tayari upo',
+    AppLanguage.en: 'Invitation already exists',
+  },
+  'bulkCreate.noEligibleMembers': {
+    AppLanguage.sw: 'Hakuna wanachama wa kuongeza mwaliko.',
+    AppLanguage.en: 'No members available to invite.',
+  },
+  'bulkCreate.step2Title': {
+    AppLanguage.sw: 'Chaguo-msingi za Mwaliko',
+    AppLanguage.en: 'Invitation Defaults',
+  },
+  'bulkCreate.namingLabel': {
+    AppLanguage.sw: 'Jina la Mwaliko',
+    AppLanguage.en: 'Naming',
+  },
+  'bulkCreate.namingUseMemberName': {
+    AppLanguage.sw: 'Tumia jina la mwanachama',
+    AppLanguage.en: 'Use member name',
+  },
+  'bulkCreate.namingFamily': {
+    AppLanguage.sw: 'Jina la mwanachama na Familia',
+    AppLanguage.en: 'Member name & Family',
+  },
+  'bulkCreate.defaultMaxGuests': {
+    AppLanguage.sw: 'Idadi ya wageni (chaguo-msingi)',
+    AppLanguage.en: 'Default maximum guests',
+  },
+  'bulkCreate.template': {
+    AppLanguage.sw: 'Kiolezo',
+    AppLanguage.en: 'Template',
+  },
+  'bulkCreate.step3Title': {
+    AppLanguage.sw: 'Uthibitisho',
+    AppLanguage.en: 'Confirmation',
+  },
+  'bulkCreate.selectedMembers': {
+    AppLanguage.sw: 'Wanachama Waliochaguliwa',
+    AppLanguage.en: 'Selected Members',
+  },
+  'bulkCreate.alreadyInvitedCount': {
+    AppLanguage.sw: 'Tayari wamealikwa',
+    AppLanguage.en: 'Already invited',
+  },
+  'bulkCreate.willCreate': {
+    AppLanguage.sw: 'Itaunda',
+    AppLanguage.en: 'Will create',
+  },
+  'bulkCreate.createCount': {
+    AppLanguage.sw: 'Unda Mialiko {count}',
+    AppLanguage.en: 'Create {count} Invitations',
+  },
+  'bulkCreate.resultTitle': {
+    AppLanguage.sw: 'Matokeo',
+    AppLanguage.en: 'Result',
+  },
+  'bulkCreate.resultCreated': {
+    AppLanguage.sw: 'Imeundwa',
+    AppLanguage.en: 'Created',
+  },
+  'bulkCreate.resultAlreadyExisted': {
+    AppLanguage.sw: 'Zilikuwepo tayari',
+    AppLanguage.en: 'Already existed',
+  },
+  'bulkCreate.next': {AppLanguage.sw: 'Endelea', AppLanguage.en: 'Next'},
+  'bulkCreate.back': {AppLanguage.sw: 'Rudi', AppLanguage.en: 'Back'},
+  'bulkCreate.done': {AppLanguage.sw: 'Maliza', AppLanguage.en: 'Done'},
+  'bulkCreate.selectMembersFirst': {
+    AppLanguage.sw: 'Chagua angalau mwanachama mmoja.',
+    AppLanguage.en: 'Select at least one member.',
+  },
+
+  // --- single create ---
+  'createInvitation.title': {
+    AppLanguage.sw: 'Unda Mwaliko',
+    AppLanguage.en: 'Create Invitation',
+  },
+  'createInvitation.displayName': {
+    AppLanguage.sw: 'Jina la Mwaliko',
+    AppLanguage.en: 'Display Name',
+  },
+  'createInvitation.maxGuests': {
+    AppLanguage.sw: 'Idadi ya Wageni',
+    AppLanguage.en: 'Maximum Guests',
+  },
+  'createInvitation.template': {
+    AppLanguage.sw: 'Kiolezo',
+    AppLanguage.en: 'Template',
+  },
+  'createInvitation.create': {
+    AppLanguage.sw: 'Unda Mwaliko',
+    AppLanguage.en: 'Create Invitation',
+  },
+
+  // --- invitation detail ---
+  'invitationDetail.title': {
+    AppLanguage.sw: 'Taarifa za Mwaliko',
+    AppLanguage.en: 'Invitation Detail',
+  },
+  'invitationDetail.previewCard': {
+    AppLanguage.sw: 'Onyesho la Kadi',
+    AppLanguage.en: 'Preview Card',
+  },
+  'invitationDetail.rotateLinkCardWarning': {
+    AppLanguage.sw: 'Kadi za mwaliko zilizopakuliwa awali zina kiungo cha zamani. Tengeneza kadi mpya.',
+    AppLanguage.en:
+        'Previous invitation cards contain the old link. Generate a new card.',
+  },
+  'invitationDetail.guest': {AppLanguage.sw: 'Mgeni', AppLanguage.en: 'Guest'},
+  'invitationDetail.invitation': {
+    AppLanguage.sw: 'Mwaliko',
+    AppLanguage.en: 'Invitation',
+  },
+  'invitationDetail.rsvp': {AppLanguage.sw: 'RSVP', AppLanguage.en: 'RSVP'},
+  'invitationDetail.publicLink': {
+    AppLanguage.sw: 'Kiungo cha Umma',
+    AppLanguage.en: 'Public Link',
+  },
+  'invitationDetail.displayName': {
+    AppLanguage.sw: 'Jina la Mwaliko',
+    AppLanguage.en: 'Display Name',
+  },
+  'invitationDetail.status': {AppLanguage.sw: 'Hali', AppLanguage.en: 'Status'},
+  'invitationDetail.maxGuests': {
+    AppLanguage.sw: 'Idadi ya Wageni',
+    AppLanguage.en: 'Maximum Guests',
+  },
+  'invitationDetail.template': {
+    AppLanguage.sw: 'Kiolezo',
+    AppLanguage.en: 'Template',
+  },
+  'invitationDetail.noTemplate': {
+    AppLanguage.sw: 'Hakuna kiolezo kilichochaguliwa',
+    AppLanguage.en: 'No template selected',
+  },
+  'invitationDetail.created': {
+    AppLanguage.sw: 'Iliundwa',
+    AppLanguage.en: 'Created',
+  },
+  'invitationDetail.updated': {
+    AppLanguage.sw: 'Ilisasishwa',
+    AppLanguage.en: 'Updated',
+  },
+  'invitationDetail.response': {
+    AppLanguage.sw: 'Jibu',
+    AppLanguage.en: 'Response',
+  },
+  'invitationDetail.attendingCount': {
+    AppLanguage.sw: 'Idadi ya Wageni',
+    AppLanguage.en: 'Attending Count',
+  },
+  'invitationDetail.guestNames': {
+    AppLanguage.sw: 'Majina ya Wageni',
+    AppLanguage.en: 'Guest Names',
+  },
+  'invitationDetail.note': {AppLanguage.sw: 'Maelezo', AppLanguage.en: 'Note'},
+  'invitationDetail.respondedAt': {
+    AppLanguage.sw: 'Ilijibiwa',
+    AppLanguage.en: 'Responded At',
+  },
+  'invitationDetail.responseSource': {
+    AppLanguage.sw: 'Chanzo cha Jibu',
+    AppLanguage.en: 'Response Source',
+  },
+  'invitationDetail.responseSource.publicGuest': {
+    AppLanguage.sw: 'Mgeni (kiungo cha umma)',
+    AppLanguage.en: 'Guest (public link)',
+  },
+  'invitationDetail.responseSource.tenantUser': {
+    AppLanguage.sw: 'Mratibu (mwenyewe)',
+    AppLanguage.en: 'Organizer (manual)',
+  },
+  'invitationDetail.noRsvpYet': {
+    AppLanguage.sw: 'Bado hakuna jibu la RSVP.',
+    AppLanguage.en: 'No RSVP response yet.',
+  },
+  'invitationDetail.viewLink': {
+    AppLanguage.sw: 'Angalia',
+    AppLanguage.en: 'View',
+  },
+  'invitationDetail.copyLink': {
+    AppLanguage.sw: 'Nakili Kiungo',
+    AppLanguage.en: 'Copy Link',
+  },
+  'invitationDetail.copyInvitationText': {
+    AppLanguage.sw: 'Nakili Ujumbe wa Mwaliko',
+    AppLanguage.en: 'Copy Invitation Text',
+  },
+  'invitationDetail.rotateLink': {
+    AppLanguage.sw: 'Badilisha Kiungo',
+    AppLanguage.en: 'Rotate Link',
+  },
+  'invitationDetail.cancelInvitation': {
+    AppLanguage.sw: 'Ghairi Mwaliko',
+    AppLanguage.en: 'Cancel Invitation',
+  },
+  'invitationDetail.edit': {AppLanguage.sw: 'Hariri', AppLanguage.en: 'Edit'},
+  'invitationDetail.activate': {
+    AppLanguage.sw: 'Amilisha',
+    AppLanguage.en: 'Activate',
+  },
+  'invitationDetail.recordRsvp': {
+    AppLanguage.sw: 'Rekodi RSVP',
+    AppLanguage.en: 'Record RSVP',
+  },
+  'invitationDetail.editRsvp': {
+    AppLanguage.sw: 'Hariri RSVP',
+    AppLanguage.en: 'Edit RSVP',
+  },
+  'invitationDetail.linkCopied': {
+    AppLanguage.sw: 'Kiungo kimenakiliwa',
+    AppLanguage.en: 'Link copied',
+  },
+  'invitationDetail.noLinkYet': {
+    AppLanguage.sw: 'Amilisha mwaliko ili kupata kiungo cha umma.',
+    AppLanguage.en: 'Activate the invitation to get a public link.',
+  },
+  'invitationDetail.cancelledNoticeBody': {
+    AppLanguage.sw:
+        'Mwaliko huu umeghairiwa. Kiungo chake cha umma hakifanyi kazi tena.',
+    AppLanguage.en:
+        'This invitation is cancelled. Its public link no longer works.',
+  },
+  'invitationDetail.rotateLinkConfirmTitle': {
+    AppLanguage.sw: 'Badilisha kiungo cha umma?',
+    AppLanguage.en: 'Rotate the public link?',
+  },
+  'invitationDetail.rotateLinkConfirmBody': {
+    AppLanguage.sw: 'Kiungo cha awali cha mwaliko hakitafanya kazi tena.',
+    AppLanguage.en: 'The previous invitation link will stop working.',
+  },
+  'invitationDetail.cancelConfirmTitle': {
+    AppLanguage.sw: 'Ghairi mwaliko huu?',
+    AppLanguage.en: 'Cancel this invitation?',
+  },
+  'invitationDetail.cancelConfirmBody': {
+    AppLanguage.sw: 'Kughairi kunazuia matumizi ya kiungo cha umma lakini kunahifadhi historia ya RSVP.',
+    AppLanguage.en: 'Cancelling prevents use of the public invitation link but keeps RSVP/history.',
+  },
+  'invitationDetail.loadError': {
+    AppLanguage.sw: 'Taarifa za mwaliko hazikuweza kupakiwa.',
+    AppLanguage.en: 'Unable to load invitation detail.',
+  },
+
+  // --- edit invitation ---
+  'editInvitation.title': {
+    AppLanguage.sw: 'Hariri Mwaliko',
+    AppLanguage.en: 'Edit Invitation',
+  },
+  'editInvitation.guestLimitBelowRsvp': {
+    AppLanguage.sw:
+        'Idadi ya wageni haiwezi kuwa chini ya idadi ya sasa ya RSVP.',
+    AppLanguage.en:
+        'Maximum guests cannot be lower than the current RSVP guest count.',
+  },
+
+  // --- activate invitation ---
+  'activateInvitation.confirmTitle': {
+    AppLanguage.sw: 'Amilisha mwaliko huu?',
+    AppLanguage.en: 'Activate this invitation?',
+  },
+  'activateInvitation.confirmBody': {
+    AppLanguage.sw: 'Kiungo cha umma kitaanza kufanya kazi mara moja.',
+    AppLanguage.en: 'The public link becomes usable immediately.',
+  },
+
+  // --- manual RSVP ---
+  'manualRsvp.title': {
+    AppLanguage.sw: 'Rekodi RSVP',
+    AppLanguage.en: 'Record RSVP',
+  },
+  'manualRsvp.response': {AppLanguage.sw: 'Jibu', AppLanguage.en: 'Response'},
+  'manualRsvp.attending': {
+    AppLanguage.sw: 'Anahudhuria',
+    AppLanguage.en: 'Attending',
+  },
+  'manualRsvp.maybe': {AppLanguage.sw: 'Labda', AppLanguage.en: 'Maybe'},
+  'manualRsvp.notAttending': {
+    AppLanguage.sw: 'Hahudhurii',
+    AppLanguage.en: 'Not Attending',
+  },
+  'manualRsvp.guests': {
+    AppLanguage.sw: 'Idadi ya Wageni',
+    AppLanguage.en: 'Guests',
+  },
+  'manualRsvp.guestNames': {
+    AppLanguage.sw: 'Majina ya Wageni',
+    AppLanguage.en: 'Guest Names',
+  },
+  'manualRsvp.addGuestName': {
+    AppLanguage.sw: 'Ongeza jina la mgeni',
+    AppLanguage.en: 'Add guest name',
+  },
+  'manualRsvp.note': {
+    AppLanguage.sw: 'Maelezo (si lazima)',
+    AppLanguage.en: 'Note (optional)',
+  },
+  'manualRsvp.save': {
+    AppLanguage.sw: 'Hifadhi RSVP',
+    AppLanguage.en: 'Save RSVP',
+  },
+  'manualRsvp.guestCountInvalid': {
+    AppLanguage.sw: 'Idadi ya wageni lazima iwe kati ya 1 na idadi ya juu.',
+    AppLanguage.en: 'Guest count must be between 1 and the maximum allowed.',
+  },
+  'manualRsvp.deadlinePassedHint': {
+    AppLanguage.sw: 'Muda wa RSVP wa umma umepita, lakini unaweza kurekodi RSVP kwa niaba ya mgeni.',
+    AppLanguage.en: 'The public RSVP deadline has passed, but you can still record an RSVP on the guest\'s behalf.',
+  },
+  'manualRsvp.permissionDenied': {
+    AppLanguage.sw: 'Huna ruhusa ya kurekodi RSVP.',
+    AppLanguage.en: 'You do not have permission to record RSVPs.',
+  },
+
+  // --- Event Member Detail integration ---
+  'memberDetail.invitation': {
+    AppLanguage.sw: 'Mwaliko',
+    AppLanguage.en: 'Invitation',
+  },
+  'memberDetail.invitationNotCreated': {
+    AppLanguage.sw: 'Hakuna mwaliko uliyoundwa',
+    AppLanguage.en: 'No invitation created',
+  },
+  'memberDetail.createInvitation': {
+    AppLanguage.sw: 'Unda Mwaliko',
+    AppLanguage.en: 'Create Invitation',
+  },
+  'memberDetail.rsvp': {AppLanguage.sw: 'RSVP', AppLanguage.en: 'RSVP'},
+  'memberDetail.rsvpNoResponse': {
+    AppLanguage.sw: 'Hakuna Jibu',
+    AppLanguage.en: 'No response',
+  },
+  'memberDetail.guestsOf': {
+    AppLanguage.sw: 'Wageni: {count} kati ya {max}',
+    AppLanguage.en: 'Guests: {count} of {max}',
+  },
+  'memberDetail.potentialGuestsOf': {
+    AppLanguage.sw: 'Wageni wanaowezekana: {count} kati ya {max}',
+    AppLanguage.en: 'Potential guests: {count} of {max}',
+  },
+  'memberDetail.viewInvitation': {
+    AppLanguage.sw: 'Angalia Mwaliko',
+    AppLanguage.en: 'View Invitation',
+  },
+
+  // --- RSVP-3A: invitation card preview / template gallery ---
+  'cardPreview.title': {
+    AppLanguage.sw: 'Onyesho la Kadi ya Mwaliko',
+    AppLanguage.en: 'Invitation Card Preview',
+  },
+  'cardPreview.template': {
+    AppLanguage.sw: 'Muundo',
+    AppLanguage.en: 'Template',
+  },
+  'cardPreview.browseTemplates': {
+    AppLanguage.sw: 'Vinjari Miundo',
+    AppLanguage.en: 'Browse Templates',
+  },
+  'cardPreview.downloadPng': {
+    AppLanguage.sw: 'Pakua Picha (PNG)',
+    AppLanguage.en: 'Download PNG',
+  },
+  'cardPreview.downloadReady': {
+    AppLanguage.sw: 'Kadi iko tayari kuhifadhiwa au kutumwa.',
+    AppLanguage.en: 'Card is ready to save or send.',
+  },
+  'cardPreview.useThisTemplate': {
+    AppLanguage.sw: 'Tumia Muundo Huu',
+    AppLanguage.en: 'Use This Template',
+  },
+  'cardPreview.templateApplied': {
+    AppLanguage.sw: 'Muundo wa mwaliko umebadilishwa.',
+    AppLanguage.en: 'Invitation template updated.',
+  },
+  'cardPreview.draftNotice': {
+    AppLanguage.sw: 'Mwaliko huu bado ni rasimu -- msimbo wa QR hautafanya kazi hadi uuwezeshe.',
+    AppLanguage.en: 'This invitation is still a draft -- the QR/link will not work until you activate it.',
+  },
+  'cardPreview.cancelledNotice': {
+    AppLanguage.sw: 'Mwaliko huu umefutwa.',
+    AppLanguage.en: 'This invitation has been cancelled.',
+  },
+  'cardPreview.noAccess': {
+    AppLanguage.sw: 'Huna ruhusa ya kuona onyesho la kadi hii.',
+    AppLanguage.en: 'You do not have permission to preview this card.',
+  },
+  'cardPreview.leadIn': {
+    AppLanguage.sw: 'UMEALIKWA KWA HESHIMA',
+    AppLanguage.en: 'YOU ARE CORDIALLY INVITED',
+  },
+  'cardPreview.connector': {AppLanguage.sw: 'kwenye', AppLanguage.en: 'to'},
+  'cardPreview.rsvpBy': {
+    AppLanguage.sw: 'Thibitisha kabla ya {date}',
+    AppLanguage.en: 'RSVP by {date}',
+  },
+  'templateGallery.title': {
+    AppLanguage.sw: 'Miundo ya Mialiko',
+    AppLanguage.en: 'Invitation Templates',
+  },
+  'templateGallery.empty': {
+    AppLanguage.sw: 'Hakuna miundo inayopatikana.',
+    AppLanguage.en: 'No templates available.',
+  },
+  'templateGallery.premium': {
+    AppLanguage.sw: 'Premium',
+    AppLanguage.en: 'Premium',
+  },
+  'templateGallery.useTemplate': {
+    AppLanguage.sw: 'Tumia Muundo',
+    AppLanguage.en: 'Use Template',
+  },
+
+  // --- RSVP dashboard ---
+  'rsvpDashboard.title': {AppLanguage.sw: 'RSVP', AppLanguage.en: 'RSVP'},
+  'rsvpDashboard.responses': {
+    AppLanguage.sw: 'Majibu ya RSVP',
+    AppLanguage.en: 'RSVP Responses',
+  },
+  'rsvpDashboard.guestCount': {
+    AppLanguage.sw: 'Idadi ya Wageni',
+    AppLanguage.en: 'Guest Count',
+  },
+  'rsvpDashboard.totalInvitations': {
+    AppLanguage.sw: 'Jumla ya Mialiko',
+    AppLanguage.en: 'Total Invitations',
+  },
+  'rsvpDashboard.activeInvitations': {
+    AppLanguage.sw: 'Mialiko Amilifu',
+    AppLanguage.en: 'Active Invitations',
+  },
+  'rsvpDashboard.confirmedGuests': {
+    AppLanguage.sw: 'Wageni Waliothibitishwa',
+    AppLanguage.en: 'Confirmed Guests',
+  },
+  'rsvpDashboard.possibleGuests': {
+    AppLanguage.sw: 'Wageni Wanaowezekana',
+    AppLanguage.en: 'Possible Guests',
+  },
+  'rsvpDashboard.loadError': {
+    AppLanguage.sw: 'Dashibodi ya RSVP haikuweza kupakiwa.',
+    AppLanguage.en: 'Unable to load the RSVP dashboard.',
+  },
+  'rsvpDashboard.viewList': {
+    AppLanguage.sw: 'Angalia orodha',
+    AppLanguage.en: 'View list',
+  },
+
+  // --- invitation settings ---
+  'invitationSettings.title': {
+    AppLanguage.sw: 'Mipangilio ya Mialiko',
+    AppLanguage.en: 'Invitation Settings',
+  },
+  'invitationSettings.hostDisplayName': {
+    AppLanguage.sw: 'Jina la Mwenyeji',
+    AppLanguage.en: 'Host Display Name',
+  },
+  'invitationSettings.invitationTitle': {
+    AppLanguage.sw: 'Kichwa cha Mwaliko',
+    AppLanguage.en: 'Invitation Title',
+  },
+  'invitationSettings.invitationMessage': {
+    AppLanguage.sw: 'Ujumbe wa Mwaliko',
+    AppLanguage.en: 'Invitation Message',
+  },
+  'invitationSettings.venueOverride': {
+    AppLanguage.sw: 'Jina la Eneo (mbadala)',
+    AppLanguage.en: 'Venue Override',
+  },
+  'invitationSettings.addressOverride': {
+    AppLanguage.sw: 'Anwani (mbadala)',
+    AppLanguage.en: 'Address Override',
+  },
+  'invitationSettings.mapsUrl': {
+    AppLanguage.sw: 'Kiungo cha Ramani',
+    AppLanguage.en: 'Maps URL',
+  },
+  'invitationSettings.eventTimeDisplay': {
+    AppLanguage.sw: 'Muda wa Tukio (maandishi)',
+    AppLanguage.en: 'Event Time',
+  },
+  'invitationSettings.overrideHint': {
+    AppLanguage.sw: 'Ukiacha wazi, taarifa za Tukio zitatumika.',
+    AppLanguage.en: 'When left blank, the Event details will be used.',
+  },
+  'invitationSettings.rsvpEnabled': {
+    AppLanguage.sw: 'RSVP Imewashwa',
+    AppLanguage.en: 'RSVP Enabled',
+  },
+  'invitationSettings.rsvpDeadline': {
+    AppLanguage.sw: 'Mwisho wa RSVP',
+    AppLanguage.en: 'RSVP Deadline',
+  },
+  'invitationSettings.deadlineHint': {
+    AppLanguage.sw: 'Wageni hawataweza kutuma RSVP baada ya muda huu isipokuwa RSVP ya kuchelewa imeruhusiwa.',
+    AppLanguage.en: 'Guests cannot submit RSVP after this deadline unless late RSVP is allowed.',
+  },
+  'invitationSettings.allowLateRsvp': {
+    AppLanguage.sw: 'Ruhusu RSVP ya Kuchelewa',
+    AppLanguage.en: 'Allow Late RSVP',
+  },
+  'invitationSettings.defaultMaxGuests': {
+    AppLanguage.sw: 'Idadi ya Wageni (chaguo-msingi)',
+    AppLanguage.en: 'Default Maximum Guests',
+  },
+  'invitationSettings.defaultTemplate': {
+    AppLanguage.sw: 'Kiolezo cha Chaguo-msingi',
+    AppLanguage.en: 'Default Template',
+  },
+  'invitationSettings.clearDeadline': {
+    AppLanguage.sw: 'Ondoa mwisho',
+    AppLanguage.en: 'Clear deadline',
+  },
+  'invitationSettings.saved': {
+    AppLanguage.sw: 'Mipangilio imehifadhiwa',
+    AppLanguage.en: 'Settings saved',
+  },
 };

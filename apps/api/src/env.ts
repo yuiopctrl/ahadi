@@ -45,6 +45,8 @@ export const apiEnvSchema = z.object({
   NMB_CLIENT_ID: z.string().trim().optional(),
   NMB_CLIENT_SECRET: z.string().trim().optional(),
   NMB_WEBHOOK_SECRET: z.string().trim().optional(),
+  INVITATION_PUBLIC_TOKEN_SECRET: z.string().trim().min(32, 'INVITATION_PUBLIC_TOKEN_SECRET must be at least 32 characters'),
+  INVITATION_PUBLIC_APP_BASE_URL: z.string().url().default('http://localhost:5173/i'),
 }).superRefine((value, context) => {
   const allowed = value.NEXTSMS_ALLOWED_SENDER_IDS.split(',').map((item) => item.trim().toUpperCase()).filter(Boolean)
   const supported = new Set(['MICHANGO', 'SHEREHE', 'KIKAO'])
@@ -53,6 +55,19 @@ export const apiEnvSchema = z.object({
   }
   if (!allowed.includes(value.NEXTSMS_DEFAULT_SENDER_ID)) {
     context.addIssue({ code: 'custom', path: ['NEXTSMS_DEFAULT_SENDER_ID'], message: 'NEXTSMS_DEFAULT_SENDER_ID must be in NEXTSMS_ALLOWED_SENDER_IDS' })
+  }
+  // A production organizer must never copy a localhost invitation link.
+  // INVITATION_PUBLIC_APP_BASE_URL defaults to the local dev web app for
+  // convenience in development/test, but that default (or any other
+  // localhost/loopback value) reaching a production deploy is a
+  // config-loading bug, not a valid production value -- fail startup
+  // loudly instead of silently generating broken shareUrls.
+  if (value.NODE_ENV === 'production' && /(^|\/\/)(localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\])([:/]|$)/i.test(value.INVITATION_PUBLIC_APP_BASE_URL)) {
+    context.addIssue({
+      code: 'custom',
+      path: ['INVITATION_PUBLIC_APP_BASE_URL'],
+      message: 'INVITATION_PUBLIC_APP_BASE_URL must be set to the real Changisha public web origin (e.g. https://app.changisha.co/i) in production -- it is still a localhost value',
+    })
   }
 })
 

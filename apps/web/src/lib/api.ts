@@ -279,4 +279,10 @@ export const api = {
   resetBalanceReminderTemplate: (tenantId: string) => apiFetch<{ data: Record<string, unknown> }>('/messages/templates/balance-reminder/reset', { tenantId, method: 'POST' }),
   resendBalanceReminder: (tenantId: string, outboxId: string, idempotencyKey: string) =>
     apiFetch<{ data: Record<string, unknown> }>(`/messages/${outboxId}/resend-balance-reminder`, { tenantId, method: 'POST', body: JSON.stringify({ idempotencyKey }) }),
+  // RSVP-2 public invitation page: unauthenticated, token is the whole
+  // capability -- never attach a session bearer token to these calls.
+  publicInvitation: (token: string) =>
+    apiFetch<{ data: Record<string, unknown> }>(`/public/invitations/${encodeURIComponent(token)}`, { auth: false }),
+  submitPublicRsvp: (token: string, payload: Record<string, unknown>) =>
+    apiFetch<{ data: Record<string, unknown> }>(`/public/invitations/${encodeURIComponent(token)}/rsvp`, { auth: false, method: 'POST', body: JSON.stringify(payload) }),
 }
