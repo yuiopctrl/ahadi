@@ -260,6 +260,87 @@ abstract class AhadiApi {
     int? limit,
     int? offset,
   });
+
+  // --- RSVP-2: Invitations + RSVP ---
+
+  Future<List<Map<String, dynamic>>> invitationTemplates(String tenantId);
+  Future<Map<String, dynamic>> eventInvitationSettings(
+    String tenantId,
+    String eventId,
+  );
+  Future<Map<String, dynamic>> upsertEventInvitationSettings(
+    String tenantId,
+    String eventId,
+    Map<String, dynamic> payload,
+  );
+
+  /// Server-side searched/filtered/paginated invitation list. Returns
+  /// `{data, pagination: {limit, offset, totalRows, hasMore}}`.
+  Future<Map<String, dynamic>> listEventInvitations(
+    String tenantId,
+    String eventId, {
+    String? search,
+    String status = 'ALL',
+    String rsvpStatus = 'ALL',
+    int? limit,
+    int? offset,
+  });
+  Future<Map<String, dynamic>> createEventInvitation(
+    String tenantId,
+    String eventId,
+    Map<String, dynamic> payload,
+  );
+  Future<Map<String, dynamic>> bulkCreateEventInvitations(
+    String tenantId,
+    String eventId,
+    Map<String, dynamic> payload,
+  );
+  Future<Map<String, dynamic>> eventInvitationDetail(
+    String tenantId,
+    String eventId,
+    String invitationId,
+  );
+  Future<Map<String, dynamic>> updateEventInvitation(
+    String tenantId,
+    String eventId,
+    String invitationId,
+    Map<String, dynamic> payload,
+  );
+  Future<Map<String, dynamic>> activateEventInvitation(
+    String tenantId,
+    String eventId,
+    String invitationId,
+  );
+  Future<Map<String, dynamic>> cancelEventInvitation(
+    String tenantId,
+    String eventId,
+    String invitationId,
+    Map<String, dynamic> payload,
+  );
+  Future<Map<String, dynamic>> rotateInvitationLink(
+    String tenantId,
+    String eventId,
+    String invitationId,
+  );
+  Future<Map<String, dynamic>> recordManualRsvp(
+    String tenantId,
+    String eventId,
+    String invitationId,
+    Map<String, dynamic> payload,
+  );
+  Future<Map<String, dynamic>> eventRsvpDashboard(
+    String tenantId,
+    String eventId,
+  );
+
+  /// Exact (tenant, event, event_member) identity lookup -- returns `null`
+  /// when the event member has no invitation. Never resolve this by name;
+  /// two Contacts can share a full_name.
+  Future<Map<String, dynamic>?> eventMemberInvitation(
+    String tenantId,
+    String eventId,
+    String eventMemberId,
+  );
 }
 
 class LoginResult {

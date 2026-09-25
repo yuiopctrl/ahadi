@@ -67,6 +67,134 @@ class FakeAhadiApi implements AhadiApi {
   Object? meError;
   Object? attachError;
 
+  // --- RSVP-2: Invitations + RSVP ---
+  List<Map<String, dynamic>> invitationTemplateRows = [
+    {
+      'id': 'template-classic',
+      'name': 'Classic',
+      'layoutKey': 'CLASSIC',
+      'scope': 'PLATFORM',
+      'category': 'Classic',
+      'isPremium': false,
+      'configJson': {
+        'version': 1,
+        'layoutKey': 'CLASSIC',
+        'background': {'type': 'solid', 'color': '#F8F2EA'},
+        'colors': {
+          'primary': '#8F1D2C',
+          'secondary': '#D7B56D',
+          'text': '#241A18',
+        },
+        'typography': {'titleStyle': 'serif_elegant', 'bodyStyle': 'ubuntu'},
+        'elements': {
+          'showHost': true,
+          'showGuestName': true,
+          'showEventName': true,
+          'showDate': true,
+          'showTime': true,
+          'showVenue': true,
+          'showAddress': true,
+          'showQr': true,
+          'showRsvpDeadline': true,
+        },
+      },
+    },
+    {
+      'id': 'template-elegant',
+      'name': 'Elegant Burgundy',
+      'layoutKey': 'ELEGANT_BURGUNDY',
+      'scope': 'PLATFORM',
+      'category': 'Elegant',
+      'isPremium': true,
+      'configJson': {
+        'version': 1,
+        'layoutKey': 'ELEGANT_BURGUNDY',
+        'background': {'type': 'solid', 'color': '#F8F2EA'},
+        'colors': {
+          'primary': '#6F1722',
+          'secondary': '#D7B56D',
+          'text': '#241A18',
+        },
+        'typography': {'titleStyle': 'serif_elegant', 'bodyStyle': 'condensed'},
+        'elements': {
+          'showHost': true,
+          'showGuestName': true,
+          'showEventName': true,
+          'showDate': true,
+          'showTime': true,
+          'showVenue': true,
+          'showAddress': true,
+          'showQr': true,
+          'showRsvpDeadline': true,
+        },
+      },
+    },
+  ];
+  Map<String, dynamic> invitationSettingsRow = {
+    'hostDisplayName': null,
+    'invitationTitle': null,
+    'invitationMessage': null,
+    'venueNameOverride': null,
+    'venueAddressOverride': null,
+    'mapsUrl': null,
+    'eventTimeDisplay': null,
+    'rsvpEnabled': true,
+    'rsvpDeadline': null,
+    'allowLateRsvp': false,
+    'defaultMaxGuests': 1,
+    'templateId': null,
+  };
+  final List<Map<String, dynamic>> invitationRecords = [];
+  int _invitationSeq = 0;
+  int listInvitationsCalls = 0;
+  Map<String, dynamic>? lastListInvitationsArgs;
+  int createInvitationCalls = 0;
+  Map<String, dynamic>? lastCreateInvitationPayload;
+  int bulkCreateInvitationsCalls = 0;
+  Map<String, dynamic>? lastBulkCreatePayload;
+  int updateInvitationCalls = 0;
+  Map<String, dynamic>? lastUpdateInvitationPayload;
+  int activateInvitationCalls = 0;
+  int cancelInvitationCalls = 0;
+  int rotateLinkCalls = 0;
+  int manualRsvpCalls = 0;
+  Map<String, dynamic>? lastManualRsvpPayload;
+  Object? updateInvitationError;
+  Object? manualRsvpError;
+
+  Map<String, dynamic> _invitationListRow(Map<String, dynamic> inv) {
+    final rsvp = inv['rsvp'] as Map<String, dynamic>?;
+    return {
+      'invitation_id': inv['id'],
+      'event_member_id': inv['eventMemberId'],
+      'member_id': inv['memberId'],
+      'member_name': inv['memberName'],
+      'display_name': inv['displayName'],
+      'phone': inv['phone'],
+      'max_guests': inv['maxGuests'],
+      'status': inv['status'],
+      'template_id': (inv['template'] as Map<String, dynamic>?)?['id'],
+      'template_name': (inv['template'] as Map<String, dynamic>?)?['name'],
+      'template_layout_key':
+          (inv['template'] as Map<String, dynamic>?)?['layoutKey'],
+      'rsvp_response': rsvp?['response'],
+      'attending_count': rsvp?['attendingCount'],
+      'rsvp_status': rsvp == null ? 'NO_RESPONSE' : rsvp['response'],
+      'created_at': inv['createdAt'],
+      'updated_at': inv['updatedAt'],
+      'last_delivery': null,
+    };
+  }
+
+  Map<String, dynamic> _invitationDetail(Map<String, dynamic> inv) {
+    return {
+      ...inv,
+      'shareUrl': inv['status'] == 'ACTIVE'
+          ? 'https://invite.test/i/token-${inv['id']}-v${inv['publicTokenVersion']}'
+          : null,
+    };
+  }
+
   UserContext userContext = userWithMemberships([
     membership('tenant-a', 'Herosimini Committee'),
   ]);
@@ -738,6 +866,384 @@ class FakeAhadiApi implements AhadiApi {
         'hasMore': false,
       },
     };
+  }
+
+  // --- RSVP-2: Invitations + RSVP ---
+
+  @override
+  Future<List<Map<String, dynamic>>> invitationTemplates(
+    String tenantId,
+  ) async {
+    lastTenantId = tenantId;
+    return invitationTemplateRows;
+  }
+
+  @override
+  Future<Map<String, dynamic>> eventInvitationSettings(
+    String tenantId,
+    String eventId,
+  ) async {
+    lastTenantId = tenantId;
+    lastEventId = eventId;
+    return {
+      'eventId': eventId,
+      'event': {
+        'name': 'Jennifer Send Off',
+        'eventDate': '2026-12-12',
+        'venue': 'Riverside Hall',
+      },
+      'settings': invitationSettingsRow,
+    };
+  }
+
+  @override
+  Future<Map<String, dynamic>> upsertEventInvitationSettings(
+    String tenantId,
+    String eventId,
+    Map<String, dynamic> payload,
+  ) async {
+    lastTenantId = tenantId;
+    invitationSettingsRow = {...invitationSettingsRow, ...payload};
+    return eventInvitationSettings(tenantId, eventId);
+  }
+
+  @override
+  Future<Map<String, dynamic>> listEventInvitations(
+    String tenantId,
+    String eventId, {
+    String? search,
+    String status = 'ALL',
+    String rsvpStatus = 'ALL',
+    int? limit,
+    int? offset,
+  }) async {
+    listInvitationsCalls += 1;
+    lastTenantId = tenantId;
+    lastEventId = eventId;
+    lastListInvitationsArgs = {
+      'search': search,
+      'status': status,
+      'rsvpStatus': rsvpStatus,
+      'limit': limit,
+      'offset': offset,
+    };
+    final needle = (search ?? '').trim().toLowerCase();
+    final filtered = invitationRecords.where((inv) {
+      if (status != 'ALL' && inv['status'] != status) return false;
+      final rsvp = inv['rsvp'] as Map<String, dynamic>?;
+      final effectiveRsvpStatus = rsvp == null
+          ? 'NO_RESPONSE'
+          : rsvp['response'];
+      if (rsvpStatus != 'ALL' && effectiveRsvpStatus != rsvpStatus) {
+        return false;
+      }
+      if (needle.isEmpty) return true;
+      final haystack = '${inv['memberName'] ?? ''} ${inv['displayName'] ?? ''}'
+          .toLowerCase();
+      return haystack.contains(needle);
+    }).toList();
+    final rows = filtered.map(_invitationListRow).toList();
+    return {
+      'data': rows,
+      'pagination': {
+        'limit': limit ?? 20,
+        'offset': offset ?? 0,
+        'totalRows': rows.length,
+        'hasMore': false,
+      },
+    };
+  }
+
+  @override
+  Future<Map<String, dynamic>> createEventInvitation(
+    String tenantId,
+    String eventId,
+    Map<String, dynamic> payload,
+  ) async {
+    createInvitationCalls += 1;
+    lastTenantId = tenantId;
+    lastEventId = eventId;
+    lastCreateInvitationPayload = payload;
+    final eventMemberId = payload['eventMemberId'] as String;
+    if (invitationRecords.any((inv) => inv['eventMemberId'] == eventMemberId)) {
+      throw const ApiFailure(
+        kind: ApiFailureKind.conflict,
+        message: 'An invitation already exists for this event member.',
+        code: 'INVITATION_ALREADY_EXISTS',
+        statusCode: 409,
+      );
+    }
+    _invitationSeq += 1;
+    final id = 'invitation-$_invitationSeq';
+    final now = DateTime.now().toUtc().toIso8601String();
+    final record = {
+      'id': id,
+      'eventId': eventId,
+      'eventMemberId': eventMemberId,
+      'memberId': 'member-for-$eventMemberId',
+      'memberName': payload['displayName'] ?? 'Victor Prever Kinabo',
+      'phone': '+255712345678',
+      'displayName': payload['displayName'] ?? 'Victor Prever Kinabo',
+      'maxGuests':
+          payload['maxGuests'] ??
+          invitationSettingsRow['defaultMaxGuests'] ??
+          1,
+      'status': 'DRAFT',
+      'publicTokenVersion': 1,
+      'template': null,
+      'rsvp': null,
+      'deliveries': <Map<String, dynamic>>[],
+      'viewCount': 0,
+      'firstViewedAt': null,
+      'lastViewedAt': null,
+      'activatedAt': null,
+      'cancelledAt': null,
+      'createdAt': now,
+      'updatedAt': now,
+    };
+    invitationRecords.add(record);
+    return _invitationDetail(record);
+  }
+
+  @override
+  Future<Map<String, dynamic>> bulkCreateEventInvitations(
+    String tenantId,
+    String eventId,
+    Map<String, dynamic> payload,
+  ) async {
+    bulkCreateInvitationsCalls += 1;
+    lastTenantId = tenantId;
+    lastEventId = eventId;
+    lastBulkCreatePayload = payload;
+    final ids = (payload['eventMemberIds'] as List).cast<String>();
+    final suffix = (payload['displayNameSuffix'] as String? ?? '').trim();
+    var created = 0;
+    var alreadyExisted = 0;
+    final createdIds = <String>[];
+    for (final eventMemberId in ids) {
+      if (invitationRecords.any(
+        (inv) => inv['eventMemberId'] == eventMemberId,
+      )) {
+        alreadyExisted += 1;
+        continue;
+      }
+      final baseName = 'Victor Prever Kinabo';
+      final detail = await createEventInvitation(tenantId, eventId, {
+        'eventMemberId': eventMemberId,
+        'maxGuests': payload['defaultMaxGuests'],
+        'displayName': suffix.isEmpty ? baseName : '$baseName $suffix',
+      });
+      created += 1;
+      createdIds.add(detail['id'] as String);
+    }
+    return {
+      'requested': ids.length,
+      'created': created,
+      'alreadyExisted': alreadyExisted,
+      'createdInvitationIds': createdIds,
+    };
+  }
+
+  @override
+  Future<Map<String, dynamic>> eventInvitationDetail(
+    String tenantId,
+    String eventId,
+    String invitationId,
+  ) async {
+    lastTenantId = tenantId;
+    lastEventId = eventId;
+    final record = invitationRecords.firstWhere(
+      (inv) => inv['id'] == invitationId,
+    );
+    return _invitationDetail(record);
+  }
+
+  @override
+  Future<Map<String, dynamic>> updateEventInvitation(
+    String tenantId,
+    String eventId,
+    String invitationId,
+    Map<String, dynamic> payload,
+  ) async {
+    updateInvitationCalls += 1;
+    lastTenantId = tenantId;
+    lastUpdateInvitationPayload = payload;
+    if (updateInvitationError != null) throw updateInvitationError!;
+    final record = invitationRecords.firstWhere(
+      (inv) => inv['id'] == invitationId,
+    );
+    if (payload['displayName'] != null) {
+      record['displayName'] = payload['displayName'];
+    }
+    if (payload['maxGuests'] != null) {
+      record['maxGuests'] = payload['maxGuests'];
+    }
+    if (payload['templateId'] != null) {
+      final matched = invitationTemplateRows.firstWhere(
+        (t) => t['id'] == payload['templateId'],
+        orElse: () => <String, dynamic>{},
+      );
+      record['template'] = matched.isEmpty
+          ? null
+          : {
+              'id': matched['id'],
+              'name': matched['name'],
+              'layoutKey': matched['layoutKey'],
+              'scope': matched['scope'],
+            };
+    }
+    record['updatedAt'] = DateTime.now().toUtc().toIso8601String();
+    return _invitationDetail(record);
+  }
+
+  @override
+  Future<Map<String, dynamic>> activateEventInvitation(
+    String tenantId,
+    String eventId,
+    String invitationId,
+  ) async {
+    activateInvitationCalls += 1;
+    lastTenantId = tenantId;
+    final record = invitationRecords.firstWhere(
+      (inv) => inv['id'] == invitationId,
+    );
+    record['status'] = 'ACTIVE';
+    record['activatedAt'] = DateTime.now().toUtc().toIso8601String();
+    return _invitationDetail(record);
+  }
+
+  @override
+  Future<Map<String, dynamic>> cancelEventInvitation(
+    String tenantId,
+    String eventId,
+    String invitationId,
+    Map<String, dynamic> payload,
+  ) async {
+    cancelInvitationCalls += 1;
+    lastTenantId = tenantId;
+    final record = invitationRecords.firstWhere(
+      (inv) => inv['id'] == invitationId,
+    );
+    record['status'] = 'CANCELLED';
+    record['cancelledAt'] = DateTime.now().toUtc().toIso8601String();
+    return _invitationDetail(record);
+  }
+
+  @override
+  Future<Map<String, dynamic>> rotateInvitationLink(
+    String tenantId,
+    String eventId,
+    String invitationId,
+  ) async {
+    rotateLinkCalls += 1;
+    lastTenantId = tenantId;
+    final record = invitationRecords.firstWhere(
+      (inv) => inv['id'] == invitationId,
+    );
+    record['publicTokenVersion'] = (record['publicTokenVersion'] as int) + 1;
+    return {
+      'invitationId': invitationId,
+      'publicTokenVersion': record['publicTokenVersion'],
+      'shareUrl':
+          'https://invite.test/i/token-$invitationId-v${record['publicTokenVersion']}',
+    };
+  }
+
+  @override
+  Future<Map<String, dynamic>> recordManualRsvp(
+    String tenantId,
+    String eventId,
+    String invitationId,
+    Map<String, dynamic> payload,
+  ) async {
+    manualRsvpCalls += 1;
+    lastTenantId = tenantId;
+    lastManualRsvpPayload = payload;
+    if (manualRsvpError != null) throw manualRsvpError!;
+    final record = invitationRecords.firstWhere(
+      (inv) => inv['id'] == invitationId,
+    );
+    record['rsvp'] = {
+      'response': payload['response'],
+      'attendingCount': payload['attendingCount'],
+      'note': payload['note'],
+      'submittedByType': 'TENANT_USER',
+      'respondedAt': DateTime.now().toUtc().toIso8601String(),
+      'guestNames': payload['guestNames'] ?? <String>[],
+    };
+    record['updatedAt'] = DateTime.now().toUtc().toIso8601String();
+    return _invitationDetail(record);
+  }
+
+  @override
+  Future<Map<String, dynamic>> eventRsvpDashboard(
+    String tenantId,
+    String eventId,
+  ) async {
+    lastTenantId = tenantId;
+    lastEventId = eventId;
+    final total = invitationRecords.length;
+    final draft = invitationRecords.where((i) => i['status'] == 'DRAFT').length;
+    final active = invitationRecords
+        .where((i) => i['status'] == 'ACTIVE')
+        .length;
+    final cancelled = invitationRecords
+        .where((i) => i['status'] == 'CANCELLED')
+        .length;
+    num attending = 0, maybe = 0, notAttending = 0, noResponse = 0;
+    num confirmedGuests = 0, possibleGuests = 0;
+    for (final inv in invitationRecords) {
+      final rsvp = inv['rsvp'] as Map<String, dynamic>?;
+      if (rsvp == null) {
+        if (inv['status'] == 'ACTIVE') noResponse += 1;
+        continue;
+      }
+      final count = (rsvp['attendingCount'] as num?) ?? 0;
+      switch (rsvp['response']) {
+        case 'ATTENDING':
+          attending += 1;
+          confirmedGuests += count;
+          break;
+        case 'MAYBE':
+          maybe += 1;
+          possibleGuests += count;
+          break;
+        case 'NOT_ATTENDING':
+          notAttending += 1;
+          break;
+      }
+    }
+    return {
+      'totalInvitations': total,
+      'draftInvitations': draft,
+      'activeInvitations': active,
+      'cancelledInvitations': cancelled,
+      'sentInvitations': 0,
+      'attendingInvitations': attending,
+      'maybeInvitations': maybe,
+      'notAttendingInvitations': notAttending,
+      'noResponseInvitations': noResponse,
+      'confirmedGuests': confirmedGuests,
+      'possibleGuests': possibleGuests,
+    };
+  }
+
+  @override
+  Future<Map<String, dynamic>?> eventMemberInvitation(
+    String tenantId,
+    String eventId,
+    String eventMemberId,
+  ) async {
+    lastTenantId = tenantId;
+    lastEventId = eventId;
+    // Exact match on eventMemberId only -- deliberately no name/text
+    // involved, mirroring the real RPC's identity guarantee.
+    for (final inv in invitationRecords) {
+      if (inv['eventMemberId'] == eventMemberId) {
+        return _invitationDetail(inv);
+      }
+    }
+    return null;
   }
 
   @override

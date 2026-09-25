@@ -9,6 +9,8 @@ import '../../auth/data/session_controller.dart';
 import '../../auth/domain/auth_models.dart';
 import '../../contacts/presentation/contacts_screen.dart';
 import '../../financial/presentation/financial_screens.dart' hide objectList;
+import '../../invitations/presentation/invitations_screen.dart';
+import '../../invitations/presentation/rsvp_dashboard_screen.dart';
 import '../../pledges/presentation/pledge_form.dart';
 import '../../pledges/presentation/pledges_screen.dart';
 
@@ -84,6 +86,22 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
               'events.update',
             ) ==
             true;
+    // No `isOwner` bypass here: `isOwner` is just a denormalized restatement
+    // of "role == TENANT_OWNER", not an independent authorization concept,
+    // and the tenant context's effective `permissions` list already
+    // includes every invitation.*/rsvp.* permission that role currently
+    // grants -- checking it directly is both behavior-identical today and
+    // correct if a permission is ever overridden per-user in the future.
+    final canViewInvitations =
+        widget.controller.selectedTenantContext?.permissions.contains(
+          'invitation.view',
+        ) ==
+        true;
+    final canViewRsvp =
+        widget.controller.selectedTenantContext?.permissions.contains(
+          'rsvp.view',
+        ) ==
+        true;
     return Scaffold(
       appBar: AppBar(
         title: Text(context.t('eventDetail.title')),
@@ -130,6 +148,16 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
                       value: 3,
                       label: context.t('shell.nav.payments'),
                     ),
+                    if (canViewInvitations)
+                      FilterTabItem(
+                        value: 4,
+                        label: context.t('eventDetail.invitations'),
+                      ),
+                    if (canViewRsvp)
+                      FilterTabItem(
+                        value: 5,
+                        label: context.t('eventDetail.rsvp'),
+                      ),
                   ],
                   selected: tabIndex,
                   onChanged: (value) => setState(() => tabIndex = value),
@@ -152,6 +180,14 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
                   ),
                 if (tabIndex == 3)
                   _PaymentsTab(controller: widget.controller, event: event),
+                if (tabIndex == 4 && canViewInvitations)
+                  InvitationsTab(
+                    controller: widget.controller,
+                    event: event,
+                    onChanged: _refresh,
+                  ),
+                if (tabIndex == 5 && canViewRsvp)
+                  RsvpDashboardTab(controller: widget.controller, event: event),
               ],
             ),
           );
@@ -1061,6 +1097,12 @@ class _EventMemberDetailScreenState extends State<EventMemberDetailScreen> {
                     ],
                   ],
                 ],
+              ),
+              EventMemberInvitationSection(
+                controller: widget.controller,
+                event: widget.event,
+                eventMemberId: widget.eventMemberId,
+                memberName: stringFrom(member, 'full_name'),
               ),
               AhadiSectionCard(
                 title: context.t('shell.nav.events'),

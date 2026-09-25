@@ -909,6 +909,213 @@ class ApiClient implements AhadiApi {
     );
   }
 
+  // --- RSVP-2: Invitations + RSVP ---
+
+  @override
+  Future<List<Map<String, dynamic>>> invitationTemplates(
+    String tenantId,
+  ) async {
+    final json = await _request('/invitation-templates', tenantId: tenantId);
+    return objectList(json['data']);
+  }
+
+  @override
+  Future<Map<String, dynamic>> eventInvitationSettings(
+    String tenantId,
+    String eventId,
+  ) async {
+    final json = await _request(
+      '/events/$eventId/invitation-settings',
+      tenantId: tenantId,
+    );
+    return jsonMap(json['data']);
+  }
+
+  @override
+  Future<Map<String, dynamic>> upsertEventInvitationSettings(
+    String tenantId,
+    String eventId,
+    Map<String, dynamic> payload,
+  ) async {
+    final json = await _request(
+      '/events/$eventId/invitation-settings',
+      method: 'PUT',
+      tenantId: tenantId,
+      body: payload,
+    );
+    return jsonMap(json['data']);
+  }
+
+  @override
+  Future<Map<String, dynamic>> listEventInvitations(
+    String tenantId,
+    String eventId, {
+    String? search,
+    String status = 'ALL',
+    String rsvpStatus = 'ALL',
+    int? limit,
+    int? offset,
+  }) async {
+    final query = Uri(
+      queryParameters: {
+        if (search != null && search.trim().isNotEmpty) 'search': search,
+        'status': status,
+        'rsvpStatus': rsvpStatus,
+        if (limit != null) 'limit': '$limit',
+        if (offset != null) 'offset': '$offset',
+      },
+    ).query;
+    return _request('/events/$eventId/invitations?$query', tenantId: tenantId);
+  }
+
+  @override
+  Future<Map<String, dynamic>> createEventInvitation(
+    String tenantId,
+    String eventId,
+    Map<String, dynamic> payload,
+  ) async {
+    final json = await _request(
+      '/events/$eventId/invitations',
+      method: 'POST',
+      tenantId: tenantId,
+      body: payload,
+    );
+    return jsonMap(json['data']);
+  }
+
+  @override
+  Future<Map<String, dynamic>> bulkCreateEventInvitations(
+    String tenantId,
+    String eventId,
+    Map<String, dynamic> payload,
+  ) async {
+    final json = await _request(
+      '/events/$eventId/invitations/bulk',
+      method: 'POST',
+      tenantId: tenantId,
+      body: payload,
+    );
+    return jsonMap(json['data']);
+  }
+
+  @override
+  Future<Map<String, dynamic>> eventInvitationDetail(
+    String tenantId,
+    String eventId,
+    String invitationId,
+  ) async {
+    final json = await _request(
+      '/events/$eventId/invitations/$invitationId',
+      tenantId: tenantId,
+    );
+    return jsonMap(json['data']);
+  }
+
+  @override
+  Future<Map<String, dynamic>> updateEventInvitation(
+    String tenantId,
+    String eventId,
+    String invitationId,
+    Map<String, dynamic> payload,
+  ) async {
+    final json = await _request(
+      '/events/$eventId/invitations/$invitationId',
+      method: 'PATCH',
+      tenantId: tenantId,
+      body: payload,
+    );
+    return jsonMap(json['data']);
+  }
+
+  @override
+  Future<Map<String, dynamic>> activateEventInvitation(
+    String tenantId,
+    String eventId,
+    String invitationId,
+  ) async {
+    final json = await _request(
+      '/events/$eventId/invitations/$invitationId/activate',
+      method: 'POST',
+      tenantId: tenantId,
+    );
+    return jsonMap(json['data']);
+  }
+
+  @override
+  Future<Map<String, dynamic>> cancelEventInvitation(
+    String tenantId,
+    String eventId,
+    String invitationId,
+    Map<String, dynamic> payload,
+  ) async {
+    final json = await _request(
+      '/events/$eventId/invitations/$invitationId/cancel',
+      method: 'POST',
+      tenantId: tenantId,
+      body: payload,
+    );
+    return jsonMap(json['data']);
+  }
+
+  @override
+  Future<Map<String, dynamic>> rotateInvitationLink(
+    String tenantId,
+    String eventId,
+    String invitationId,
+  ) async {
+    final json = await _request(
+      '/events/$eventId/invitations/$invitationId/rotate-link',
+      method: 'POST',
+      tenantId: tenantId,
+    );
+    return jsonMap(json['data']);
+  }
+
+  @override
+  Future<Map<String, dynamic>> recordManualRsvp(
+    String tenantId,
+    String eventId,
+    String invitationId,
+    Map<String, dynamic> payload,
+  ) async {
+    final json = await _request(
+      '/events/$eventId/invitations/$invitationId/rsvp',
+      method: 'POST',
+      tenantId: tenantId,
+      body: payload,
+    );
+    return jsonMap(json['data']);
+  }
+
+  @override
+  Future<Map<String, dynamic>> eventRsvpDashboard(
+    String tenantId,
+    String eventId,
+  ) async {
+    final json = await _request(
+      '/events/$eventId/rsvp/dashboard',
+      tenantId: tenantId,
+    );
+    return jsonMap(json['data']);
+  }
+
+  @override
+  Future<Map<String, dynamic>?> eventMemberInvitation(
+    String tenantId,
+    String eventId,
+    String eventMemberId,
+  ) async {
+    final json = await _request(
+      '/events/$eventId/members/$eventMemberId/invitation',
+      tenantId: tenantId,
+    );
+    final data = json['data'];
+    // Deliberately not routed through jsonMap(), which coalesces null to
+    // {} -- that would erase the "no invitation exists" signal this
+    // exact-identity lookup depends on.
+    return data is Map ? Map<String, dynamic>.from(data) : null;
+  }
+
   Future<Map<String, dynamic>> _request(
     String path, {
     String method = 'GET',
